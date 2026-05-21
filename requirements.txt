@@ -1,0 +1,7 @@
+flask
+flask-limiter
+requests
+urllib3
+markupsafe
+gunicorn
+plotly
