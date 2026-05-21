@@ -3,7 +3,5 @@ flask-limiter
 gunicorn
 requests
 plotly
-chromadb
-sentence-transformers
 markupsafe
 urllib3
