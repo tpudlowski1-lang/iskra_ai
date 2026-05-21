@@ -1,7 +1,4 @@
 flask
 flask-limiter
-gunicorn
 requests
-plotly
-markupsafe
-urllib3
+gunicorn
