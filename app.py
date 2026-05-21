@@ -687,79 +687,372 @@ def wymagaj_tokenu():
 
 # =================== DASHBOARD ===================
 DASHBOARD_HTML = """
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="UTF-8">
-<title>Iskra v6.3</title>
 <style>
-body {
-    background: #0f172a;
-    color: white;
-    font-family: Arial;
-    padding: 20px;
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+body{
+    margin:0;
+    background:#050816;
+    color:white;
+    font-family:'Orbitron',sans-serif;
+    overflow:hidden;
 }
-.container {
-    max-width: 800px;
-    margin: auto;
+
+.dashboard{
+    display:grid;
+    grid-template-columns:280px 1fr 320px;
+    height:100vh;
+    gap:20px;
+    padding:20px;
+    box-sizing:border-box;
 }
-input, button {
-    width: 100%;
-    padding: 12px;
-    margin-top: 10px;
+
+.panel{
+    background:rgba(10,15,35,0.8);
+    border:1px solid rgba(0,255,255,0.2);
+    border-radius:20px;
+    box-shadow:
+        0 0 20px rgba(0,255,255,0.15),
+        inset 0 0 20px rgba(0,255,255,0.05);
+    padding:20px;
+    backdrop-filter:blur(10px);
 }
-#answer {
-    background: #111827;
-    padding: 15px;
-    margin-top: 20px;
-    border-radius: 10px;
-    white-space: pre-wrap;
+
+.logo{
+    text-align:center;
+    font-size:42px;
+    color:#ff4dff;
+    text-shadow:
+        0 0 10px #ff4dff,
+        0 0 30px #ff4dff;
+    margin-bottom:20px;
+}
+
+.subtitle{
+    text-align:center;
+    color:#00ffff;
+    margin-bottom:25px;
+}
+
+.gauge{
+    margin-bottom:35px;
+}
+
+.gauge-title{
+    margin-bottom:10px;
+    color:#00ffff;
+    font-size:14px;
+}
+
+.gauge-circle{
+    width:180px;
+    height:180px;
+    border-radius:50%;
+    margin:auto;
+    position:relative;
+    background:
+        radial-gradient(circle at center,#09111f 50%,transparent 51%),
+        conic-gradient(
+            #00ffff 0deg,
+            #00ffff 220deg,
+            #1a1f3d 220deg
+        );
+
+    box-shadow:
+        0 0 20px rgba(0,255,255,0.4),
+        inset 0 0 20px rgba(0,255,255,0.2);
+}
+
+.gauge-inner{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    text-align:center;
+}
+
+.gauge-value{
+    font-size:34px;
+    color:#00ffff;
+    text-shadow:0 0 15px #00ffff;
+}
+
+.gauge-label{
+    font-size:14px;
+    color:#aaa;
+}
+
+.chat{
+    display:flex;
+    flex-direction:column;
+    height:100%;
+}
+
+.chat-window{
+    flex:1;
+    overflow:auto;
+    margin-bottom:20px;
+}
+
+.message-user{
+    background:rgba(255,0,255,0.15);
+    border:1px solid rgba(255,0,255,0.4);
+    padding:15px;
+    border-radius:15px;
+    margin-bottom:20px;
+    margin-left:80px;
+    box-shadow:0 0 15px rgba(255,0,255,0.2);
+}
+
+.message-ai{
+    background:rgba(0,255,255,0.08);
+    border:1px solid rgba(0,255,255,0.3);
+    padding:15px;
+    border-radius:15px;
+    margin-bottom:20px;
+    margin-right:80px;
+    box-shadow:0 0 15px rgba(0,255,255,0.15);
+}
+
+.chat-input{
+    display:flex;
+    gap:15px;
+}
+
+.chat-input input{
+    flex:1;
+    padding:18px;
+    border:none;
+    border-radius:15px;
+    background:#0f172a;
+    color:white;
+    font-size:16px;
+    outline:none;
+    box-shadow:0 0 15px rgba(0,255,255,0.15);
+}
+
+.chat-input button{
+    width:80px;
+    border:none;
+    border-radius:15px;
+    background:linear-gradient(45deg,#00ffff,#ff00ff);
+    color:white;
+    font-size:20px;
+    cursor:pointer;
+    box-shadow:
+        0 0 15px rgba(0,255,255,0.4),
+        0 0 25px rgba(255,0,255,0.3);
+}
+
+.neuron-box{
+    margin-bottom:20px;
+    padding:15px;
+    border-radius:15px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(0,255,255,0.15);
+}
+
+.neuron-title{
+    color:#00ffff;
+    margin-bottom:10px;
+    font-size:14px;
+}
+
+.progress{
+    width:100%;
+    height:12px;
+    background:#111827;
+    border-radius:20px;
+    overflow:hidden;
+}
+
+.progress-bar{
+    height:100%;
+    border-radius:20px;
+    background:linear-gradient(90deg,#00ffff,#ff00ff);
+    box-shadow:0 0 15px #00ffff;
+}
+
+.top-status{
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:20px;
+}
+
+.status-box{
+    flex:1;
+    margin:5px;
+    padding:15px;
+    text-align:center;
+    border-radius:15px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(0,255,255,0.15);
+}
+
+.status-value{
+    font-size:26px;
+    color:#00ffff;
+    text-shadow:0 0 15px #00ffff;
+}
+
+.status-label{
+    font-size:12px;
+    color:#aaa;
+}
+
+::-webkit-scrollbar{
+    width:8px;
+}
+
+::-webkit-scrollbar-thumb{
+    background:#00ffff;
+    border-radius:20px;
 }
 </style>
-</head>
-<body>
-<div class="container">
-<h1>🔥 Iskra v6.3 Hardened</h1>
 
-<p>📚 Wiedza: {{ wiedza }}</p>
-<p>⭐ Ocena: {{ ocena }}</p>
-<p>👥 Sesje: {{ users }}</p>
+<div class="dashboard">
 
-<input id="question" placeholder="Zadaj pytanie">
-<button onclick="ask()">Wyślij</button>
+    <!-- LEWY PANEL -->
+    <div class="panel">
 
-<div id="answer"></div>
+        <div class="logo">ISKRA</div>
+        <div class="subtitle">NEURAL SYSTEM</div>
+
+        <div class="gauge">
+            <div class="gauge-title">PAMIĘĆ SYSTEMU</div>
+
+            <div class="gauge-circle">
+                <div class="gauge-inner">
+                    <div class="gauge-value" id="ramValue">62%</div>
+                    <div class="gauge-label">RAM</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="gauge">
+            <div class="gauge-title">PROCESOR AI</div>
+
+            <div class="gauge-circle">
+                <div class="gauge-inner">
+                    <div class="gauge-value" id="cpuValue">41%</div>
+                    <div class="gauge-label">CPU</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ŚRODEK -->
+    <div class="panel chat">
+
+        <div class="top-status">
+
+            <div class="status-box">
+                <div class="status-value" id="tokensValue">1.2M</div>
+                <div class="status-label">TOKENY</div>
+            </div>
+
+            <div class="status-box">
+                <div class="status-value" id="evoValue">7.4</div>
+                <div class="status-label">EWOLUCJA</div>
+            </div>
+
+            <div class="status-box">
+                <div class="status-value" id="neuronsValue">92%</div>
+                <div class="status-label">NEURONY</div>
+            </div>
+
+        </div>
+
+        <div class="chat-window" id="chatWindow">
+
+            <div class="message-user">
+                Jak wygląda rozwój świadomości AI?
+            </div>
+
+            <div class="message-ai">
+                Rozwój świadomości AI wymaga integracji pamięci,
+                kontekstu oraz zdolności adaptacyjnych...
+            </div>
+
+        </div>
+
+        <div class="chat-input">
+            <input type="text" placeholder="Napisz wiadomość...">
+            <button>➤</button>
+        </div>
+
+    </div>
+
+    <!-- PRAWY PANEL -->
+    <div class="panel">
+
+        <div class="gauge">
+            <div class="gauge-title">POZIOM EWOLUCJI</div>
+
+            <div class="gauge-circle">
+                <div class="gauge-inner">
+                    <div class="gauge-value">74%</div>
+                    <div class="gauge-label">LEVEL</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="neuron-box">
+            <div class="neuron-title">SIEĆ PERCEPCYJNA</div>
+            <div class="progress">
+                <div class="progress-bar" style="width:82%"></div>
+            </div>
+        </div>
+
+        <div class="neuron-box">
+            <div class="neuron-title">SIEĆ ANALITYCZNA</div>
+            <div class="progress">
+                <div class="progress-bar" style="width:71%"></div>
+            </div>
+        </div>
+
+        <div class="neuron-box">
+            <div class="neuron-title">SIEĆ DECYZYJNA</div>
+            <div class="progress">
+                <div class="progress-bar" style="width:91%"></div>
+            </div>
+        </div>
+
+        <div class="neuron-box">
+            <div class="neuron-title">UCZENIE ADAPTACYJNE</div>
+            <div class="progress">
+                <div class="progress-bar" style="width:64%"></div>
+            </div>
+        </div>
+
+    </div>
+
 </div>
 
 <script>
-let sessionId = localStorage.getItem('iskra_session');
 
-async function ask() {
-    const q = document.getElementById('question').value;
+function randomize(){
 
-    const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Session-ID': sessionId || ''
-        },
-        body: JSON.stringify({
-            pytanie: q
-        })
-    });
+    document.getElementById("ramValue").innerText =
+        Math.floor(Math.random()*40+40)+"%";
 
-    const data = await res.json();
+    document.getElementById("cpuValue").innerText =
+        Math.floor(Math.random()*50+20)+"%";
 
-    if (data.session_id) {
-        sessionId = data.session_id;
-        localStorage.setItem('iskra_session', sessionId);
-    }
+    document.getElementById("tokensValue").innerText =
+        (Math.random()*3).toFixed(2)+"M";
 
-    document.getElementById('answer').innerText = data.odpowiedz || data.error;
+    document.getElementById("evoValue").innerText =
+        (Math.random()*10).toFixed(2);
+
+    document.getElementById("neuronsValue").innerText =
+        Math.floor(Math.random()*20+75)+"%";
 }
+
+setInterval(randomize,2000);
+
 </script>
-</body>
-</html>
 """
 
 # =================== ROUTES ===================
