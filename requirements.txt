@@ -1,7 +1,9 @@
 flask
 flask-limiter
-requests
-urllib3
-markupsafe
 gunicorn
+requests
 plotly
+chromadb
+sentence-transformers
+markupsafe
+urllib3
