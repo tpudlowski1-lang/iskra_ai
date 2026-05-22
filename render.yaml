@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: iskra-ai
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --workers 1 --timeout 120
-    plan: free
