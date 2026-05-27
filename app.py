@@ -132,61 +132,50 @@ class Pamiec:
 # PROVIDER DEEPSEEK (ANTHROPIC-COMPATIBLE)
 # =========================
 
+
 class DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/anthropic"
-        self.model = "deepseek-v4-pro"   # będzie automatycznie mapowany na właściwy model
+        # Najpierw spróbujemy standardowego API (nie anthropic)
+        self.url = "https://api.deepseek.com/v1/chat/completions"
+        self.model = "deepseek-chat"
 
     def generate(self, prompt):
         if not self.api_key:
-            raise Exception("Brak skonfigurowanej zmiennej DEEPSEEK_API_KEY w panelu Render.")
+            raise Exception("Brak DEEPSEEK_API_KEY")
 
         headers = {
-            "x-api-key": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
         data = {
             "model": self.model,
-            "max_tokens": 1000,
-            "system": "Jesteś futurystyczną AI o nazwie Iskra. Odpowiadaj po polsku.",
             "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt}
             ],
-            "temperature": 0.5
+            "temperature": 0.5,
+            "stream": False
         }
 
-        last_error = None
+        print(f"[DeepSeek] Wywołanie URL: {self.url}")
+        print(f"[DeepSeek] Model: {self.model}")
+        print(f"[DeepSeek] Prompt: {prompt[:100]}...")
 
-        for attempt in range(REQUEST_RETRIES):
-            try:
-                print(f"[DeepSeek-Anthropic] Próba połączenia ({attempt + 1}/{REQUEST_RETRIES})...")
-                r = requests.post(
-                    self.url,
-                    headers=headers,
-                    json=data,
-                    timeout=REQUEST_TIMEOUT
-                )
+        try:
+            r = requests.post(self.url, headers=headers, json=data, timeout=30)
+            print(f"[DeepSeek] Status: {r.status_code}")
+            print(f"[DeepSeek] Response: {r.text[:200]}")
 
-                if r.status_code != 200:
-                    last_error = f"HTTP {r.status_code}: {r.text}"
-                    time.sleep(1)
-                    continue
+            if r.status_code != 200:
+                raise Exception(f"HTTP {r.status_code}: {r.text}")
 
-                response = r.json()
-                # Format odpowiedzi wg standardu Anthropic
-                return response["content"][0]["text"]
+            response = r.json()
+            return response["choices"][0]["message"]["content"]
 
-            except Exception as e:
-                last_error = str(e)
-                time.sleep(1)
-
-        raise Exception(f"DeepSeek (Anthropic endpoint) error: {last_error}")
-
+        except Exception as e:
+            print(f"[DeepSeek] Błąd: {e}")
+            raise
 # =========================
 # RDZEŃ REPREZENTACJI AI
 # =========================
