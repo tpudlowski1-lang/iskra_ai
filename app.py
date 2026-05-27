@@ -42,7 +42,7 @@ REQUEST_RETRIES = 3
 # =========================
 # DIAGNOSTYKA STARTU
 # =========================
-print("=== START ISKRY (CLOUD - DEEPSEEK VIA ANTHROPIC ENDPOINT) ===")
+print("=== START ISKRY (CLOUD - DEEPSEEK STANDARD API) ===")
 print(f"PORT: {PORT}")
 print(f"Katalog danych: {DATA_DIR}")
 print(f"DEEPSEEK_API_KEY: {'✔️' if os.environ.get('DEEPSEEK_API_KEY') else '❌'}")
@@ -129,14 +129,12 @@ class Pamiec:
         return len(self.dane)
 
 # =========================
-# PROVIDER DEEPSEEK (ANTHROPIC-COMPATIBLE)
+# PROVIDER DEEPSEEK (STANDARD API)
 # =========================
-
 
 class DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        # Najpierw spróbujemy standardowego API (nie anthropic)
         self.url = "https://api.deepseek.com/v1/chat/completions"
         self.model = "deepseek-chat"
 
@@ -158,14 +156,10 @@ class DeepSeekProvider:
             "stream": False
         }
 
-        print(f"[DeepSeek] Wywołanie URL: {self.url}")
-        print(f"[DeepSeek] Model: {self.model}")
-        print(f"[DeepSeek] Prompt: {prompt[:100]}...")
-
+        print(f"[DeepSeek] Wywołanie API...")
         try:
-            r = requests.post(self.url, headers=headers, json=data, timeout=30)
+            r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
             print(f"[DeepSeek] Status: {r.status_code}")
-            print(f"[DeepSeek] Response: {r.text[:200]}")
 
             if r.status_code != 200:
                 raise Exception(f"HTTP {r.status_code}: {r.text}")
@@ -176,6 +170,7 @@ class DeepSeekProvider:
         except Exception as e:
             print(f"[DeepSeek] Błąd: {e}")
             raise
+
 # =========================
 # RDZEŃ REPREZENTACJI AI
 # =========================
@@ -185,7 +180,7 @@ class IskraAI:
         self.pamiec = Pamiec()
         self.historia = defaultdict(list)
         self.provider = DeepSeekProvider()
-        print("=== ISKRA SFORMOWANA (tryb Anthropic-compatible) ===")
+        print("=== ISKRA SFORMOWANA (tryb DeepSeek standard) ===")
 
     def cleanup_sessions(self):
         while len(self.historia) > MAX_SESSIONS:
@@ -424,7 +419,7 @@ DASHBOARD_HTML = """
         </div>
         <div class="card">
             <h3>Silnik Główny</h3>
-            <div class="value" style="font-size: 20px; color: #ec4899;">DEEPSEEK (Anthropic)</div>
+            <div class="value" style="font-size: 20px; color: #ec4899;">DEEPSEEK</div>
         </div>
         <div class="card">
             <h3>Status</h3>
@@ -434,7 +429,7 @@ DASHBOARD_HTML = """
 
     <div class="panel-main">
         <div class="chat-window" id="chatWindow">
-            <div class="message-ai">Witaj. Jestem Iskra AI. Rdzeń systemu używa kompatybilnego z Anthropic endpointu DeepSeek. Jakie masz wytyczne?</div>
+            <div class="message-ai">Witaj. Jestem Iskra AI. Rdzeń systemu korzysta z DeepSeek API. Jakie masz wytyczne?</div>
         </div>
 
         <div class="chat-input">
@@ -543,22 +538,30 @@ def status():
     return jsonify({
         "pamiec": iskra.pamiec.rozmiar(),
         "users": len(iskra.historia),
-        "provider": "deepseek-anthropic-endpoint"
+        "provider": "deepseek-chat"
     })
 
 @app.route('/health')
 def health():
     return jsonify({
         "status": "ok",
-        "provider": "deepseek-anthropic-endpoint"
+        "provider": "deepseek-chat"
     })
 
 @app.route('/keep-alive')
 def keep_alive():
     return "Iskra żyje", 200
 
+@app.route('/test-api')
+def test_api():
+    try:
+        odpowiedz = iskra.provider.generate("Powiedz 'test OK'")
+        return f"Sukces! Odpowiedź API: {odpowiedz}"
+    except Exception as e:
+        return f"Błąd API: {str(e)}", 500
+
 # =========================
-# START SERWERA
+# INICJACJA SERWERA
 # =========================
 
 if __name__ == "__main__":
