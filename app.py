@@ -250,11 +250,43 @@ ODPOWIEDŹ ISKRY:
         historia.append((pytanie, odpowiedz))
         return odpowiedz
 
+    # =========================
+    # AUTONOMICZNE UCZENIE SIĘ (WĄTEK TŁA)
+    # =========================
+    def autonomiczne_uczenie(self):
+        """Co godzinę pobiera losową stronę z Wikipedii i zapamiętuje."""
+        while True:
+            try:
+                url = "https://pl.wikipedia.org/api/rest_v1/page/random/summary"
+                resp = requests.get(url, timeout=15)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    tytul = data.get('title', 'brak tytułu')
+                    streszczenie = data.get('extract', 'brak treści')
+                    prompt = f"""Oto nowa informacja z Wikipedii:
+Tytuł: {tytul}
+Treść: {streszczenie}
+
+Przeczytaj i zapamiętaj najważniejsze fakty. Odpowiedz krótko: "Zapamiętałam: ..." (maksymalnie 2 zdania)."""
+                    odpowiedz = self.provider.generate(prompt)
+                    self.pamiec.dodaj(f"[AUTO] {tytul}", odpowiedz)
+                    print(f"[AUTONOMIA] Zapamiętałam: {tytul}")
+                else:
+                    print("[AUTONOMIA] Błąd pobierania Wikipedii")
+            except Exception as e:
+                print(f"[AUTONOMIA] Błąd: {e}")
+            time.sleep(3600)  # 1 godzina
+
 # =========================
 # INSTANCJA SZEFA SYSTU
 # =========================
 
 iskra = IskraAI()
+
+# Uruchom wątek autonomicznego uczenia się (nie blokuje serwera)
+thread_auto = threading.Thread(target=iskra.autonomiczne_uczenie, daemon=True)
+thread_auto.start()
+print("✅ Autonomiczne uczenie się uruchomione (co godzinę)")
 
 # =========================
 # DYNAMICZNY CYBERPUNKOWY INTERFEJS FRONT-END
@@ -533,6 +565,10 @@ def health():
         "status": "ok",
         "provider": "deepseek-chat"
     })
+
+@app.route('/keep-alive')
+def keep_alive():
+    return "Iskra żyje", 200
 
 # =========================
 # INICJACJA SERWERA
