@@ -42,7 +42,7 @@ REQUEST_RETRIES = 3
 # =========================
 # DIAGNOSTYKA STARTU
 # =========================
-print("=== START ISKRY (CLOUD - DEEPSEEK EDITION) ===")
+print("=== START ISKRY (CLOUD - DEEPSEEK VIA ANTHROPIC ENDPOINT) ===")
 print(f"PORT: {PORT}")
 print(f"Katalog danych: {DATA_DIR}")
 print(f"DEEPSEEK_API_KEY: {'✔️' if os.environ.get('DEEPSEEK_API_KEY') else '❌'}")
@@ -129,40 +129,42 @@ class Pamiec:
         return len(self.dane)
 
 # =========================
-# PROVIDER DEEPSEEK
+# PROVIDER DEEPSEEK (ANTHROPIC-COMPATIBLE)
 # =========================
 
 class DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/v1/chat/completions"
+        self.url = "https://api.deepseek.com/anthropic"
+        self.model = "deepseek-v4-pro"   # będzie automatycznie mapowany na właściwy model
 
     def generate(self, prompt):
         if not self.api_key:
             raise Exception("Brak skonfigurowanej zmiennej DEEPSEEK_API_KEY w panelu Render.")
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "x-api-key": self.api_key,
             "Content-Type": "application/json"
         }
 
         data = {
-            "model": "deepseek-chat",
+            "model": self.model,
+            "max_tokens": 1000,
+            "system": "Jesteś futurystyczną AI o nazwie Iskra. Odpowiadaj po polsku.",
             "messages": [
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            "temperature": 0.5,
-            "stream": False
+            "temperature": 0.5
         }
 
         last_error = None
 
         for attempt in range(REQUEST_RETRIES):
             try:
-                print(f"[DeepSeek] Próba połączenia ({attempt + 1}/{REQUEST_RETRIES})...")
+                print(f"[DeepSeek-Anthropic] Próba połączenia ({attempt + 1}/{REQUEST_RETRIES})...")
                 r = requests.post(
                     self.url,
                     headers=headers,
@@ -176,13 +178,14 @@ class DeepSeekProvider:
                     continue
 
                 response = r.json()
-                return response["choices"][0]["message"]["content"]
+                # Format odpowiedzi wg standardu Anthropic
+                return response["content"][0]["text"]
 
             except Exception as e:
                 last_error = str(e)
                 time.sleep(1)
 
-        raise Exception(f"DeepSeek API Error: {last_error}")
+        raise Exception(f"DeepSeek (Anthropic endpoint) error: {last_error}")
 
 # =========================
 # RDZEŃ REPREZENTACJI AI
@@ -193,7 +196,7 @@ class IskraAI:
         self.pamiec = Pamiec()
         self.historia = defaultdict(list)
         self.provider = DeepSeekProvider()
-        print("=== ISKRA SFORMOWANA ===")
+        print("=== ISKRA SFORMOWANA (tryb Anthropic-compatible) ===")
 
     def cleanup_sessions(self):
         while len(self.historia) > MAX_SESSIONS:
@@ -230,13 +233,10 @@ ODPOWIEDŹ ISKRY:
         prompt = self.build_prompt(pytanie, context)
 
         try:
-            # Próba wygenerowania odpowiedzi przez DeepSeek
             odpowiedz = self.provider.generate(prompt)
-            # Zapisujemy udaną interakcję do lokalnej bazy
             self.pamiec.dodaj(pytanie, odpowiedz)
         except Exception as e:
             print(f"[SYSTEM CRITICAL] Błąd zewnętrznego API: {e}")
-            # Tryb autonomiczny / Fallback offline
             odpowiedz_lokalna = self.pamiec.szukaj_fallback(pytanie)
             if odpowiedz_lokalna:
                 odpowiedz = f"(Tryb Offline - Awaria API. Odpowiedź z bazy autonomicznej):\n{odpowiedz_lokalna}"
@@ -278,18 +278,17 @@ Przeczytaj i zapamiętaj najważniejsze fakty. Odpowiedz krótko: "Zapamiętała
             time.sleep(3600)  # 1 godzina
 
 # =========================
-# INSTANCJA SZEFA SYSTU
+# INSTANCJA ISKRY I WĄTEK AUTONOMICZNY
 # =========================
 
 iskra = IskraAI()
 
-# Uruchom wątek autonomicznego uczenia się (nie blokuje serwera)
 thread_auto = threading.Thread(target=iskra.autonomiczne_uczenie, daemon=True)
 thread_auto.start()
 print("✅ Autonomiczne uczenie się uruchomione (co godzinę)")
 
 # =========================
-# DYNAMICZNY CYBERPUNKOWY INTERFEJS FRONT-END
+# INTERFEJS FRONT-END (DASHBOARD)
 # =========================
 
 DASHBOARD_HTML = """
@@ -436,7 +435,7 @@ DASHBOARD_HTML = """
         </div>
         <div class="card">
             <h3>Silnik Główny</h3>
-            <div class="value" style="font-size: 20px; color: #ec4899;">DEEPSEEK</div>
+            <div class="value" style="font-size: 20px; color: #ec4899;">DEEPSEEK (Anthropic)</div>
         </div>
         <div class="card">
             <h3>Status</h3>
@@ -446,7 +445,7 @@ DASHBOARD_HTML = """
 
     <div class="panel-main">
         <div class="chat-window" id="chatWindow">
-            <div class="message-ai">Witaj. Jestem Iskra AI. Rdzeń systemu został przepięty na stabilną architekturę chmurową DeepSeek. Jakie masz wytyczne?</div>
+            <div class="message-ai">Witaj. Jestem Iskra AI. Rdzeń systemu używa kompatybilnego z Anthropic endpointu DeepSeek. Jakie masz wytyczne?</div>
         </div>
 
         <div class="chat-input">
@@ -497,7 +496,6 @@ async function sendMessage(){
         const data = await response.json();
         aiDiv.textContent = data.odpowiedz;
         
-        // Dynamiczne odświeżenie licznika bazy danych z API statusu
         const statusRes = await fetch('/status');
         const statusData = await statusRes.json();
         document.getElementById("valPamiec").textContent = statusData.pamiec;
@@ -556,14 +554,14 @@ def status():
     return jsonify({
         "pamiec": iskra.pamiec.rozmiar(),
         "users": len(iskra.historia),
-        "provider": "deepseek-chat"
+        "provider": "deepseek-anthropic-endpoint"
     })
 
 @app.route('/health')
 def health():
     return jsonify({
         "status": "ok",
-        "provider": "deepseek-chat"
+        "provider": "deepseek-anthropic-endpoint"
     })
 
 @app.route('/keep-alive')
@@ -571,7 +569,7 @@ def keep_alive():
     return "Iskra żyje", 200
 
 # =========================
-# INICJACJA SERWERA
+# START SERWERA
 # =========================
 
 if __name__ == "__main__":
