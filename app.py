@@ -15,7 +15,6 @@ from flask import Flask, jsonify, render_template_string
 # KONFIGURACJA I ŚCIEŻKI
 # =========================
 PORT = int(os.environ.get("PORT", 8080))
-# Zmiana na katalog główny aplikacji, aby uniknąć problemów z czyszczeniem /tmp na Renderze
 DATA_DIR = os.path.abspath(".") 
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 REQUEST_TIMEOUT = 30
@@ -110,36 +109,37 @@ class SiecNeuronowa:
 # =========================
 # PROVIDERY LLM
 # =========================
-cclass DeepSeekProvider:
+class DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        # Zmiana na oficjalny i stabilny endpoint
-        self.url = "[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)" 
+        self.url = "https://api.deepseek.com/chat/completions"
 
     def generate(self, prompt):
         if not self.api_key: return None
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": "deepseek-chat",
-            # Rozbicie na system i user gwarantuje poprawne działanie json_object
             "messages": [
-                {"role": "system", "content": "You are a research assistant that outputs strictly valid JSON."},
+                {"role": "system", "content": "You are a specialized JSON analyzer core. Respond exclusively with a valid JSON object."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.2, # Niższa temperatura stabilizuje generowanie struktur JSON
+            "temperature": 0.3,
             "response_format": {"type": "json_object"}
         }
-        try:
-            r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-            if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
-            print(f"[DEBUG DEEPSEEK] Status: {r.status_code}, Odpowiedź: {r.text}")
-        except Exception as e: print(f"[DEBUG DEEPSEEK] Wyjątek: {e}")
+        for _ in range(REQUEST_RETRIES):
+            try:
+                r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
+                print(f"[DEBUG DEEPSEEK] Status: {r.status_code}, Odpowiedź: {r.text}")
+            except Exception as e: 
+                print(f"[DEBUG DEEPSEEK] Wyjątek połączenia: {e}")
+            time.sleep(1)
         return None
 
 class OpenAIProvider:
     def __init__(self):
         self.api_key = os.environ.get("OPENAI_API_KEY", "")
-        self.url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
+        self.url = "https://api.openai.com/v1/chat/completions"
         self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
     def generate(self, prompt):
@@ -148,18 +148,20 @@ class OpenAIProvider:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a psychological analytical engine that outputs strictly valid JSON."},
+                {"role": "system", "content": "You are a backend structural engine. Respond exclusively with a valid JSON object."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.5,
+            "temperature": 0.4,
             "response_format": {"type": "json_object"}
         }
-        try:
-            r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-            if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
-        except Exception as e: print(f"[DEBUG OPENAI] Wyjątek: {e}")
+        for _ in range(REQUEST_RETRIES):
+            try:
+                r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
+            except Exception as e: 
+                print(f"[DEBUG OPENAI] Wyjątek połączenia: {e}")
+            time.sleep(1)
         return None
-
 
 class GeminiProvider:
     def __init__(self):
@@ -169,11 +171,19 @@ class GeminiProvider:
     def generate(self, prompt):
         if not self.api_key: return None
         headers = {"Content-Type": "application/json"}
-        data = {"contents": [{"parts": [{"text": prompt + " ODPOWIEDZ WYŁĄCZNIE CZYSTYM JSONEM."}]}]}
-        try:
-            r = requests.post(f"{self.url}?key={self.api_key}", headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-            if r.status_code == 200: return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e: print(f"[DEBUG GEMINI] Wyjątek: {e}")
+        data = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
+        }
+        for _ in range(REQUEST_RETRIES):
+            try:
+                r = requests.post(f"{self.url}?key={self.api_key}", headers=headers, json=data, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200: return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            except Exception as e: 
+                print(f"[DEBUG GEMINI] Wyjątek połączenia: {e}")
+            time.sleep(1)
         return None
 
 class RouterProvider:
@@ -186,7 +196,6 @@ class RouterProvider:
     def clean_json(self, text):
         if not text: return None
         text = text.strip()
-        # Wyciąganie JSON-a w przypadku gdy model użyje znaczników markdown ```json ... ```
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match: return match.group(0)
         return text
@@ -198,7 +207,6 @@ class RouterProvider:
             "gemini": self.gemini
         }
         
-        # Ustalenie kolejności (główny dostawca na początek)
         order = [self.primary] + [k for k in providers.keys() if k != self.primary]
         
         for p_name in order:
@@ -207,8 +215,15 @@ class RouterProvider:
                 print(f"[ISKRA] Próba generowania przez dostawcę: {p_name}...")
                 res = provider.generate(prompt)
                 if res:
-                    return self.clean_json(res)
-                print(f"[OSTRZEŻENIE] Dostawca {p_name} zwrócił pustą odpowiedź lub wystąpił błąd.")
+                    cleaned = self.clean_json(res)
+                    if cleaned:
+                        try:
+                            # Próba parsowania kontrolnego – autokorekta przed zwróceniem danych wyżej
+                            json.loads(cleaned)
+                            return cleaned
+                        except Exception:
+                            print(f"[OSTRZEŻENIE] Dostawca {p_name} zwrócił tekst niebędący prawidłowym JSON-em.")
+                print(f"[OSTRZEŻENIE] Dostawca {p_name} zawiódł. Przełączanie awaryjne na kolejny model...")
         
         print("[CRITICAL] Wszyscy dostępni dostawcy LLM zawiedli lub brakuje kluczy API!")
         return None
@@ -294,7 +309,7 @@ DASHBOARD_HTML = """
 </head>
 <body>
     <div class="container">
-        <h1>ISKRA AI — Sieć Neuronów (V2)</h1>
+        <h1>ISKRA AI — Sieć Neuronów (V2.3 — Zero-Error Loop)</h1>
         <div class="stats">
             <div class="card"><h3>Neurony</h3><p id="count-n">-</p></div>
             <div class="card"><h3>Synapsy</h3><p id="count-s">-</p></div>
