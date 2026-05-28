@@ -110,18 +110,23 @@ class SiecNeuronowa:
 # =========================
 # PROVIDERY LLM
 # =========================
-class DeepSeekProvider:
+cclass DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/v1/chat/completions"
+        # Zmiana na oficjalny i stabilny endpoint
+        self.url = "[https://api.deepseek.com/chat/completions](https://api.deepseek.com/chat/completions)" 
 
     def generate(self, prompt):
         if not self.api_key: return None
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
+            # Rozbicie na system i user gwarantuje poprawne działanie json_object
+            "messages": [
+                {"role": "system", "content": "You are a research assistant that outputs strictly valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.2, # Niższa temperatura stabilizuje generowanie struktur JSON
             "response_format": {"type": "json_object"}
         }
         try:
@@ -134,7 +139,7 @@ class DeepSeekProvider:
 class OpenAIProvider:
     def __init__(self):
         self.api_key = os.environ.get("OPENAI_API_KEY", "")
-        self.url = "https://api.openai.com/v1/chat/completions"
+        self.url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
         self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
     def generate(self, prompt):
@@ -142,8 +147,11 @@ class OpenAIProvider:
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
+            "messages": [
+                {"role": "system", "content": "You are a psychological analytical engine that outputs strictly valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.5,
             "response_format": {"type": "json_object"}
         }
         try:
@@ -151,6 +159,7 @@ class OpenAIProvider:
             if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
         except Exception as e: print(f"[DEBUG OPENAI] Wyjątek: {e}")
         return None
+
 
 class GeminiProvider:
     def __init__(self):
