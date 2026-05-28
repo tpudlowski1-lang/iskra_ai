@@ -29,7 +29,7 @@ services:
       # =========================
 
       - key: OPENAI_MODEL
-        value: gpt-4.1-mini
+        value: gpt-4o-mini
 
       # API KEY ustaw ręcznie w panelu Render
 
