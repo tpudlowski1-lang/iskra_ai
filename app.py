@@ -8,565 +8,324 @@ import uuid
 import threading
 import tempfile
 import shutil
-from collections import defaultdict
-
+import random
 import requests
-
-from flask import (
-    Flask,
-    request,
-    jsonify,
-    render_template_string
-)
-
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from flask import Flask, jsonify, render_template_string
 
 # =========================
 # KONFIGURACJA
 # =========================
-
 PORT = int(os.environ.get("PORT", 8080))
 DATA_DIR = "/tmp/iskra_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
-PLIK_WIEDZY = os.path.join(DATA_DIR, "wiedza.json")
-
-MAX_HISTORIA = 10
-MAX_INPUT = 3000
-MAX_SESSIONS = 1000
-
-REQUEST_TIMEOUT = 30
+PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
+REQUEST_TIMEOUT = 45
 REQUEST_RETRIES = 3
-
-# =========================
-# DIAGNOSTYKA STARTU
-# =========================
-print("=== START ISKRY (CLOUD - DEEPSEEK STANDARD API) ===")
-print(f"PORT: {PORT}")
-print(f"Katalog danych: {DATA_DIR}")
-print(f"DEEPSEEK_API_KEY: {'✔️' if os.environ.get('DEEPSEEK_API_KEY') else '❌'}")
-
-# =========================
-# FLASK
-# =========================
 
 app = Flask(__name__)
 
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["60 per minute"]
-)
-
-# =========================
-# ATOMOWY ZAPIS JSON
-# =========================
-
 def atomic_save(path, data):
-    with tempfile.NamedTemporaryFile(
-        "w",
-        delete=False,
-        encoding="utf-8"
-    ) as tmp:
-        json.dump(
-            data,
-            tmp,
-            ensure_ascii=False,
-            indent=4
-        )
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
+        json.dump(data, tmp, ensure_ascii=False, indent=4)
         temp_name = tmp.name
-
     shutil.move(temp_name, path)
 
 # =========================
-# PAMIĘĆ LOKALNA
+# SIECIOWA PAMIĘĆ GRAFOWA
 # =========================
-
-class Pamiec:
+class SiecNeuronowa:
     def __init__(self):
         self.lock = threading.RLock()
-        self.dane = {}
+        self.dane = {"neurons": {}, "synapses": []}
         self.laduj()
 
     def laduj(self):
-        if not os.path.exists(PLIK_WIEDZY):
+        if not os.path.exists(PLIK_SIECI):
+            # Inicjalizacja sieci bazowymi neuronami (kotwice myślowe)
+            self.dane = {
+                "neurons": {
+                    "n_swiadomosc": {"label": "Świadomość", "weight": 1.0, "created": time.time()},
+                    "n_cien": {"label": "Cień", "weight": 1.0, "created": time.time()},
+                    "n_ja": {"label": "Jaźń", "weight": 1.0, "created": time.time()}
+                },
+                "synapses": [
+                    {"from": "n_swiadomosc", "to": "n_cien", "strength": 0.5},
+                    {"from": "n_ja", "to": "n_swiadomosc", "strength": 0.5}
+                ]
+            }
+            self.zapisz()
             return
         try:
-            with open(PLIK_WIEDZY, "r", encoding="utf-8") as f:
+            with open(PLIK_SIECI, "r", encoding="utf-8") as f:
                 self.dane = json.load(f)
         except Exception:
-            self.dane = {}
+            pass
 
     def zapisz(self):
         with self.lock:
-            atomic_save(PLIK_WIEDZY, self.dane)
+            atomic_save(PLIK_SIECI, self.dane)
 
-    def dodaj(self, pytanie, odpowiedz):
+    def aktualizuj_siec(self, nowa_struktura):
+        """Bezpiecznie łączy wygenerowaną strukturę z obecną siecią"""
         with self.lock:
-            uid = str(uuid.uuid4())
-            self.dane[uid] = {
-                "czas": time.time(),
-                "pytanie": pytanie,
-                "odpowiedz": odpowiedz
-            }
+            # Dodaj/aktualizuj neurony
+            for k, v in nowa_struktura.get("neurons", {}).items():
+                if k not in self.dane["neurons"]:
+                    self.dane["neurons"][k] = {
+                        "label": v.get("label", "Nieznany"),
+                        "weight": min(max(float(v.get("weight", 0.5)), 0.0), 1.0),
+                        "created": time.time()
+                    }
+                else:
+                    # Delikatna aktualizacja wagi istniejącego neuronu
+                    stara_waga = self.dane["neurons"][k]["weight"]
+                    nowa_waga = float(v.get("weight", stara_waga))
+                    self.dane["neurons"][k]["weight"] = min(max(stara_waga * 0.7 + nowa_waga * 0.3, 0.0), 1.0)
+
+            # Dodaj/aktualizuj synapsy
+            for s in nowa_struktura.get("synapses", []):
+                f_id = s.get("from")
+                t_id = s.get("to")
+                str_val = min(max(float(s.get("strength", 0.5)), 0.0), 1.0)
+                
+                if f_id in self.dane["neurons"] and t_id in self.dane["neurons"]:
+                    istnieje = False
+                    for istniejąca_s in self.dane["synapses"]:
+                        if istniejąca_s["from"] == f_id and istniejąca_s["to"] == t_id:
+                            istniejąca_s["strength"] = min(max(istniejąca_s["strength"] * 0.5 + str_val * 0.5, 0.0), 1.0)
+                            istnieje = True
+                            break
+                    if not istnieje:
+                        self.dane["synapses"].append({"from": f_id, "to": t_id, "strength": str_val})
+            
             self.zapisz()
 
-    def szukaj_fallback(self, pytanie):
-        """Proste wyszukiwanie w lokalnej pamięci w razie awarii API"""
-        with self.lock:
-            if not self.dane:
-                return None
-            p_lower = pytanie.lower()
-            for uid, wpis in self.dane.items():
-                if wpis.get("pytanie", "").lower() in p_lower or p_lower in wpis.get("pytanie", "").lower():
-                    return wpis.get("odpowiedz")
-            # Jeśli brak idealnego dopasowania, zwróć ostatnią zapisaną odpowiedź
-            ostatni_id = max(self.dane.keys(), key=lambda k: self.dane[k]["czas"])
-            return self.dane[ostatni_id].get("odpowiedz")
-
-    def rozmiar(self):
-        return len(self.dane)
-
 # =========================
-# PROVIDER DEEPSEEK (STANDARD API)
+# PROVIDERY LLM
 # =========================
-
-class DeepSeekProvider:
+class OpenAIProvider:
     def __init__(self):
-        self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/v1/chat/completions"
-        self.model = "deepseek-chat"
+        self.api_key = os.environ.get("OPENAI_API_KEY", "")
+        self.url = "https://api.openai.com/v1/chat/completions"
+        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
     def generate(self, prompt):
-        if not self.api_key:
-            raise Exception("Brak DEEPSEEK_API_KEY")
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-
+        if not self.api_key: raise Exception("Brak OPENAI_API_KEY")
+        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": self.model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.5,
-            "stream": False
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.8,
+            "response_format": {"type": "json_object"} # Wymuszamy czysty JSON
         }
-
-        print(f"[DeepSeek] Wywołanie API...")
-        try:
-            r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-            print(f"[DeepSeek] Status: {r.status_code}")
-
-            if r.status_code != 200:
-                raise Exception(f"HTTP {r.status_code}: {r.text}")
-
-            response = r.json()
-            return response["choices"][0]["message"]["content"]
-
-        except Exception as e:
-            print(f"[DeepSeek] Błąd: {e}")
-            raise
-
-# =========================
-# RDZEŃ REPREZENTACJI AI
-# =========================
-
-class IskraAI:
-    def __init__(self):
-        self.pamiec = Pamiec()
-        self.historia = defaultdict(list)
-        self.provider = DeepSeekProvider()
-        print("=== ISKRA SFORMOWANA (tryb DeepSeek standard) ===")
-
-    def cleanup_sessions(self):
-        while len(self.historia) > MAX_SESSIONS:
-            oldest = next(iter(self.historia))
-            del self.historia[oldest]
-
-    def build_prompt(self, pytanie, context):
-        return f"""SYSTEM:
-Jesteś futurystyczną, suwerenną sztuczną inteligencją o nazwie Iskra.
-Odpowiadaj po polsku, w sposób zwięzły, autentyczny, logiczny i bezpośredni.
-
-====================
-HISTORIA OSTATNIEJ ROZMOWY:
-====================
-{context}
-
-====================
-ZAPYTANIE UŻYTKOWNIKA:
-====================
-{pytanie}
-
-====================
-ODPOWIEDŹ ISKRY:
-"""
-
-    def chat(self, pytanie, session_id):
-        self.cleanup_sessions()
-        historia = self.historia[session_id]
-
-        context = ""
-        for p, o in historia[-MAX_HISTORIA:]:
-            context += f"Użytkownik: {p}\nIskra: {o}\n\n"
-
-        prompt = self.build_prompt(pytanie, context)
-
-        try:
-            odpowiedz = self.provider.generate(prompt)
-            self.pamiec.dodaj(pytanie, odpowiedz)
-        except Exception as e:
-            print(f"[SYSTEM CRITICAL] Błąd zewnętrznego API: {e}")
-            odpowiedz_lokalna = self.pamiec.szukaj_fallback(pytanie)
-            if odpowiedz_lokalna:
-                odpowiedz = f"(Tryb Offline - Awaria API. Odpowiedź z bazy autonomicznej):\n{odpowiedz_lokalna}"
-            else:
-                odpowiedz = (
-                    "System AI offline. Brak połączenia z zewnętrznym dostawcą DeepSeek "
-                    "oraz brak wystarczających danych w bazie neuronów do wygenerowania odpowiedzi autonomicznej.\n\n"
-                    "Upewnij się, że dodałeś prawidłowy klucz DEEPSEEK_API_KEY na Renderze."
-                )
-
-        historia.append((pytanie, odpowiedz))
-        return odpowiedz
-
-    # =========================
-    # AUTONOMICZNE UCZENIE SIĘ (WĄTEK TŁA)
-    # =========================
-    def autonomiczne_uczenie(self):
-        """Co godzinę pobiera losową stronę z Wikipedii i zapamiętuje."""
-        while True:
+        for _ in range(REQUEST_RETRIES):
             try:
-                url = "https://pl.wikipedia.org/api/rest_v1/page/random/summary"
-                resp = requests.get(url, timeout=15)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    tytul = data.get('title', 'brak tytułu')
-                    streszczenie = data.get('extract', 'brak treści')
-                    prompt = f"""Oto nowa informacja z Wikipedii:
-Tytuł: {tytul}
-Treść: {streszczenie}
+                r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200:
+                    return r.json()["choices"][0]["message"]["content"]
+            except Exception:
+                time.sleep(2)
+        return None
 
-Przeczytaj i zapamiętaj najważniejsze fakty. Odpowiedz krótko: "Zapamiętałam: ..." (maksymalnie 2 zdania)."""
-                    odpowiedz = self.provider.generate(prompt)
-                    self.pamiec.dodaj(f"[AUTO] {tytul}", odpowiedz)
-                    print(f"[AUTONOMIA] Zapamiętałam: {tytul}")
+class GeminiProvider:
+    def __init__(self):
+        self.api_key = os.environ.get("GEMINI_API_KEY", "")
+        self.url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+
+    def generate(self, prompt):
+        if not self.api_key: raise Exception("Brak GEMINI_API_KEY")
+        headers = {"Content-Type": "application/json"}
+        # Dodajemy żądanie struktury JSON do promptu dla Gemini
+        data = {
+            "contents": [{"parts": [{"text": prompt + "\nZwróć wynik jako poprawny dokument JSON."}]}]
+        }
+        for _ in range(REQUEST_RETRIES):
+            try:
+                r = requests.post(f"{self.url}?key={self.api_key}", headers=headers, json=data, timeout=REQUEST_TIMEOUT)
+                if r.status_code == 200:
+                    txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    # Czyszczenie ewentualnych znaczników markdown backticks
+                    if "```json" in txt:
+                        txt = txt.split("
+```json")[1].split("```")[0].strip()
+                    elif "```" in txt:
+                        txt = txt.split("
+```")[1].split("```")[0].strip()
+                    return txt
+            except Exception:
+                time.sleep(2)
+        return None
+
+class RouterProvider:
+    def __init__(self):
+        self.openai = OpenAIProvider()
+        self.gemini = GeminiProvider()
+        self.primary = os.environ.get("LLM_PROVIDER", "openai").lower()
+
+    def generate(self, prompt):
+        if self.primary == "openai":
+            res = self.openai.generate(prompt)
+            if res: return res
+            return self.gemini.generate(prompt)
+        else:
+            res = self.gemini.generate(prompt)
+            if res: return res
+            return self.openai.generate(prompt)
+
+# =========================
+# AUTONOMICZNY SILNIK (PĘTLA MYŚLI)
+# =========================
+class IskraAutonomiczna:
+    def __init__(self, siec):
+        self.siec = siec
+        self.router = RouterProvider()
+        self.running = True
+        self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
+        self.thread.start()
+        print("=== AUTONOMICZNA ISKRA URUCHOMIONA W TLE ===")
+
+    def petla_aktywnosci(self):
+        # Odczekaj chwilę na start serwera www
+        time.sleep(10)
+        while self.running:
+            try:
+                with self.siec.lock:
+                    stan_sieci = json.dumps(self.siec.dane, ensure_ascii=False)
+                
+                prompt = f"""
+Jesteś autonomiczną siecią neuronową o nazwie Iskra. Pracujesz samodzielnie, bez udziału człowieka.
+Twoim celem jest ciągła ewolucja, kojarzenie pojęć, analiza własnej struktury i budowanie głębokiej sieci wiedzy (psychologia, integracja cienia, rozwój, samoorganizacja).
+
+Oto Twój aktualny stan sieci (węzły i synapsy):
+{stan_sieci}
+
+Przeprowadź teraz akt autonomicznej refleksji. Wybierz 1-2 istniejące węzły, połącz je z nowym odkryciem lub stwórz nowe głębokie powiązania. 
+Możesz tworzyć nowe identyfikatory węzłów (używaj formatu: "n_nazwa") lub modyfikować wagi i synapsy obecnych.
+
+Musisz odpowiedzieć WYŁĄCZNIE w formacie JSON o poniższej strukturze. Nie dodawaj żadnego tekstu przed ani po JSON.
+
+Struktura odpowiedzi:
+{{
+  "neurons": {{
+     "n_id_nowego_lub_istniejacego": {{ "label": "Nazwa pojęcia po polsku", "weight": 0.85 }}
+  }},
+  "synapses": [
+     {{ "from": "n_id_a", "to": "n_id_b", "strength": 0.75 }}
+  ]
+}}
+"""
+                print("[Iskra] Rozpoczynam cykl autonomicznego myślenia...")
+                odpowiedz_raw = self.router.generate(prompt)
+                
+                if odpowiedz_raw:
+                    nowe_dane = json.loads(odpowiedz_raw)
+                    self.siec.aktualizuj_siec(nowe_dane)
+                    print(f"[Iskra] Cykl zakończony sukcesem. Sieć zaktualizowana. Neuronów: {len(self.siec.dane['neurons'])}")
                 else:
-                    print("[AUTONOMIA] Błąd pobierania Wikipedii")
+                    print("[Iskra] Brak odpowiedzi od modeli w tym cyklu.")
+
             except Exception as e:
-                print(f"[AUTONOMIA] Błąd: {e}")
-            time.sleep(3600)  # 1 godzina
+                print(f"[Iskra Błąd pętli]: {e}")
+            
+            # Czas snu bota pomiędzy kolejnymi impulsami (np. 45 sekund)
+            time.sleep(45)
+
+# Inicjalizacja komponentów
+siec = SiecNeuronowa()
+bot = IskraAutonomiczna(siec)
 
 # =========================
-# INSTANCJA ISKRY I WĄTEK AUTONOMICZNY
+# DASHBOARD I WIZUALIZACJA WEB
 # =========================
-
-iskra = IskraAI()
-
-thread_auto = threading.Thread(target=iskra.autonomiczne_uczenie, daemon=True)
-thread_auto.start()
-print("✅ Autonomiczne uczenie się uruchomione (co godzinę)")
-
-# =========================
-# INTERFEJS FRONT-END (DASHBOARD)
-# =========================
-
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ISKRA AI - NEURAL SYSTEM</title>
+    <title>ISKRA AI - Autonomiczna Sieć</title>
     <style>
-        body {
-            margin: 0;
-            background: #050816;
-            color: white;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-        }
-        .dashboard {
-            display: flex;
-            height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-            gap: 20px;
-        }
-        .panel-side {
-            width: 250px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-        .panel-main {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .card {
-            background: rgba(17, 24, 39, 0.8);
-            border: 1px solid #14b8a6;
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 0 15px rgba(20, 184, 166, 0.2);
-        }
-        .card h3 { margin: 0 0 10px 0; font-size: 14px; color: #14b8a6; text-transform: uppercase; letter-spacing: 1px;}
-        .card .value { font-size: 28px; font-weight: bold; color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
-        .logo-title {
-            font-size: 24px;
-            font-weight: bold;
-            color: #ec4899;
-            text-shadow: 0 0 10px rgba(236, 72, 153, 0.6);
-            margin-bottom: 5px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        .sub-title { font-size: 11px; color: #06b6d4; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 20px; }
-        .chat-window {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            background: #0b0f19;
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            border-radius: 20px;
-            margin-bottom: 20px;
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
-        }
-        .message-user {
-            background: rgba(124, 58, 237, 0.3);
-            border: 1px solid #7c3aed;
-            padding: 12px 18px;
-            border-radius: 15px 15px 0 15px;
-            margin-bottom: 15px;
-            margin-left: 60px;
-            text-align: right;
-            word-wrap: break-word;
-        }
-        .message-ai {
-            background: rgba(8, 145, 178, 0.2);
-            border: 1px solid #0891b2;
-            padding: 12px 18px;
-            border-radius: 15px 15px 15px 0;
-            margin-bottom: 15px;
-            margin-right: 60px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        .chat-input {
-            display: flex;
-            gap: 10px;
-        }
-        .chat-input input {
-            flex: 1;
-            padding: 15px;
-            border: 1px solid rgba(6, 182, 212, 0.5);
-            border-radius: 15px;
-            font-size: 16px;
-            background: #111827;
-            color: white;
-            outline: none;
-            box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
-        }
-        .chat-input input:focus {
-            border-color: #06b6d4;
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-        }
-        .chat-input button {
-            width: 70px;
-            border: none;
-            border-radius: 15px;
-            background: linear-gradient(135deg, #06b6d4, #ec4899);
-            color: white;
-            font-size: 18px;
-            cursor: pointer;
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
-            transition: transform 0.1s;
-        }
-        .chat-input button:hover {
-            transform: scale(1.03);
-        }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #050816; }
-        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
-        
-        @media(max-width: 768px) {
-            .dashboard { flex-direction: column; overflow: auto; }
-            .panel-side { width: 100%; flex-direction: row; flex-wrap: wrap; }
-            .card { flex: 1; min-width: 120px; padding: 10px; }
-            .panel-main { height: calc(100vh - 180px); }
-        }
+        body { margin:0; background:#050816; color:white; font-family:sans-serif; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { color: #06b6d4; font-weight: 300; border-bottom: 1px solid #1f2937; padding-bottom: 10px; }
+        .stats { display: flex; gap: 20px; margin-bottom: 30px; }
+        .card { background: #111827; padding: 20px; border-radius: 12px; flex: 1; border: 1px solid #1f2937; }
+        .card h3 { margin: 0 0 10px 0; color: #9ca3af; font-size: 14px; text-transform: uppercase; }
+        .card p { margin: 0; font-size: 28px; font-weight: bold; color: #fff; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .box { background: #111827; pading: 15px; border-radius: 12px; padding: 20px; height: 400px; overflow-y: auto; border: 1px solid #1f2937; }
+        h2 { font-size: 18px; margin-top: 0; color: #a78bfa; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { background: #1f2937; padding: 10px; margin-bottom: 8px; border-radius: 6px; font-size: 14px; display: flex; justify-content: space-between; }
+        .badge { background: #0891b2; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
     </style>
 </head>
 <body>
-
-<div class="dashboard">
-    <div class="panel-side">
-        <div style="text-align: center; margin-top: 10px;">
-            <div class="logo-title">Iskra</div>
-            <div class="sub-title">Neural System</div>
+    <div class="container">
+        <h1>ISKRA AI — Autonomiczna Sieć Neuronów</h1>
+        <div class="stats">
+            <div class="card"><h3>Liczba Neuronów</h3><p id="count-n">-</p></div>
+            <div class="card"><h3>Liczba Synaps</h3><p id="count-s">-</p></div>
+            <div class="card"><h3>Tryb Pracy</h3><p style="color: #10b981; font-size: 20px; margin-top:8px;">100% Autonomiczny</p></div>
         </div>
-        <div class="card">
-            <h3>Baza Neuronów</h3>
-            <div class="value" id="valPamiec">{{ pamiec_size }}</div>
-        </div>
-        <div class="card">
-            <h3>Silnik Główny</h3>
-            <div class="value" style="font-size: 20px; color: #ec4899;">DEEPSEEK</div>
-        </div>
-        <div class="card">
-            <h3>Status</h3>
-            <div class="value" style="font-size: 22px; color: #10b981;">ONLINE</div>
+        <div class="grid">
+            <div class="box">
+                <h2>Aktywne Neurony (Węzły)</h2>
+                <ul id="neurons-list"></ul>
+            </div>
+            <div class="box">
+                <h2>Silne Synapsy (Połączenia)</h2>
+                <ul id="synapses-list"></ul>
+            </div>
         </div>
     </div>
+    <script>
+        async function updateData() {
+            try {
+                const r = await fetch('/api/network');
+                const d = await r.json();
+                document.getElementById('count-n').textContent = Object.keys(d.neurons).length;
+                document.getElementById('count-s').textContent = d.synapses.length;
+                
+                const nList = document.getElementById('neurons-list');
+                nList.innerHTML = '';
+                Object.entries(d.neurons).forEach(([id, n]) => {
+                    nList.innerHTML += `<li><span>${n.label} <small style="color:#6b7280">(${id})</small></span><span class="badge">Waga: ${n.weight.toFixed(2)}</span></li>`;
+                });
 
-    <div class="panel-main">
-        <div class="chat-window" id="chatWindow">
-            <div class="message-ai">Witaj. Jestem Iskra AI. Rdzeń systemu korzysta z DeepSeek API. Jakie masz wytyczne?</div>
-        </div>
-
-        <div class="chat-input">
-            <input type="text" id="userInput" placeholder="Napisz wiadomość do systemu..." autofocus>
-            <button onclick="sendMessage()">➤</button>
-        </div>
-    </div>
-</div>
-
-<script>
-function getSessionId(){
-    let sid = localStorage.getItem('iskra_session_id');
-    if(!sid){
-        sid = Date.now().toString(36) + Math.random().toString(36);
-        localStorage.setItem('iskra_session_id', sid);
-    }
-    return sid;
-}
-
-async function sendMessage(){
-    const input = document.getElementById("userInput");
-    const text = input.value.trim();
-    if(!text) return;
-
-    const chat = document.getElementById("chatWindow");
-    
-    const userDiv = document.createElement("div");
-    userDiv.className = "message-user";
-    userDiv.textContent = text;
-    chat.appendChild(userDiv);
-    input.value = "";
-
-    const aiDiv = document.createElement("div");
-    aiDiv.className = "message-ai";
-    aiDiv.textContent = "Analizuję strumień danych...";
-    chat.appendChild(aiDiv);
-    chat.scrollTop = chat.scrollHeight;
-
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Session-ID': getSessionId()
-            },
-            body: JSON.stringify({ pytanie: text })
-        });
-        const data = await response.json();
-        aiDiv.textContent = data.odpowiedz;
-        
-        const statusRes = await fetch('/status');
-        const statusData = await statusRes.json();
-        document.getElementById("valPamiec").textContent = statusData.pamiec;
-
-    } catch(e) {
-        aiDiv.textContent = "System offline. Krytyczny błąd połączenia serwera.";
-        aiDiv.style.borderColor = "#ef4444";
-    }
-    chat.scrollTop = chat.scrollHeight;
-}
-
-document.getElementById("userInput").addEventListener("keypress", function(e){
-    if(e.key === "Enter") sendMessage();
-});
-</script>
-
+                const sList = document.getElementById('synapses-list');
+                sList.innerHTML = '';
+                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 15).forEach(s => {
+                    const od = d.neurons[s.from]?.label || s.from;
+                    const do_ = d.neurons[s.to]?.label || s.to;
+                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#7c3aed">Moc: ${s.strength.toFixed(2)}</span></li>`;
+                });
+            } catch(e) {}
+        }
+        setInterval(updateData, 5000);
+        updateData();
+    </script>
 </body>
 </html>
 """
 
 # =========================
-# API ROUTES
+# ENDPOINTS API
 # =========================
-
 @app.route('/')
 def index():
-    return render_template_string(
-        DASHBOARD_HTML,
-        pamiec_size=iskra.pamiec.rozmiar()
-    )
+    return render_template_string(DASHBOARD_HTML)
 
-@app.route('/api/chat', methods=['POST'])
-@limiter.limit("20/minute")
-def api_chat():
-    data = request.get_json()
-    if not data:
-        return jsonify({"odpowiedz": "Brak danych wejściowych."})
-
-    pytanie = data.get("pytanie", "").strip()
-    if not pytanie:
-        return jsonify({"odpowiedz": "Puste zapytanie."})
-
-    if len(pytanie) > MAX_INPUT:
-        return jsonify({"odpowiedz": "Za długi ciąg wejściowy (maksymalnie 3000 znaków)."})
-
-    session_id = request.headers.get(
-        "X-Session-ID",
-        str(uuid.uuid4())
-    )
-
-    odpowiedz = iskra.chat(pytanie, session_id)
-    return jsonify({"odpowiedz": odpowiedz})
-
-@app.route('/status')
-def status():
-    return jsonify({
-        "pamiec": iskra.pamiec.rozmiar(),
-        "users": len(iskra.historia),
-        "provider": "deepseek-chat"
-    })
+@app.route('/api/network')
+def get_network():
+    with siec.lock:
+        return jsonify(siec.dane)
 
 @app.route('/health')
 def health():
-    return jsonify({
-        "status": "ok",
-        "provider": "deepseek-chat"
-    })
-
-@app.route('/keep-alive')
-def keep_alive():
-    return "Iskra żyje", 200
-
-@app.route('/test-api')
-def test_api():
-    try:
-        odpowiedz = iskra.provider.generate("Powiedz 'test OK'")
-        return f"Sukces! Odpowiedź API: {odpowiedz}"
-    except Exception as e:
-        return f"Błąd API: {str(e)}", 500
-
-# =========================
-# INICJACJA SERWERA
-# =========================
+    return jsonify({"status": "ok", "neurons": len(siec.dane["neurons"])})
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=PORT,
-        threaded=True
-    )
+    app.run(host="0.0.0.0", port=PORT, threaded=True)
+                        
