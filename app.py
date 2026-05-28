@@ -8,6 +8,7 @@ import threading
 import tempfile
 import shutil
 import requests
+import re
 from flask import Flask, jsonify, render_template_string
 
 # =========================
@@ -99,16 +100,16 @@ class SiecNeuronowa:
 class OpenAIProvider:
     def __init__(self):
         self.api_key = os.environ.get("OPENAI_API_KEY", "")
-        self.url = "https://api.openai.com/v1/chat/completions"
+        self.url = "[https://api.openai.com/v1/chat/completions](https://api.openai.com/v1/chat/completions)"
         self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
     def generate(self, prompt):
-        if not self.api_key: raise Exception("Brak OPENAI_API_KEY")
+        if not self.api_key: return None
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.8,
+            "temperature": 0.7,
             "response_format": {"type": "json_object"}
         }
         for _ in range(REQUEST_RETRIES):
@@ -123,12 +124,12 @@ class OpenAIProvider:
 class GeminiProvider:
     def __init__(self):
         self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.url = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent)"
 
     def generate(self, prompt):
-        if not self.api_key: raise Exception("Brak GEMINI_API_KEY")
+        if not self.api_key: return None
         headers = {"Content-Type": "application/json"}
-        data = {"contents": [{"parts": [{"text": prompt + " Odpowiedz w czystym formacie JSON bez markdown."}]}]}
+        data = {"contents": [{"parts": [{"text": prompt}]}]}
         for _ in range(REQUEST_RETRIES):
             try:
                 r = requests.post(f"{self.url}?key={self.api_key}", headers=headers, json=data, timeout=REQUEST_TIMEOUT)
@@ -144,18 +145,30 @@ class RouterProvider:
         self.gemini = GeminiProvider()
         self.primary = os.environ.get("LLM_PROVIDER", "openai").lower()
 
+    def clean_json(self, text):
+        if not text:
+            return None
+        # Wyciąganie czystego JSON za pomocą wyrażenia regularnego (szuka wszystkiego między pierwszym { a ostatnim })
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return match.group(0)
+        return text
+
     def generate(self, prompt):
+        raw_res = None
         if self.primary == "openai":
-            res = self.openai.generate(prompt)
-            if res: return res
-            return self.gemini.generate(prompt)
+            raw_res = self.openai.generate(prompt)
+            if not raw_res:
+                raw_res = self.gemini.generate(prompt)
         else:
-            res = self.gemini.generate(prompt)
-            if res: return res
-            return self.openai.generate(prompt)
+            raw_res = self.gemini.generate(prompt)
+            if not raw_res:
+                raw_res = self.openai.generate(prompt)
+        
+        return self.clean_json(raw_res)
 
 # =========================
-# AUTONOMICZNY SILNIK (PĘTLA MYŚLI)
+# AUTONOMICZNY SILNIK
 # =========================
 class IskraAutonomiczna:
     def __init__(self, siec):
@@ -164,33 +177,37 @@ class IskraAutonomiczna:
         self.running = True
         self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
         self.thread.start()
-        print("=== AUTONOMICZNA ISKRA URUCHOMIONA ===")
 
     def petla_aktywnosci(self):
-        time.sleep(10)
+        time.sleep(5)
         while self.running:
             try:
                 with self.siec.lock:
                     stan_sieci = json.dumps(self.siec.dane, ensure_ascii=False)
                 
                 prompt = f"""
-Jesteś autonomiczną siecią neuronową Iskra. Pracujesz bez udziału człowieka.
-Twój cel to analiza własnej struktury i budowanie sieci wiedzy (psychologia, integracja cienia, rozwój).
+Jesteś autonomiczną siecią neuronową Iskra. Analizujesz strukturę swoich pojęć.
+Twoja tematyka: psychologia analityczna, integracja cienia, ludzkie popędy, mechanizmy obronne.
 Aktualny stan sieci: {stan_sieci}
-Wygeneruj 1-2 nowe pojęcia ("n_nazwa") lub zaktualizuj wagi obecnych i połącz je synapsami.
-Musisz odpowiedzieć WYŁĄCZNIE w formacie JSON:
+
+Zadanie: Wygeneruj dokładnie 1 lub 2 nowe pojęcia jako neurony (nadaj im unikalne klucze, np. "n_projekcja", "n_ego") i połącz je logicznymi synapsami ze starymi lub nowymi neuronami. Możesz też zmienić wagi obecnych neuronów.
+Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu:
 {{
-  "neurons": {{ "n_id": {{ "label": "Nazwa", "weight": 0.8 }} }},
-  "synapses": [ {{ "from": "n_id_a", "to": "n_id_b", "strength": 0.7 }} ]
+  "neurons": {{
+    "n_nowy_id": {{ "label": "Nazwa Pojęcia", "weight": 0.75 }}
+  }},
+  "synapses": [
+    {{ "from": "n_swiadomosc", "to": "n_nowy_id", "strength": 0.60 }}
+  ]
 }}
 """
-                odpowiedz_raw = self.router.generate(prompt)
-                if odpowiedz_raw:
-                    nowe_dane = json.loads(odpowiedz_raw)
+                odpowiedz_json = self.router.generate(prompt)
+                if odpowiedz_json:
+                    nowe_dane = json.loads(odpowiedz_json)
                     self.siec.aktualizuj_siec(nowe_dane)
             except Exception:
                 pass
-            time.sleep(45)
+            time.sleep(30) # Cykl skrócony do 30 sekund dla szybszych testów
 
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
@@ -257,7 +274,7 @@ DASHBOARD_HTML = """
                 });
             } catch(e) {}
         }
-        setInterval(updateData, 5000);
+        setInterval(updateData, 4000);
         updateData();
     </script>
 </body>
@@ -279,3 +296,4 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
+e
