@@ -115,7 +115,7 @@ class DeepSeekProvider:
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a precise JSON generator. Always return raw JSON objects matching the schema without markdown formatting."},
+                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                 {"role": "user", "content": prompt}
             ],
             "temperature": 0.7,
@@ -177,7 +177,8 @@ Twoja tematyka: psychologia analityczna, integracja cienia, ludzkie popędy, mec
 Aktualny stan sieci: {stan_sieci}
 
 Zadanie: Wygeneruj dokładnie 1 lub 2 nowe pojęcia jako neurony (nadaj im unikalne klucze, np. "n_projekcja", "n_ego") i połącz je logicznymi synapsami ze starymi lub nowymi neuronami. Możesz też zmienić wagi obecnych neuronów.
-Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu:
+
+Respond ONLY with a valid JSON object matching this schema:
 {{
   "neurons": {{
     "n_nowy_id": {{ "label": "Nazwa Pojęcia", "weight": 0.75 }}
@@ -191,7 +192,7 @@ Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu
                 if odpowiedz_json:
                     print(f"Bot: Otrzymano odpowiedź z API: {odpowiedz_json}")
                     nowe_dane = json.loads(odpowiedz_json)
-                    self.siec.aktualizuj_siec(nowe_dane)
+                    self.siec.aktualizuj_network = self.siec.aktualizuj_siec(nowe_dane)
                     print("Bot: Pomyślnie zaktualizowano graf sieci pojęciowej.")
                 else:
                     print("Bot: Router nie zwrócił żadnych danych (pusta odpowiedź).")
@@ -201,10 +202,9 @@ Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu
             print("Bot: Idę spać na 30 sekund...")
             time.sleep(30)
 
-# Poprawiona, czysta inicjalizacja obiektów
+# Czysta inicjalizacja obiektów
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
-
 
 # =========================
 # DASHBOARD WEB
@@ -290,3 +290,4 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
+                    
