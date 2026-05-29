@@ -14,7 +14,7 @@ from flask import Flask, jsonify, render_template_string
 # =========================
 # KONFIGURACJA
 # =========================
-PORT = int(os.environ.get("PORT", 8080))
+PORT = int(os.environ.get("PORT", 10000))
 DATA_DIR = "/tmp/iskra_data"
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -193,7 +193,7 @@ Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu
                 pass
             time.sleep(30)
 
-siec = SiecNeuronowa()
+siec = SiecNeUniformowa = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
 
 # =========================
