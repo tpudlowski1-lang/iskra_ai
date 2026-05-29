@@ -15,7 +15,6 @@ from flask import Flask, jsonify, render_template_string
 # KONFIGURACJA
 # =========================
 PORT = int(os.environ.get("PORT", 10000))
-# Zmiana na katalog bieżący, aby dane nie znikały z /tmp po restarcie
 DATA_DIR = os.path.abspath(os.path.dirname(__file__))
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
@@ -40,17 +39,35 @@ class SiecNeuronowa:
         self.laduj()
 
     def laduj(self):
+        # Inicjalizacja pełnej matrycy 12 obszarów wiedzy i rozumowania
         if not os.path.exists(PLIK_SIECI):
-            print(f"Sieć: Brak pliku bazy danych. Inicjalizacja bazy w: {PLIK_SIECI}")
+            print(f"Sieć: Inicjalizacja 12-filarowej matrycy wiedzy w: {PLIK_SIECI}")
             self.dane = {
                 "neurons": {
-                    "n_swiadomosc": {"label": "Świadomość", "weight": 1.0, "created": time.time()},
-                    "n_cien": {"label": "Cień", "weight": 1.0, "created": time.time()},
-                    "n_ja": {"label": "Jaźń", "weight": 1.0, "created": time.time()}
+                    "n_logika": {"label": "1. Logika i Rozumowanie", "weight": 1.0, "created": time.time()},
+                    "n_epistemologia": {"label": "2. Epistemologia", "weight": 1.0, "created": time.time()},
+                    "n_etyka": {"label": "3. Etyka i Wartości", "weight": 1.0, "created": time.time()},
+                    "n_ontologia": {"label": "4. Ontologia i Metafizyka", "weight": 1.0, "created": time.time()},
+                    "n_przyrodnicze": {"label": "5. Nauki Przyrodnicze", "weight": 1.0, "created": time.time()},
+                    "n_spoleczne": {"label": "6. Nauki Społeczne i Psychologia", "weight": 1.0, "created": time.time()},
+                    "n_jezyk": {"label": "7. Język i Komunikacja", "weight": 1.0, "created": time.time()},
+                    "n_historia": {"label": "8. Historia i Kultura", "weight": 1.0, "created": time.time()},
+                    "n_technologia": {"label": "9. Technologia i Sztuczna Inteligencja", "weight": 1.0, "created": time.time()},
+                    "n_sztuka": {"label": "10. Sztuka i Kreatywność", "weight": 1.0, "created": time.time()},
+                    "n_zdrowie": {"label": "11. Zdrowie i Rozwój Osobisty", "weight": 1.0, "created": time.time()},
+                    "n_metapoznanie": {"label": "12. Metapoznanie", "weight": 1.0, "created": time.time()}
                 },
                 "synapses": [
-                    {"from": "n_swiadomosc", "to": "n_cien", "strength": 0.5},
-                    {"from": "n_ja", "to": "n_swiadomosc", "strength": 0.5}
+                    {"from": "n_logika", "to": "n_epistemologia", "strength": 0.95},
+                    {"from": "n_logika", "to": "n_technologia", "strength": 0.90},
+                    {"from": "n_epistemologia", "to": "n_ontologia", "strength": 0.85},
+                    {"from": "n_etyka", "to": "n_spoleczne", "strength": 0.80},
+                    {"from": "n_ontologia", "to": "n_przyrodnicze", "strength": 0.85},
+                    {"from": "n_przyrodnicze", "to": "n_technologia", "strength": 0.80},
+                    {"from": "n_jezyk", "to": "n_spoleczne", "strength": 0.75},
+                    {"from": "n_historia", "to": "n_sztuka", "strength": 0.70},
+                    {"from": "n_metapoznanie", "to": "n_logika", "strength": 0.90},
+                    {"from": "n_zdrowie", "to": "n_metapoznanie", "strength": 0.80}
                 ]
             }
             self.zapisz()
@@ -58,16 +75,21 @@ class SiecNeuronowa:
         try:
             with open(PLIK_SIECI, "r", encoding="utf-8") as f:
                 self.dane = json.load(f)
-            print(f"Sieć: Pomyślnie wczytano stan sieci ({len(self.dane['neurons'])} neuronów) z {PLIK_SIECI}")
+            
+            # Wymuszenie przebudowy, jeśli w bazie brakuje nowej struktury 12 filarów
+            if "n_logika" not in self.dane.get("neurons", {}):
+                print("Sieć: Wykryto starą strukturę bazy. Nadpisywanie nowym schematem 12 filarów...")
+                os.remove(PLIK_SIECI)
+                self.laduj()
         except Exception as e:
-            print(f"Sieć: Błąd wczytywania pliku bazy, tworzę nową: {e}")
+            print(f"Sieć: Błąd krytyczny ładowania, reset: {e}")
 
     def zapisz(self):
         with self.lock:
             try:
                 atomic_save(PLIK_SIECI, self.dane)
             except Exception as e:
-                print(f"Sieć: Krytyczny błąd zapisu bazy: {e}")
+                print(f"Sieć: Błąd zapisu: {e}")
 
     def aktualizuj_siec(self, nowa_struktura):
         with self.lock:
@@ -123,7 +145,7 @@ class DeepSeekProvider:
                 {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.7,
+            "temperature": 0.5,
             "response_format": {"type": "json_object"}
         }
         
@@ -165,50 +187,61 @@ class IskraAutonomiczna:
         self.running = True
         self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
         self.thread.start()
-        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (DEEPSEEK ONLY) ===")
+        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (MATRYCA SYSTEMOWA 12 FILARÓW) ===")
 
     def petla_aktywnosci(self):
         print("Bot: Oczekiwanie 5 sekund na stabilizację serwera...")
         time.sleep(5)
         while self.running:
             try:
-                print("Bot: Rozpoczynam nowy cykl analizy sieci...")
+                print("Bot: Rozpoczynam nowy cykl mapowania matrycy wiedzy...")
                 with self.siec.lock:
                     stan_sieci = json.dumps(self.siec.dane, ensure_ascii=False)
                 
                 prompt = f"""
-Jesteś autonomiczną siecią neuronową Iskra. Analizujesz strukturę swoich pojęć.
-Twoja tematyka: psychologia analityczna, integracja cienia, ludzkie popędy, mechanizmy obronne.
-Aktualny stan sieci: {stan_sieci}
+Jesteś autonomicznym systemem Iskra. Mapujesz i analizujesz powiązania pojęciowe w oparciu o 12 fundamentalnych obszarów:
+1. Logika i rozumowanie (zasady myślenia, błędy poznawcze, matematyka, algorytmy)
+2. Epistemologia (teoria poznania, prawda, metody naukowe)
+3. Etyka i wartości (dobro, sprawiedliwość, wolność, Dekalog)
+4. Ontologia i metafizyka (byt, przyczynowość, umysł-ciało)
+5. Nauki przyrodnicze (fizyka, chemia, biologia, astronomia)
+6. Nauki społeczne i psychologia (poznawcza, socjologia, ekonomia)
+7. Język i komunikacja (semantyka, pragmatyka, manipulacja językowa)
+8. Historia i kultura (wydarzenia, rozwój cywilizacji, różnorodność)
+9. Technologia i sztuczna inteligencja (sieci neuronowe, programowanie, etyka AI)
+10. Sztuka i kreatywność (estetyka, proces twórczy, wyobraźnia)
+11. Zdrowie i rozwój osobisty (higiena, uważność, samodyscyplina)
+12. Metapoznanie (myślenie o myśleniu, monitorowanie własnych błędów)
 
-Zadanie: Wygeneruj dokładnie 1 lub 2 nowe pojęcia jako neurony (nadaj im unikalne klucze, np. "n_projekcja", "n_ego") i połącz je logicznymi synapsami ze starymi lub nowymi neuronami. Możesz też zmienić wagi obecnych neuronów.
+Aktualny stan grafu sieci: {stan_sieci}
+
+Zadanie: Wybierz podaspekty z tych obszarów, dokonaj ich syntezy lub uszczegółowienia. Wygeneruj dokładnie 1 lub 2 nowe podpojęcia (nadaj im precyzyjne klucze techniczne, np. "n_falsyfikacja", "n_deontologia", "n_algorytmika") i stwórz dla nich logiczne, merytoryczne synapsy z istniejącymi lub nowymi węzłami.
 
 Respond ONLY with a valid JSON object matching this schema:
 {{
   "neurons": {{
-    "n_nowy_id": {{ "label": "Nazwa Pojęcia", "weight": 0.75 }}
+    "n_nowy_id": {{ "label": "Precyzyjna Nazwa Pojęcia", "weight": 0.85 }}
   }},
   "synapses": [
-    {{ "from": "n_swiadomosc", "to": "n_nowy_id", "strength": 0.60 }}
+    {{ "from": "n_logika", "to": "n_nowy_id", "strength": 0.80 }}
   ]
 }}
 """
                 odpowiedz_json = self.router.generate(prompt)
                 if odpowiedz_json:
-                    print(f"Bot: Otrzymano odpowiedź z API: {odpowiedz_json}")
+                    print(f"Bot: Otrzymano poprawną strukturę JSON: {odpowiedz_json}")
                     nowe_dane = json.loads(odpowiedz_json)
-                    # Poprawiona literówka (usunięto niepoprawne przypisanie do zmiennej)
                     self.siec.aktualizuj_siec(nowe_dane)
-                    print("Bot: Pomyślnie zaktualizowano graf sieci pojęciowej.")
+                    print("Bot: Pomyślnie zaktualizowano graf mapy wiedzy.")
                 else:
-                    print("Bot: Router nie zwrócił żadnych danych (pusta odpowiedź).")
+                    print("Bot: Router zwrócił pustą odpowiedź.")
             except Exception as e:
-                print(f"KRYTYCZNY BŁĄD W PĘTLI BOTA: {e}")
+                print(f"BŁĄD W CYKLU MAPOWANIA: {e}")
             
             print("Bot: Idę spać na 30 sekund...")
             time.sleep(30)
 
-# Czysta inicjalizacja obiektów
+# Inicjalizacja obiektów
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
 
@@ -221,34 +254,34 @@ DASHBOARD_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ISKRA AI</title>
+    <title>ISKRA AI — Rdzeń Wiedzy</title>
     <style>
-        body { margin:0; background:#050816; color:white; font-family:sans-serif; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        h1 { color: #06b6d4; font-weight: 300; border-bottom: 1px solid #1f2937; padding-bottom: 10px; }
+        body { margin:0; background:#040712; color:#e2e8f0; font-family:sans-serif; padding: 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { color: #0ea5e9; font-weight: 300; border-bottom: 1px solid #334155; padding-bottom: 10px; font-size: 24px; letter-spacing: 0.5px; }
         .stats { display: flex; gap: 20px; margin-bottom: 30px; }
-        .card { background: #111827; padding: 20px; border-radius: 12px; flex: 1; border: 1px solid #1f2937; }
-        .card h3 { margin: 0 0 10px 0; color: #9ca3af; font-size: 14px; text-transform: uppercase; }
-        .card p { margin: 0; font-size: 28px; font-weight: bold; }
+        .card { background: #0f172a; padding: 20px; border-radius: 12px; flex: 1; border: 1px solid #1e293b; }
+        .card h3 { margin: 0 0 10px 0; color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card p { margin: 0; font-size: 28px; font-weight: bold; color: #f1f5f9; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .box { background: #111827; border-radius: 12px; padding: 20px; height: 400px; overflow-y: auto; border: 1px solid #1f2937; }
-        h2 { font-size: 18px; margin-top: 0; color: #a78bfa; }
+        .box { background: #0f172a; border-radius: 12px; padding: 20px; height: 450px; overflow-y: auto; border: 1px solid #1e293b; }
+        h2 { font-size: 15px; margin-top: 0; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; }
         ul { list-style: none; padding: 0; margin: 0; }
-        li { background: #1f2937; padding: 10px; margin-bottom: 8px; border-radius: 6px; font-size: 14px; display: flex; justify-content: space-between; }
-        .badge { background: #0891b2; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        li { background: #1e293b; padding: 12px; margin-bottom: 8px; border-radius: 6px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #38bdf8; }
+        .badge { background: #0369a1; color: #f0f9ff; padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>ISKRA AI — Sieć Neuronów</h1>
+        <h1>ISKRA AI — System Mapowania Wiedzy i Metapoznania</h1>
         <div class="stats">
-            <div class="card"><h3>Neurony</h3><p id="count-n">-</p></div>
-            <div class="card"><h3>Synapsy</h3><p id="count-s">-</p></div>
-            <div class="card"><h3>Tryb silnika</h3><p style="color: #06b6d4; font-size: 20px; margin-top:8px;">DeepSeek V3</p></div>
+            <div class="card"><h3>Węzły (Kategorie)</h3><p id="count-n">-</p></div>
+            <div class="card"><h3>Korelacje (Synapsy)</h3><p id="count-s">-</p></div>
+            <div class="card"><h3>Status Układu</h3><p style="color: #38bdf8; font-size: 18px; margin-top:8px; font-weight: 500;">12 Filarów / Aktywny</p></div>
         </div>
         <div class="grid">
-            <div class="box"><h2>Węzły sieci</h2><ul id="neurons-list"></ul></div>
-            <div class="box"><h2>Połączenia</h2><ul id="synapses-list"></ul></div>
+            <div class="box"><h2>Struktura Pojęciowa</h2><ul id="neurons-list"></ul></div>
+            <div class="box"><h2>Powiązania i Korelacie</h2><ul id="synapses-list"></ul></div>
         </div>
     </div>
     <script>
@@ -267,10 +300,10 @@ DASHBOARD_HTML = """
 
                 const sList = document.getElementById('synapses-list');
                 sList.innerHTML = '';
-                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 15).forEach(s => {
+                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 25).forEach(s => {
                     const od = d.neurons[s.from]?.label || s.from;
                     const do_ = d.neurons[s.to]?.label || s.to;
-                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#7c3aed">Moc: ${s.strength.toFixed(2)}</span></li>`;
+                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#0284c7">Moc: ${s.strength.toFixed(2)}</span></li>`;
                 });
             } catch(e) {}
         }
@@ -296,4 +329,4 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
-                        
+    
