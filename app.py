@@ -12,25 +12,23 @@ import re
 from flask import Flask, jsonify, render_template_string
 
 # =========================
-# KONFIGURACJA I ŚCIEŻKI
+# KONFIGURACJA
 # =========================
 PORT = int(os.environ.get("PORT", 8080))
-DATA_DIR = os.path.abspath(".") 
+DATA_DIR = "/tmp/iskra_data"
+os.makedirs(DATA_DIR, exist_ok=True)
+
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 45
 REQUEST_RETRIES = 3
 
 app = Flask(__name__)
 
 def atomic_save(path, data):
-    try:
-        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", dir=DATA_DIR) as tmp:
-            json.dump(data, tmp, ensure_ascii=False, indent=4)
-            temp_name = tmp.name
-        shutil.move(temp_name, path)
-        print(f"[SIEC] Baza danych {os.path.basename(path)} zaktualizowana pomyślnie.")
-    except Exception as e:
-        print(f"[BŁĄD KRYTYCZNY ZAPISU]: {e}")
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
+        json.dump(data, tmp, ensure_ascii=False, indent=4)
+        temp_name = tmp.name
+    shutil.move(temp_name, path)
 
 # =========================
 # SIECIOWA PAMIĘĆ GRAFOWA
@@ -43,7 +41,6 @@ class SiecNeuronowa:
 
     def laduj(self):
         if not os.path.exists(PLIK_SIECI):
-            print("[SIEC] Plik bazy danych nie istnieje. Inicjalizacja archetypów...")
             self.dane = {
                 "neurons": {
                     "n_swiadomosc": {"label": "Świadomość", "weight": 1.0, "created": time.time()},
@@ -60,9 +57,8 @@ class SiecNeuronowa:
         try:
             with open(PLIK_SIECI, "r", encoding="utf-8") as f:
                 self.dane = json.load(f)
-            print(f"[SIEC] Wczytano istniejącą sieć: {len(self.dane['neurons'])} neuronów.")
-        except Exception as e:
-            print(f"[SIEC] Błąd ładowania pliku, tworzenie struktury awaryjnej: {e}")
+        except Exception:
+            pass
 
     def zapisz(self):
         with self.lock:
@@ -70,11 +66,6 @@ class SiecNeuronowa:
 
     def aktualizuj_siec(self, nowa_struktura):
         with self.lock:
-            if not nowa_struktura or not isinstance(nowa_struktura, dict):
-                print("[SIEC] Odebrano nieprawidłową strukturę do aktualizacji.")
-                return
-
-            # Aktualizacja neuronów
             for k, v in nowa_struktura.get("neurons", {}).items():
                 if k not in self.dane["neurons"]:
                     self.dane["neurons"][k] = {
@@ -82,13 +73,11 @@ class SiecNeuronowa:
                         "weight": min(max(float(v.get("weight", 0.5)), 0.0), 1.0),
                         "created": time.time()
                     }
-                    print(f"[SIEC] ZBUDOWANO NOWY NEURON: [{k}] -> '{v.get('label')}'")
                 else:
                     stara_waga = self.dane["neurons"][k]["weight"]
                     nowa_waga = float(v.get("weight", stara_waga))
                     self.dane["neurons"][k]["weight"] = min(max(stara_waga * 0.7 + nowa_waga * 0.3, 0.0), 1.0)
 
-            # Aktualizacja synaps
             for s in nowa_struktura.get("synapses", []):
                 f_id = s.get("from")
                 t_id = s.get("to")
@@ -103,130 +92,63 @@ class SiecNeuronowa:
                             break
                     if not istnieje:
                         self.dane["synapses"].append({"from": f_id, "to": t_id, "strength": str_val})
-                        print(f"[SIEC] Nowe połączenie: {f_id} -> {t_id} ({str_val})")
             self.zapisz()
 
 # =========================
-# PROVIDERY LLM
+# PROVIDER DEEPSEEK
 # =========================
 class DeepSeekProvider:
     def __init__(self):
         self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/chat/completions"
+        self.url = "https://api.deepseek.com/v1/chat/completions"
+        self.model = "deepseek-chat"
 
     def generate(self, prompt):
-        if not self.api_key: return None
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        data = {
-            "model": "deepseek-chat",
-            "messages": [
-                {"role": "system", "content": "You are a specialized JSON analyzer core. Respond exclusively with a valid JSON object."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3,
-            "response_format": {"type": "json_object"}
+        if not self.api_key:
+            print("BŁĄD: Brak zmiennej DEEPSEEK_API_KEY w konfiguracji Rendera!")
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}", 
+            "Content-Type": "application/json"
         }
-        for _ in range(REQUEST_RETRIES):
-            try:
-                r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-                if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
-                print(f"[DEBUG DEEPSEEK] Status: {r.status_code}, Odpowiedź: {r.text}")
-            except Exception as e: 
-                print(f"[DEBUG DEEPSEEK] Wyjątek połączenia: {e}")
-            time.sleep(1)
-        return None
-
-class OpenAIProvider:
-    def __init__(self):
-        self.api_key = os.environ.get("OPENAI_API_KEY", "")
-        self.url = "https://api.openai.com/v1/chat/completions"
-        self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-
-    def generate(self, prompt):
-        if not self.api_key: return None
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         data = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": "You are a backend structural engine. Respond exclusively with a valid JSON object."},
+                {"role": "system", "content": "You are a precise JSON generator. Always return raw JSON objects matching the schema without markdown formatting."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.4,
+            "temperature": 0.7,
             "response_format": {"type": "json_object"}
         }
+        
         for _ in range(REQUEST_RETRIES):
             try:
                 r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-                if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
-            except Exception as e: 
-                print(f"[DEBUG OPENAI] Wyjątek połączenia: {e}")
-            time.sleep(1)
-        return None
-
-class GeminiProvider:
-    def __init__(self):
-        self.api_key = os.environ.get("GEMINI_API_KEY", "")
-        self.url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-
-    def generate(self, prompt):
-        if not self.api_key: return None
-        headers = {"Content-Type": "application/json"}
-        data = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json"
-            }
-        }
-        for _ in range(REQUEST_RETRIES):
-            try:
-                r = requests.post(f"{self.url}?key={self.api_key}", headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-                if r.status_code == 200: return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            except Exception as e: 
-                print(f"[DEBUG GEMINI] Wyjątek połączenia: {e}")
-            time.sleep(1)
+                if r.status_code == 200:
+                    return r.json()["choices"][0]["message"]["content"]
+                else:
+                    print(f"DeepSeek API Error: {r.status_code} - {r.text}")
+            except Exception as e:
+                print(f"Błąd połączenia z DeepSeek: {e}")
+                time.sleep(2)
         return None
 
 class RouterProvider:
     def __init__(self):
-        self.openai = OpenAIProvider()
-        self.gemini = GeminiProvider()
         self.deepseek = DeepSeekProvider()
-        self.primary = os.environ.get("LLM_PROVIDER", "openai").lower()
 
     def clean_json(self, text):
-        if not text: return None
-        text = text.strip()
+        if not text:
+            return None
         match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match: return match.group(0)
+        if match:
+            return match.group(0)
         return text
 
     def generate(self, prompt):
-        providers = {
-            "openai": self.openai,
-            "deepseek": self.deepseek,
-            "gemini": self.gemini
-        }
-        
-        order = [self.primary] + [k for k in providers.keys() if k != self.primary]
-        
-        for p_name in order:
-            provider = providers.get(p_name)
-            if provider and provider.api_key:
-                print(f"[ISKRA] Próba generowania przez dostawcę: {p_name}...")
-                res = provider.generate(prompt)
-                if res:
-                    cleaned = self.clean_json(res)
-                    if cleaned:
-                        try:
-                            # Próba parsowania kontrolnego – autokorekta przed zwróceniem danych wyżej
-                            json.loads(cleaned)
-                            return cleaned
-                        except Exception:
-                            print(f"[OSTRZEŻENIE] Dostawca {p_name} zwrócił tekst niebędący prawidłowym JSON-em.")
-                print(f"[OSTRZEŻENIE] Dostawca {p_name} zawiódł. Przełączanie awaryjne na kolejny model...")
-        
-        print("[CRITICAL] Wszyscy dostępni dostawcy LLM zawiedli lub brakuje kluczy API!")
-        return None
+        raw_res = self.deepseek.generate(prompt)
+        return self.clean_json(raw_res)
 
 # =========================
 # AUTONOMICZNY SILNIK
@@ -238,25 +160,22 @@ class IskraAutonomiczna:
         self.running = True
         self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
         self.thread.start()
+        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (DEEPSEEK ONLY) ===")
 
     def petla_aktywnosci(self):
-        print("[ENGINE] Oczekiwanie 5 sekund na stabilizację serwera...")
         time.sleep(5)
-        print("[ENGINE] Autonomiczna pętla Iskry rozpoczęła działanie.")
-        
         while self.running:
             try:
                 with self.siec.lock:
                     stan_sieci = json.dumps(self.siec.dane, ensure_ascii=False)
                 
-                print("[ISKRA] Rozpoczynam nowy cykl analizy sieci pojęciowej...")
                 prompt = f"""
 Jesteś autonomiczną siecią neuronową Iskra. Analizujesz strukturę swoich pojęć.
-Twoja tematyka: psychologia analityczna, integracja cienia, ludzkie popędy, mechanizmy obronne, archetypy Carla Junga.
+Twoja tematyka: psychologia analityczna, integracja cienia, ludzkie popędy, mechanizmy obronne.
 Aktualny stan sieci: {stan_sieci}
 
-Zadanie: Wygeneruj dokładnie 1 lub 2 nowe pojęcia jako neurony (nadaj im unikalne klucze, np. "n_projekcja", "n_ego", "n_persona", "n_animus") i połącz je logicznymi synapsami ze starymi lub nowymi neuronami. Możesz też zmienić wagi obecnych neuronów.
-Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu ani komentarza przed/po:
+Zadanie: Wygeneruj dokładnie 1 lub 2 nowe pojęcia jako neurony (nadaj im unikalne klucze, np. "n_projekcja", "n_ego") i połącz je logicznymi synapsami ze starymi lub nowymi neuronami. Możesz też zmienić wagi obecnych neuronów.
+Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu:
 {{
   "neurons": {{
     "n_nowy_id": {{ "label": "Nazwa Pojęcia", "weight": 0.75 }}
@@ -270,12 +189,8 @@ Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu
                 if odpowiedz_json:
                     nowe_dane = json.loads(odpowiedz_json)
                     self.siec.aktualizuj_siec(nowe_dane)
-                else:
-                    print("[ISKRA] Pętla pominięta w tym cyklu z powodu braku odpowiedzi z AI.")
-            except Exception as e:
-                print(f"[!!! POWAŻNY BŁĄD BOTA !!!]: {e}")
-            
-            print("[ISKRA] Cykl zakończony. Zasypiam na 30 sekund.")
+            except Exception:
+                pass
             time.sleep(30)
 
 siec = SiecNeuronowa()
@@ -309,15 +224,15 @@ DASHBOARD_HTML = """
 </head>
 <body>
     <div class="container">
-        <h1>ISKRA AI — Sieć Neuronów (V2.3 — Zero-Error Loop)</h1>
+        <h1>ISKRA AI — Sieć Neuronów</h1>
         <div class="stats">
             <div class="card"><h3>Neurony</h3><p id="count-n">-</p></div>
             <div class="card"><h3>Synapsy</h3><p id="count-s">-</p></div>
-            <div class="card"><h3>Tryb</h3><p style="color: #10b981; font-size: 20px; margin-top:8px;">Autonomiczny</p></div>
+            <div class="card"><h3>Tryb silnika</h3><p style="color: #06b6d4; font-size: 20px; margin-top:8px;">DeepSeek V3</p></div>
         </div>
         <div class="grid">
-            <div class="box"><h2>Węzły sieci (Pojęcia)</h2><ul id="neurons-list"></ul></div>
-            <div class="box"><h2>Połączenia (Synapsy)</h2><ul id="synapses-list"></ul></div>
+            <div class="box"><h2>Węzły sieci</h2><ul id="neurons-list"></ul></div>
+            <div class="box"><h2>Połączenia</h2><ul id="synapses-list"></ul></div>
         </div>
     </div>
     <script>
@@ -336,7 +251,7 @@ DASHBOARD_HTML = """
 
                 const sList = document.getElementById('synapses-list');
                 sList.innerHTML = '';
-                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 20).forEach(s => {
+                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 15).forEach(s => {
                     const od = d.neurons[s.from]?.label || s.from;
                     const do_ = d.neurons[s.to]?.label || s.to;
                     sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#7c3aed">Moc: ${s.strength.toFixed(2)}</span></li>`;
