@@ -163,9 +163,11 @@ class IskraAutonomiczna:
         print("=== AUTONOMICZNA ISKRA URUCHOMIONA (DEEPSEEK ONLY) ===")
 
     def petla_aktywnosci(self):
+        print("Bot: Oczekiwanie 5 sekund na stabilizację serwera...")
         time.sleep(5)
         while self.running:
             try:
+                print("Bot: Rozpoczynam nowy cykl analizy sieci...")
                 with self.siec.lock:
                     stan_sieci = json.dumps(self.siec.dane, ensure_ascii=False)
                 
@@ -187,14 +189,22 @@ Odpowiedz wyłącznie w poprawnym formacie JSON, bez żadnego dodatkowego tekstu
 """
                 odpowiedz_json = self.router.generate(prompt)
                 if odpowiedz_json:
+                    print(f"Bot: Otrzymano odpowiedź z API: {odpowiedz_json}")
                     nowe_dane = json.loads(odpowiedz_json)
                     self.siec.aktualizuj_siec(nowe_dane)
-            except Exception:
-                pass
+                    print("Bot: Pomyślnie zaktualizowano graf sieci pojęciowej.")
+                else:
+                    print("Bot: Router nie zwrócił żadnych danych (pusta odpowiedź).")
+            except Exception as e:
+                print(f"KRYTYCZNY BŁĄD W PĘTLI BOTA: {e}")
+            
+            print("Bot: Idę spać na 30 sekund...")
             time.sleep(30)
 
-siec = SiecNeUniformowa = SiecNeuronowa()
+# Poprawiona, czysta inicjalizacja obiektów
+siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
+
 
 # =========================
 # DASHBOARD WEB
