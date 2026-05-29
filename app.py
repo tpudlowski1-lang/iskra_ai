@@ -15,17 +15,17 @@ from flask import Flask, jsonify, render_template_string
 # KONFIGURACJA
 # =========================
 PORT = int(os.environ.get("PORT", 10000))
-DATA_DIR = "/tmp/iskra_data"
-os.makedirs(DATA_DIR, exist_ok=True)
-
+# Zmiana na katalog bieżący, aby dane nie znikały z /tmp po restarcie
+DATA_DIR = os.path.abspath(os.path.dirname(__file__))
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
+
 REQUEST_TIMEOUT = 45
 REQUEST_RETRIES = 3
 
 app = Flask(__name__)
 
 def atomic_save(path, data):
-    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as tmp:
+    with tempfile.NamedTemporaryFile("w", delete=False, dir=DATA_DIR, encoding="utf-8") as tmp:
         json.dump(data, tmp, ensure_ascii=False, indent=4)
         temp_name = tmp.name
     shutil.move(temp_name, path)
@@ -41,6 +41,7 @@ class SiecNeuronowa:
 
     def laduj(self):
         if not os.path.exists(PLIK_SIECI):
+            print(f"Sieć: Brak pliku bazy danych. Inicjalizacja bazy w: {PLIK_SIECI}")
             self.dane = {
                 "neurons": {
                     "n_swiadomosc": {"label": "Świadomość", "weight": 1.0, "created": time.time()},
@@ -57,12 +58,16 @@ class SiecNeuronowa:
         try:
             with open(PLIK_SIECI, "r", encoding="utf-8") as f:
                 self.dane = json.load(f)
-        except Exception:
-            pass
+            print(f"Sieć: Pomyślnie wczytano stan sieci ({len(self.dane['neurons'])} neuronów) z {PLIK_SIECI}")
+        except Exception as e:
+            print(f"Sieć: Błąd wczytywania pliku bazy, tworzę nową: {e}")
 
     def zapisz(self):
         with self.lock:
-            atomic_save(PLIK_SIECI, self.dane)
+            try:
+                atomic_save(PLIK_SIECI, self.dane)
+            except Exception as e:
+                print(f"Sieć: Krytyczny błąd zapisu bazy: {e}")
 
     def aktualizuj_siec(self, nowa_struktura):
         with self.lock:
@@ -192,7 +197,8 @@ Respond ONLY with a valid JSON object matching this schema:
                 if odpowiedz_json:
                     print(f"Bot: Otrzymano odpowiedź z API: {odpowiedz_json}")
                     nowe_dane = json.loads(odpowiedz_json)
-                    self.siec.aktualizuj_network = self.siec.aktualizuj_siec(nowe_dane)
+                    # Poprawiona literówka (usunięto niepoprawne przypisanie do zmiennej)
+                    self.siec.aktualizuj_siec(nowe_dane)
                     print("Bot: Pomyślnie zaktualizowano graf sieci pojęciowej.")
                 else:
                     print("Bot: Router nie zwrócił żadnych danych (pusta odpowiedź).")
@@ -290,4 +296,4 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
-                    
+                        
