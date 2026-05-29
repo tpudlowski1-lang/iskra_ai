@@ -23,77 +23,77 @@ REQUEST_RETRIES = 2
 
 app = Flask(__name__)
 
-def atomic_save(path, data):
-    with tempfile.NamedTemporaryFile("w", delete=False, dir=DATA_DIR, encoding="utf-8") as tmp:
-        json.dump(data, tmp, ensure_ascii=False, indent=4)
-        temp_name = tmp.name
-    shutil.move(temp_name, path)
-
 # =========================
 # SIECIOWA PAMIĘĆ GRAFOWA
 # =========================
 class SiecNeuronowa:
     def __init__(self):
         self.lock = threading.RLock()
-        self.dane = {"neurons": {}, "synapses": []}
+        # Domyślny, niezmienny fundament 12 filarów w pamięci RAM
+        self.fundament = {
+            "neurons": {
+                "n_logika": {"label": "1. Logika i Rozumowanie", "weight": 1.0, "created": time.time()},
+                "n_epistemologia": {"label": "2. Epistemologia", "weight": 1.0, "created": time.time()},
+                "n_etyka": {"label": "3. Etyka i Wartości", "weight": 1.0, "created": time.time()},
+                "n_ontologia": {"label": "4. Ontologia i Metafizyka", "weight": 1.0, "created": time.time()},
+                "n_przyrodnicze": {"label": "5. Nauki Przyrodnicze", "weight": 1.0, "created": time.time()},
+                "n_spoleczne": {"label": "6. Nauki Społeczne i Psychologia", "weight": 1.0, "created": time.time()},
+                "n_jezyk": {"label": "7. Język i Komunikacja", "weight": 1.0, "created": time.time()},
+                "n_historia": {"label": "8. Historia i Kultura", "weight": 1.0, "created": time.time()},
+                "n_technologia": {"label": "9. Technologia i Sztuczna Inteligencja", "weight": 1.0, "created": time.time()},
+                "n_sztuka": {"label": "10. Sztuka i Kreatywność", "weight": 1.0, "created": time.time()},
+                "n_zdrowie": {"label": "11. Zdrowie i Rozwój Osobisty", "weight": 1.0, "created": time.time()},
+                "n_metapoznanie": {"label": "12. Metapoznanie", "weight": 1.0, "created": time.time()}
+            },
+            "synapses": [
+                {"from": "n_logika", "to": "n_epistemologia", "strength": 0.95},
+                {"from": "n_logika", "to": "n_technologia", "strength": 0.90},
+                {"from": "n_epistemologia", "to": "n_ontologia", "strength": 0.85},
+                {"from": "n_etyka", "to": "n_spoleczne", "strength": 0.80},
+                {"from": "n_ontologia", "to": "n_przyrodnicze", "strength": 0.85},
+                {"from": "n_przyrodnicze", "to": "n_technologia", "strength": 0.80},
+                {"from": "n_jezyk", "to": "n_spoleczne", "strength": 0.75},
+                {"from": "n_historia", "to": "n_sztuka", "strength": 0.70},
+                {"from": "n_metapoznanie", "to": "n_logika", "strength": 0.90},
+                {"from": "n_zdrowie", "to": "n_metapoznanie", "strength": 0.80}
+            ]
+        }
+        self.dane = json.loads(json.dumps(self.fundament))
         self.laduj()
 
     def laduj(self):
         with self.lock:
-            # Sprawdzamy czy plik istnieje i czy nie jest pusty/uszkodzony
             if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
-                print(f"Sieć: Inicjalizacja 12-filarowej matrycy wiedzy w: {PLIK_SIECI}")
-                self.dane = {
-                    "neurons": {
-                        "n_logika": {"label": "1. Logika i Rozumowanie", "weight": 1.0, "created": time.time()},
-                        "n_epistemologia": {"label": "2. Epistemologia", "weight": 1.0, "created": time.time()},
-                        "n_etyka": {"label": "3. Etyka i Wartości", "weight": 1.0, "created": time.time()},
-                        "n_ontologia": {"label": "4. Ontologia i Metafizyka", "weight": 1.0, "created": time.time()},
-                        "n_przyrodnicze": {"label": "5. Nauki Przyrodnicze", "weight": 1.0, "created": time.time()},
-                        "n_spoleczne": {"label": "6. Nauki Społeczne i Psychologia", "weight": 1.0, "created": time.time()},
-                        "n_jezyk": {"label": "7. Język i Komunikacja", "weight": 1.0, "created": time.time()},
-                        "n_historia": {"label": "8. Historia i Kultura", "weight": 1.0, "created": time.time()},
-                        "n_technologia": {"label": "9. Technologia i Sztuczna Inteligencja", "weight": 1.0, "created": time.time()},
-                        "n_sztuka": {"label": "10. Sztuka i Kreatywność", "weight": 1.0, "created": time.time()},
-                        "n_zdrowie": {"label": "11. Zdrowie i Rozwój Osobisty", "weight": 1.0, "created": time.time()},
-                        "n_metapoznanie": {"label": "12. Metapoznanie", "weight": 1.0, "created": time.time()}
-                    },
-                    "synapses": [
-                        {"from": "n_logika", "to": "n_epistemologia", "strength": 0.95},
-                        {"from": "n_logika", "to": "n_technologia", "strength": 0.90},
-                        {"from": "n_epistemologia", "to": "n_ontologia", "strength": 0.85},
-                        {"from": "n_etyka", "to": "n_spoleczne", "strength": 0.80},
-                        {"from": "n_ontologia", "to": "n_przyrodnicze", "strength": 0.85},
-                        {"from": "n_przyrodnicze", "to": "n_technologia", "strength": 0.80},
-                        {"from": "n_jezyk", "to": "n_spoleczne", "strength": 0.75},
-                        {"from": "n_historia", "to": "n_sztuka", "strength": 0.70},
-                        {"from": "n_metapoznanie", "to": "n_logika", "strength": 0.90},
-                        {"from": "n_zdrowie", "to": "n_metapoznanie", "strength": 0.80}
-                    ]
-                }
+                print("Sieć: Plik bazy nie istnieje. Uruchamianie czystej matrycy z pamięci RAM.")
+                self.dane = json.loads(json.dumps(self.fundament))
                 self.zapisz()
                 return
 
             try:
                 with open(PLIK_SIECI, "r", encoding="utf-8") as f:
-                    self.dane = json.load(f)
+                    wczytane = json.load(f)
                 
-                # Bezpieczne sprawdzenie bez wywalania aplikacji
-                if "n_logika" not in self.dane.get("neurons", {}):
-                    print("Sieć: Wykryto starą strukturę bazy. Czyszczenie i nadpisywanie schematem 12 filarów...")
-                    self.dane = {"neurons": {}, "synapses": []} # czyszczenie w locie
+                # Walidacja: Jeśli w pliku nie ma kluczowych węzłów, nadpisujemy strukturą 12 filarów
+                if "n_logika" not in wczytane.get("neurons", {}):
+                    print("Sieć: Nieprawidłowa struktura pliku. Wymuszam reset do 12 filarów.")
+                    self.dane = json.loads(json.dumps(self.fundament))
                     self.zapisz()
-                    os.remove(PLIK_SIECI)
-                    self.laduj()
+                else:
+                    self.dane = wczytane
             except Exception as e:
-                print(f"Sieć: Błąd ładowania, wymuszenie czystego startu: {e}")
+                print(f"Sieć: Błąd odczytu pliku ({e}). Pozostaję przy bezpiecznej strukturze z pamięci RAM.")
+                self.dane = json.loads(json.dumps(self.fundament))
 
     def zapisz(self):
         with self.lock:
             try:
-                atomic_save(PLIK_SIECI, self.dane)
+                # Bezpieczny zapis atomowy z łapaniem błędów uniemożliwiający wysypanie programu
+                with tempfile.NamedTemporaryFile("w", delete=False, dir=DATA_DIR, encoding="utf-8") as tmp:
+                    json.dump(self.dane, tmp, ensure_ascii=False, indent=4)
+                    temp_name = tmp.name
+                shutil.move(temp_name, PLIK_SIECI)
             except Exception as e:
-                print(f"Sieć: Błąd zapisu pliku bazy: {e}")
+                print(f"Sieć: [Ignorowany błąd we/wy] Nie udało się zapisać stanu na dysk: {e}")
 
     def aktualizuj_siec(self, nowa_struktura):
         with self.lock:
@@ -194,9 +194,8 @@ class IskraAutonomiczna:
         print("=== AUTONOMICZNA ISKRA URUCHOMIONA (MATRYCA 12 FILARÓW) ===")
 
     def petla_aktywnosci(self):
-        # Wydłużony czas na pełne wystartowanie serwera i uniknięcie zakleszczenia wątków
-        print("Bot: Bezpieczny sen startowy (12 sekund)...")
-        time.sleep(12)
+        print("Bot: Bezpieczny sen startowy (10 sekund)...")
+        time.sleep(10)
         while self.running:
             try:
                 print("Bot: Rozpoczynam nowy cykl mapowania matrycy wiedzy...")
@@ -239,11 +238,10 @@ Respond ONLY with a valid JSON object matching this schema:
                     self.siec.aktualizuj_siec(nowe_dane)
                     print("Bot: Pomyślnie zaktualizowano graf mapy wiedzy.")
                 else:
-                    print("Bot: Router zwrócił pustą odpowiedź lub wystąpił błąd API.")
+                    print("Bot: Router zwrócił pustą odpowiedź.")
             except Exception as e:
                 print(f"BŁĄD W CYKLU MAPOWANIA: {e}")
             
-            # Zwiększony czas snu do 45 sekund, aby odciążyć darmową maszynę
             print("Bot: Idę spać na 45 sekund...")
             time.sleep(45)
 
@@ -283,7 +281,7 @@ DASHBOARD_HTML = """
         <div class="stats">
             <div class="card"><h3>Węzły (Kategorie)</h3><p id="count-n">-</p></div>
             <div class="card"><h3>Korelacje (Synapsy)</h3><p id="count-s">-</p></div>
-            <div class="card"><h3>Status Układu</h3><p style="color: #38bdf8; font-size: 18px; margin-top:8px; font-weight: 500;">12 Filarów / Aktywny</p></div>
+            <div class="card"><h3>Status Układu</h3><p style="color: #38bdf8; font-size: 18px; margin-top:8px; font-weight: 500;">12 Filarów / Stabilny RAM</p></div>
         </div>
         <div class="grid">
             <div class="box"><h2>Struktura Pojęciowa</h2><ul id="neurons-list"></ul></div>
@@ -313,8 +311,8 @@ DASHBOARD_HTML = """
                 });
             } catch(e) {}
         }
-        // ZWIĘKSZONO INTERWAŁ Z 4 NA 10 SEKUND, ABY NIE ZAPYCHAĆ SERWERA RENDER
-        setInterval(updateData, 10000);
+        // Odświeżanie raz na 15 sekund, żeby darmowy serwer działał stabilnie
+        setInterval(updateData, 15000);
         updateData();
     </script>
 </body>
@@ -336,4 +334,3 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
-            
