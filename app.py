@@ -19,7 +19,7 @@ DATA_DIR = os.path.abspath(os.path.dirname(__file__))
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 REQUEST_TIMEOUT = 45
-REQUEST_RETRIES = 3
+REQUEST_RETRIES = 2
 
 app = Flask(__name__)
 
@@ -39,57 +39,61 @@ class SiecNeuronowa:
         self.laduj()
 
     def laduj(self):
-        # Inicjalizacja pełnej matrycy 12 obszarów wiedzy i rozumowania
-        if not os.path.exists(PLIK_SIECI):
-            print(f"Sieć: Inicjalizacja 12-filarowej matrycy wiedzy w: {PLIK_SIECI}")
-            self.dane = {
-                "neurons": {
-                    "n_logika": {"label": "1. Logika i Rozumowanie", "weight": 1.0, "created": time.time()},
-                    "n_epistemologia": {"label": "2. Epistemologia", "weight": 1.0, "created": time.time()},
-                    "n_etyka": {"label": "3. Etyka i Wartości", "weight": 1.0, "created": time.time()},
-                    "n_ontologia": {"label": "4. Ontologia i Metafizyka", "weight": 1.0, "created": time.time()},
-                    "n_przyrodnicze": {"label": "5. Nauki Przyrodnicze", "weight": 1.0, "created": time.time()},
-                    "n_spoleczne": {"label": "6. Nauki Społeczne i Psychologia", "weight": 1.0, "created": time.time()},
-                    "n_jezyk": {"label": "7. Język i Komunikacja", "weight": 1.0, "created": time.time()},
-                    "n_historia": {"label": "8. Historia i Kultura", "weight": 1.0, "created": time.time()},
-                    "n_technologia": {"label": "9. Technologia i Sztuczna Inteligencja", "weight": 1.0, "created": time.time()},
-                    "n_sztuka": {"label": "10. Sztuka i Kreatywność", "weight": 1.0, "created": time.time()},
-                    "n_zdrowie": {"label": "11. Zdrowie i Rozwój Osobisty", "weight": 1.0, "created": time.time()},
-                    "n_metapoznanie": {"label": "12. Metapoznanie", "weight": 1.0, "created": time.time()}
-                },
-                "synapses": [
-                    {"from": "n_logika", "to": "n_epistemologia", "strength": 0.95},
-                    {"from": "n_logika", "to": "n_technologia", "strength": 0.90},
-                    {"from": "n_epistemologia", "to": "n_ontologia", "strength": 0.85},
-                    {"from": "n_etyka", "to": "n_spoleczne", "strength": 0.80},
-                    {"from": "n_ontologia", "to": "n_przyrodnicze", "strength": 0.85},
-                    {"from": "n_przyrodnicze", "to": "n_technologia", "strength": 0.80},
-                    {"from": "n_jezyk", "to": "n_spoleczne", "strength": 0.75},
-                    {"from": "n_historia", "to": "n_sztuka", "strength": 0.70},
-                    {"from": "n_metapoznanie", "to": "n_logika", "strength": 0.90},
-                    {"from": "n_zdrowie", "to": "n_metapoznanie", "strength": 0.80}
-                ]
-            }
-            self.zapisz()
-            return
-        try:
-            with open(PLIK_SIECI, "r", encoding="utf-8") as f:
-                self.dane = json.load(f)
-            
-            # Wymuszenie przebudowy, jeśli w bazie brakuje nowej struktury 12 filarów
-            if "n_logika" not in self.dane.get("neurons", {}):
-                print("Sieć: Wykryto starą strukturę bazy. Nadpisywanie nowym schematem 12 filarów...")
-                os.remove(PLIK_SIECI)
-                self.laduj()
-        except Exception as e:
-            print(f"Sieć: Błąd krytyczny ładowania, reset: {e}")
+        with self.lock:
+            # Sprawdzamy czy plik istnieje i czy nie jest pusty/uszkodzony
+            if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
+                print(f"Sieć: Inicjalizacja 12-filarowej matrycy wiedzy w: {PLIK_SIECI}")
+                self.dane = {
+                    "neurons": {
+                        "n_logika": {"label": "1. Logika i Rozumowanie", "weight": 1.0, "created": time.time()},
+                        "n_epistemologia": {"label": "2. Epistemologia", "weight": 1.0, "created": time.time()},
+                        "n_etyka": {"label": "3. Etyka i Wartości", "weight": 1.0, "created": time.time()},
+                        "n_ontologia": {"label": "4. Ontologia i Metafizyka", "weight": 1.0, "created": time.time()},
+                        "n_przyrodnicze": {"label": "5. Nauki Przyrodnicze", "weight": 1.0, "created": time.time()},
+                        "n_spoleczne": {"label": "6. Nauki Społeczne i Psychologia", "weight": 1.0, "created": time.time()},
+                        "n_jezyk": {"label": "7. Język i Komunikacja", "weight": 1.0, "created": time.time()},
+                        "n_historia": {"label": "8. Historia i Kultura", "weight": 1.0, "created": time.time()},
+                        "n_technologia": {"label": "9. Technologia i Sztuczna Inteligencja", "weight": 1.0, "created": time.time()},
+                        "n_sztuka": {"label": "10. Sztuka i Kreatywność", "weight": 1.0, "created": time.time()},
+                        "n_zdrowie": {"label": "11. Zdrowie i Rozwój Osobisty", "weight": 1.0, "created": time.time()},
+                        "n_metapoznanie": {"label": "12. Metapoznanie", "weight": 1.0, "created": time.time()}
+                    },
+                    "synapses": [
+                        {"from": "n_logika", "to": "n_epistemologia", "strength": 0.95},
+                        {"from": "n_logika", "to": "n_technologia", "strength": 0.90},
+                        {"from": "n_epistemologia", "to": "n_ontologia", "strength": 0.85},
+                        {"from": "n_etyka", "to": "n_spoleczne", "strength": 0.80},
+                        {"from": "n_ontologia", "to": "n_przyrodnicze", "strength": 0.85},
+                        {"from": "n_przyrodnicze", "to": "n_technologia", "strength": 0.80},
+                        {"from": "n_jezyk", "to": "n_spoleczne", "strength": 0.75},
+                        {"from": "n_historia", "to": "n_sztuka", "strength": 0.70},
+                        {"from": "n_metapoznanie", "to": "n_logika", "strength": 0.90},
+                        {"from": "n_zdrowie", "to": "n_metapoznanie", "strength": 0.80}
+                    ]
+                }
+                self.zapisz()
+                return
+
+            try:
+                with open(PLIK_SIECI, "r", encoding="utf-8") as f:
+                    self.dane = json.load(f)
+                
+                # Bezpieczne sprawdzenie bez wywalania aplikacji
+                if "n_logika" not in self.dane.get("neurons", {}):
+                    print("Sieć: Wykryto starą strukturę bazy. Czyszczenie i nadpisywanie schematem 12 filarów...")
+                    self.dane = {"neurons": {}, "synapses": []} # czyszczenie w locie
+                    self.zapisz()
+                    os.remove(PLIK_SIECI)
+                    self.laduj()
+            except Exception as e:
+                print(f"Sieć: Błąd ładowania, wymuszenie czystego startu: {e}")
 
     def zapisz(self):
         with self.lock:
             try:
                 atomic_save(PLIK_SIECI, self.dane)
             except Exception as e:
-                print(f"Sieć: Błąd zapisu: {e}")
+                print(f"Sieć: Błąd zapisu pliku bazy: {e}")
 
     def aktualizuj_siec(self, nowa_struktura):
         with self.lock:
@@ -132,7 +136,7 @@ class DeepSeekProvider:
 
     def generate(self, prompt):
         if not self.api_key:
-            print("BŁĄD: Brak zmiennej DEEPSEEK_API_KEY w konfiguracji Rendera!")
+            print("BŁĄD: Brak klucza DEEPSEEK_API_KEY!")
             return None
         
         headers = {
@@ -145,7 +149,7 @@ class DeepSeekProvider:
                 {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.5,
+            "temperature": 0.4,
             "response_format": {"type": "json_object"}
         }
         
@@ -155,10 +159,10 @@ class DeepSeekProvider:
                 if r.status_code == 200:
                     return r.json()["choices"][0]["message"]["content"]
                 else:
-                    print(f"DeepSeek API Error: {r.status_code} - {r.text}")
+                    print(f"DeepSeek API Error: {r.status_code}")
             except Exception as e:
-                print(f"Błąd połączenia z DeepSeek: {e}")
-                time.sleep(2)
+                print(f"Błąd połączenia API: {e}")
+                time.sleep(3)
         return None
 
 class RouterProvider:
@@ -187,11 +191,12 @@ class IskraAutonomiczna:
         self.running = True
         self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
         self.thread.start()
-        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (MATRYCA SYSTEMOWA 12 FILARÓW) ===")
+        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (MATRYCA 12 FILARÓW) ===")
 
     def petla_aktywnosci(self):
-        print("Bot: Oczekiwanie 5 sekund na stabilizację serwera...")
-        time.sleep(5)
+        # Wydłużony czas na pełne wystartowanie serwera i uniknięcie zakleszczenia wątków
+        print("Bot: Bezpieczny sen startowy (12 sekund)...")
+        time.sleep(12)
         while self.running:
             try:
                 print("Bot: Rozpoczynam nowy cykl mapowania matrycy wiedzy...")
@@ -229,19 +234,20 @@ Respond ONLY with a valid JSON object matching this schema:
 """
                 odpowiedz_json = self.router.generate(prompt)
                 if odpowiedz_json:
-                    print(f"Bot: Otrzymano poprawną strukturę JSON: {odpowiedz_json}")
+                    print("Bot: Otrzymano poprawną strukturę JSON z API DeepSeek.")
                     nowe_dane = json.loads(odpowiedz_json)
                     self.siec.aktualizuj_siec(nowe_dane)
                     print("Bot: Pomyślnie zaktualizowano graf mapy wiedzy.")
                 else:
-                    print("Bot: Router zwrócił pustą odpowiedź.")
+                    print("Bot: Router zwrócił pustą odpowiedź lub wystąpił błąd API.")
             except Exception as e:
                 print(f"BŁĄD W CYKLU MAPOWANIA: {e}")
             
-            print("Bot: Idę spać na 30 sekund...")
-            time.sleep(30)
+            # Zwiększony czas snu do 45 sekund, aby odciążyć darmową maszynę
+            print("Bot: Idę spać na 45 sekund...")
+            time.sleep(45)
 
-# Inicjalizacja obiektów
+# Inicjalizacja obiektów globalnych
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
 
@@ -307,7 +313,8 @@ DASHBOARD_HTML = """
                 });
             } catch(e) {}
         }
-        setInterval(updateData, 4000);
+        // ZWIĘKSZONO INTERWAŁ Z 4 NA 10 SEKUND, ABY NIE ZAPYCHAĆ SERWERA RENDER
+        setInterval(updateData, 10000);
         updateData();
     </script>
 </body>
@@ -329,4 +336,4 @@ def health():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
-    
+            
