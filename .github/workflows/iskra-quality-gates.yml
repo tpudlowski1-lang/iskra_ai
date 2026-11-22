@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [commercial-mvp]
   push:
-    branches: [iskra-full-quality-gates, iskra-unified-core]
+    branches: [iskra-full-quality-gates, iskra-unified-core, refactor/modular-core]
   workflow_dispatch:
 
 permissions:
