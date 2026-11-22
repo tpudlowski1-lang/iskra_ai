@@ -640,7 +640,7 @@ def upload_too_large(_error):
 def admin_tenants():
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
-    db_path = SiecNeuronowa._sqlite_path()
+    db_path = _knowledge_db_path()
     if request.method == "GET":
         return jsonify({"tenants": knowledge.list_tenants(db_path)})
     payload = request.get_json(silent=True) or {}
@@ -655,7 +655,7 @@ def admin_tenants():
 def admin_rotate_tenant_key(tenant_id):
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
-    key = knowledge.rotate_tenant_key(SiecNeuronowa._sqlite_path(), tenant_id)
+    key = knowledge.rotate_tenant_key(_knowledge_db_path(), tenant_id)
     if not key:
         return jsonify({"error": "not_found"}), 404
     return jsonify({"tenant_id": tenant_id, "api_key": key})
@@ -665,7 +665,7 @@ def admin_rotate_tenant_key(tenant_id):
 def admin_delete_tenant(tenant_id):
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
-    if not knowledge.delete_tenant(SiecNeuronowa._sqlite_path(), tenant_id):
+    if not knowledge.delete_tenant(_knowledge_db_path(), tenant_id):
         return jsonify({"error": "not_found"}), 404
     return jsonify({"deleted": True})
 
@@ -675,7 +675,7 @@ def documents():
     tenant_id = _tenant_id()
     if not tenant_id:
         return jsonify({"error": "tenant_key_required"}), 403
-    db_path = SiecNeuronowa._sqlite_path()
+    db_path = _knowledge_db_path()
     if request.method == "GET":
         return jsonify({"documents": knowledge.list_documents(db_path, tenant_id)})
     uploaded = request.files.get("file")
@@ -697,7 +697,7 @@ def remove_document(document_id):
     tenant_id = _tenant_id()
     if not tenant_id:
         return jsonify({"error": "tenant_key_required"}), 403
-    deleted = knowledge.delete_document(SiecNeuronowa._sqlite_path(), tenant_id, document_id)
+    deleted = knowledge.delete_document(_knowledge_db_path(), tenant_id, document_id)
     if not deleted:
         return jsonify({"error": "not_found"}), 404
     return jsonify({"deleted": True})
@@ -711,7 +711,7 @@ def search_documents():
     payload = request.get_json(silent=True) or {}
     try:
         results = knowledge.search_documents(
-            SiecNeuronowa._sqlite_path(), tenant_id, payload.get("query", ""),
+            _knowledge_db_path(), tenant_id, payload.get("query", ""),
             payload.get("limit", 5),
         )
     except (ValueError, TypeError) as exc:
