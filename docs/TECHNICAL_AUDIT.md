@@ -20,11 +20,11 @@ Audyt statyczny plików dostępnych w repozytorium na gałęzi main. Nie jest to
 
 ## Blokery przed produktem komercyjnym
 
-1. **Brak właściwego routera LLM.** app.py tworzy wyłącznie DeepSeekProvider. Zmienne LLM_PROVIDER, LLM_FALLBACK_PROVIDERS i OPENAI_MODEL z render.yaml nie są używane. Kod oczekuje DEEPSEEK_API_KEY.
+1. **Router LLM — poprawka w gałęzi commercial-mvp.** Dodano obsługę OpenAI, DeepSeek i Gemini, kolejność primary/fallback z ENV oraz jawne pomijanie providerów bez kluczy. Konfiguracja nie została jeszcze zweryfikowana na żywym Renderze.
 2. **Brak obsługi klienta.** Nie ma logowania, użytkowników, organizacji/tenantów ani ról.
 3. **Brak dokumentów/RAG dla klienta.** Obecny graf pojęciowy nie jest bazą wiedzy firmy i nie obsługuje uploadu dokumentów.
 4. **Brak izolacji danych.** Jedna globalna sieć i jeden plik wiedza.json; nie wolno używać tego modelu do danych wielu firm.
-5. **Proces w tle uruchamia się przy imporcie modułu.** Gunicorn ma 2 workery, więc każdy worker może uruchomić własny wątek autonomiczny. To grozi duplikacją kosztów i zapisów.
+5. **Proces w tle — zabezpieczenie w gałęzi commercial-mvp.** Pętla autonomiczna jest teraz domyślnie wyłączona i wymaga ENABLE_AUTONOMOUS_LOOP=true. Przy wielu workerach nadal nie wolno jej włączać, bo każdy worker utworzy własny wątek.
 6. **Trwałość danych.** DATA_DIR wskazuje katalog repozytorium. Na hostingu katalog aplikacji może być efemeryczny lub tylko do odczytu; potrzebny trwały storage/baza.
 7. **XSS w dashboardzie.** Etykiety grafu są interpolowane do innerHTML. Dane pochodzące z modelu nie mogą być bezpiecznie traktowane jako HTML.
 8. **Walidacja grafu.** Wagi i synapsy są częściowo ograniczane, ale struktura odpowiedzi modelu wymaga ścisłej walidacji przed zapisem.
@@ -33,6 +33,6 @@ Audyt statyczny plików dostępnych w repozytorium na gałęzi main. Nie jest to
 
 ## Wniosek
 
-Nie należy dodawać płatności ani udostępniać obecnego dashboardu klientom. Najpierw trzeba rozdzielić eksperymentalny graf wiedzy od komercyjnego API i wdrożyć wielodostępność, trwałą bazę, bezpieczne dokumenty i rzeczywisty routing providerów.
+Nie należy dodawać płatności ani udostępniać obecnego dashboardu klientom. Gałąź commercial-mvp usuwa dwa wczesne problemy (konfiguracja providerów i automatyczne uruchamianie pętli), ale nadal trzeba rozdzielić eksperymentalny graf wiedzy od komercyjnego API i wdrożyć wielodostępność, trwałą bazę, bezpieczne dokumenty oraz testy.
 
 Graf 12 filarów można zachować jako wewnętrzny moduł badawczy Iskry, ale nie może być podstawą wyszukiwania poufnej wiedzy klientów.
