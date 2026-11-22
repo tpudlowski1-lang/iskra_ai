@@ -9,13 +9,20 @@ import tempfile
 import shutil
 import requests
 import re
+import math
+from contextlib import contextmanager
+try:
+    import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
+except ImportError:  # pragma: no cover - non-POSIX development environments
+    fcntl = None
 from flask import Flask, jsonify, render_template_string
 
 # =========================
 # KONFIGURACJA
 # =========================
 PORT = int(os.environ.get("PORT", 10000))
-DATA_DIR = os.path.abspath(os.path.dirname(__file__))
+DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(__file__)))
+os.makedirs(DATA_DIR, exist_ok=True)
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 REQUEST_TIMEOUT = 45
@@ -61,69 +68,162 @@ class SiecNeuronowa:
         self.dane = json.loads(json.dumps(self.fundament))
         self.laduj()
 
+    @contextmanager
+    def _file_lock(self):
+        """Serialize read-modify-write cycles between separate server processes."""
+        os.makedirs(DATA_DIR, exist_ok=True)
+        lock_path = PLIK_SIECI + ".lock"
+        with open(lock_path, "a+", encoding="utf-8") as lock_handle:
+            if fcntl is not None:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                if fcntl is not None:
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+    @staticmethod
+    def _bounded_number(value, default=0.5):
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return default
+        if not math.isfinite(number):
+            return default
+        return min(max(number, 0.0), 1.0)
+
+    def _save_atomic_locked(self):
+        """Persist current state atomically; never silently report a failed save."""
+        os.makedirs(DATA_DIR, exist_ok=True)
+        temp_name = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w", delete=False, dir=DATA_DIR, encoding="utf-8"
+            ) as tmp:
+                json.dump(self.dane, tmp, ensure_ascii=False, indent=2, allow_nan=False)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+                temp_name = tmp.name
+            os.replace(temp_name, PLIK_SIECI)
+            temp_name = None
+            try:
+                dir_fd = os.open(DATA_DIR, os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except OSError:
+                pass
+        finally:
+            if temp_name and os.path.exists(temp_name):
+                os.unlink(temp_name)
+
+    def _load_from_disk_locked(self):
+        if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
+            self.dane = json.loads(json.dumps(self.fundament))
+            self._save_atomic_locked()
+            return
+        try:
+            with open(PLIK_SIECI, "r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            neurons = loaded.get("neurons") if isinstance(loaded, dict) else None
+            synapses = loaded.get("synapses") if isinstance(loaded, dict) else None
+            if not isinstance(neurons, dict) or not isinstance(synapses, list) or "n_logika" not in neurons:
+                raise ValueError("Nieprawidłowy format grafu")
+            valid_neurons = {}
+            for node_id, node in neurons.items():
+                if not isinstance(node_id, str) or not node_id or not isinstance(node, dict):
+                    continue
+                valid_neurons[node_id] = {
+                    "label": str(node.get("label", "Nieznany"))[:500],
+                    "weight": self._bounded_number(node.get("weight", 0.5)),
+                    "created": node.get("created", time.time()),
+                }
+            valid_synapses = []
+            for edge in synapses:
+                if not isinstance(edge, dict):
+                    continue
+                source, target = edge.get("from"), edge.get("to")
+                if source in valid_neurons and target in valid_neurons:
+                    valid_synapses.append({
+                        "from": source, "to": target,
+                        "strength": self._bounded_number(edge.get("strength", 0.5)),
+                    })
+            self.dane = {"neurons": valid_neurons, "synapses": valid_synapses}
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            # Preserve a damaged file for diagnosis instead of silently destroying it.
+            if os.path.exists(PLIK_SIECI):
+                backup = PLIK_SIECI + ".corrupt-" + str(int(time.time()))
+                try:
+                    os.replace(PLIK_SIECI, backup)
+                except OSError:
+                    pass
+            self.dane = json.loads(json.dumps(self.fundament))
+            self._save_atomic_locked()
+
     def laduj(self):
         with self.lock:
-            if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
-                print("Sieć: Plik bazy nie istnieje. Uruchamianie czystej matrycy z pamięci RAM.")
-                self.dane = json.loads(json.dumps(self.fundament))
-                self.zapisz()
-                return
-
-            try:
-                with open(PLIK_SIECI, "r", encoding="utf-8") as f:
-                    wczytane = json.load(f)
-                
-                # Walidacja: Jeśli w pliku nie ma kluczowych węzłów, nadpisujemy strukturą 12 filarów
-                if "n_logika" not in wczytane.get("neurons", {}):
-                    print("Sieć: Nieprawidłowa struktura pliku. Wymuszam reset do 12 filarów.")
-                    self.dane = json.loads(json.dumps(self.fundament))
-                    self.zapisz()
-                else:
-                    self.dane = wczytane
-            except Exception as e:
-                print(f"Sieć: Błąd odczytu pliku ({e}). Pozostaję przy bezpiecznej strukturze z pamięci RAM.")
-                self.dane = json.loads(json.dumps(self.fundament))
+            with self._file_lock():
+                self._load_from_disk_locked()
 
     def zapisz(self):
         with self.lock:
-            try:
-                # Bezpieczny zapis atomowy z łapaniem błędów uniemożliwiający wysypanie programu
-                with tempfile.NamedTemporaryFile("w", delete=False, dir=DATA_DIR, encoding="utf-8") as tmp:
-                    json.dump(self.dane, tmp, ensure_ascii=False, indent=4)
-                    temp_name = tmp.name
-                shutil.move(temp_name, PLIK_SIECI)
-            except Exception as e:
-                print(f"Sieć: [Ignorowany błąd we/wy] Nie udało się zapisać stanu na dysk: {e}")
+            with self._file_lock():
+                self._save_atomic_locked()
 
     def aktualizuj_siec(self, nowa_struktura):
-        with self.lock:
-            for k, v in nowa_struktura.get("neurons", {}).items():
-                if k not in self.dane["neurons"]:
-                    self.dane["neurons"][k] = {
-                        "label": v.get("label", "Nieznany"),
-                        "weight": min(max(float(v.get("weight", 0.5)), 0.0), 1.0),
-                        "created": time.time()
-                    }
-                else:
-                    stara_waga = self.dane["neurons"][k]["weight"]
-                    nowa_waga = float(v.get("weight", stara_waga))
-                    self.dane["neurons"][k]["weight"] = min(max(stara_waga * 0.7 + nowa_waga * 0.3, 0.0), 1.0)
+        if not isinstance(nowa_struktura, dict):
+            raise ValueError("Aktualizacja grafu musi być obiektem JSON")
+        neurons = nowa_struktura.get("neurons", {})
+        synapses = nowa_struktura.get("synapses", [])
+        if not isinstance(neurons, dict) or not isinstance(synapses, list):
+            raise ValueError("Nieprawidłowy format neuronów lub synaps")
 
-            for s in nowa_struktura.get("synapses", []):
-                f_id = s.get("from")
-                t_id = s.get("to")
-                str_val = min(max(float(s.get("strength", 0.5)), 0.0), 1.0)
-                
-                if f_id in self.dane["neurons"] and t_id in self.dane["neurons"]:
-                    istnieje = False
-                    for ist_s in self.dane["synapses"]:
-                        if ist_s["from"] == f_id and ist_s["to"] == t_id:
-                            ist_s["strength"] = min(max(ist_s["strength"] * 0.5 + str_val * 0.5, 0.0), 1.0)
-                            istnieje = True
-                            break
-                    if not istnieje:
-                        self.dane["synapses"].append({"from": f_id, "to": t_id, "strength": str_val})
-            self.zapisz()
+        with self.lock:
+            with self._file_lock():
+                # Reload latest persisted state inside the inter-process lock to
+                # prevent lost updates when Gunicorn runs multiple workers.
+                self._load_from_disk_locked()
+                for node_id, node in neurons.items():
+                    if not isinstance(node_id, str) or not node_id or len(node_id) > 160:
+                        continue
+                    if not isinstance(node, dict):
+                        continue
+                    incoming_weight = self._bounded_number(node.get("weight", 0.5))
+                    if node_id not in self.dane["neurons"]:
+                        self.dane["neurons"][node_id] = {
+                            "label": str(node.get("label", "Nieznany"))[:500],
+                            "weight": incoming_weight,
+                            "created": time.time(),
+                        }
+                    else:
+                        old_weight = self._bounded_number(
+                            self.dane["neurons"][node_id].get("weight", 0.5)
+                        )
+                        self.dane["neurons"][node_id]["weight"] = (
+                            old_weight * 0.7 + incoming_weight * 0.3
+                        )
+
+                edge_index = {
+                    (edge["from"], edge["to"]): edge
+                    for edge in self.dane["synapses"]
+                }
+                for edge in synapses:
+                    if not isinstance(edge, dict):
+                        continue
+                    source, target = edge.get("from"), edge.get("to")
+                    if source not in self.dane["neurons"] or target not in self.dane["neurons"]:
+                        continue
+                    strength = self._bounded_number(edge.get("strength", 0.5))
+                    key = (source, target)
+                    if key in edge_index:
+                        old = self._bounded_number(edge_index[key].get("strength", 0.5))
+                        edge_index[key]["strength"] = old * 0.5 + strength * 0.5
+                    else:
+                        new_edge = {"from": source, "to": target, "strength": strength}
+                        self.dane["synapses"].append(new_edge)
+                        edge_index[key] = new_edge
+                self._save_atomic_locked()
 
 # =========================
 # ROUTER LLM — OPENAI / DEEPSEEK / GEMINI
@@ -365,16 +465,21 @@ DASHBOARD_HTML = """
                 
                 const nList = document.getElementById('neurons-list');
                 nList.innerHTML = '';
+                const escapeHtml = (value) => String(value).replace(/[&<>"']/g, ch => ({
+                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+                }[ch]));
                 Object.entries(d.neurons).forEach(([id, n]) => {
-                    nList.innerHTML += `<li><span>${n.label}</span><span class="badge">Waga: ${n.weight.toFixed(2)}</span></li>`;
+                    const weight = Number(n.weight);
+                    nList.innerHTML += `<li><span>${escapeHtml(n.label)}</span><span class="badge">Waga: ${Number.isFinite(weight) ? weight.toFixed(2) : '—'}</span></li>`;
                 });
 
                 const sList = document.getElementById('synapses-list');
                 sList.innerHTML = '';
                 d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 25).forEach(s => {
-                    const od = d.neurons[s.from]?.label || s.from;
-                    const do_ = d.neurons[s.to]?.label || s.to;
-                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#0284c7">Moc: ${s.strength.toFixed(2)}</span></li>`;
+                    const od = escapeHtml(d.neurons[s.from]?.label || s.from);
+                    const do_ = escapeHtml(d.neurons[s.to]?.label || s.to);
+                    const strength = Number(s.strength);
+                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#0284c7">Moc: ${Number.isFinite(strength) ? strength.toFixed(2) : '—'}</span></li>`;
                 });
             } catch(e) {}
         }
@@ -397,7 +502,8 @@ def get_network():
 
 @app.route('/health')
 def health():
-    return jsonify({"status": "ok", "neurons": len(siec.dane["neurons"])})
+    with siec.lock:
+        return jsonify({"status": "ok", "neurons": len(siec.dane["neurons"])})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
