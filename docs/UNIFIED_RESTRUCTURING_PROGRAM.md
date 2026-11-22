@@ -33,8 +33,8 @@ The following branches were found during the repository inventory:
 |---|---|---|
 | `refactor/modular-core` | Modular packages, compatibility façade, SQLite graph adapter, baseline security, tests and readiness docs | Canonical integration branch |
 | `iskra-unified-core` | Current upstream graph hardening and regression history | Track and selectively port new fixes; one newer stale-read regression is already covered by an equivalent blueprint-level test on the canonical branch |
-| `commercial-mvp` | Product direction, provider configuration, security middleware prototype, stress tests and deployment notes | Reuse audited ideas and tests; do not merge its older monolithic `app.py` over the modular façade |
-| `iskra-api-security` | Security prototype and related tests | Audit and port only after middleware is adapted to the modular app and route policy |
+| `commercial-mvp` | Product direction, provider configuration, shared-token security middleware prototype, stress tests and deployment notes | Reuse audited ideas and tests; do not merge its older monolithic `app.py` over the modular façade |
+| `iskra-api-security` | Shared-token security prototype and related tests | Existing middleware is already present in the canonical branch; audit and extend it for named principals, roles and tenant policy |
 | `iskra-sqlite-migration` | Older SQLite persistence implementation and tests | Do not replace the current storage boundary wholesale; compare behavior and port missing regression cases |
 | `iskra-tenant-rag` | Tenant API-key prototype, SQLite document/chunk store, FTS retrieval, PDF/DOCX/TXT ingestion | Treat as experimental reference only; security review and modular redesign required before integration |
 | `iskra-full-quality-gates` | Earlier CI work | Superseded by the current quality workflow; preserve useful checks, avoid duplicate pipelines |
@@ -76,9 +76,9 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Exit gate: complete deterministic suite and compatibility smoke tests pass.
 
 ### Stream B — Security and identity
+- Retain the existing fail-closed shared `API_TOKEN` WSGI gate as the initial administrator boundary.
 - Define principal, role, tenant context, authentication provider, and authorization policy interfaces.
-- Implement fail-closed middleware/decorators without allowing client-supplied tenant identity.
-- Protect every non-health route according to an explicit policy.
+- Extend the shared-token gate into explicit route policies; add tenant credentials only when bound to server-side principals.
 - Add tests for missing/invalid credentials, role boundaries, IDOR, tenant spoofing, cross-tenant reads/writes/deletes, and secret redaction.
 - Exit gate: negative authorization tests pass before any tenant feature is enabled.
 
@@ -146,8 +146,7 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Current blockers — do not mark production-ready
 
-- Authentication and named user lifecycle are not implemented in the canonical application.
-- Request-scoped tenant identity and application-wide authorization are not implemented.
+- Shared API-token authentication exists at the WSGI boundary, but named user lifecycle, roles, and request-scoped tenant authorization are not implemented.
 - The current SQLite adapter is not wired into the live Flask application.
 - PostgreSQL persistence and migrations are not implemented.
 - The tenant document/RAG prototype is not integrated and has not passed a full security review.
