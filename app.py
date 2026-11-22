@@ -10,7 +10,8 @@ import shutil
 import requests
 import re
 import math
-from contextlib import contextmanager
+import sqlite3
+from contextlib import contextmanager, closing
 try:
     import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
 except ImportError:  # pragma: no cover - non-POSIX development environments
@@ -92,8 +93,59 @@ class SiecNeuronowa:
             return default
         return min(max(number, 0.0), 1.0)
 
-    def _save_atomic_locked(self):
-        """Persist current state atomically; never silently report a failed save."""
+    @staticmethod
+    def _sqlite_path():
+        return os.path.join(DATA_DIR, "iskra.sqlite3")
+
+    def _save_sqlite_locked(self):
+        """SQLite is the durable source of truth; one row stores a versioned graph snapshot."""
+        os.makedirs(DATA_DIR, exist_ok=True)
+        payload = json.dumps(self.dane, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        with closing(sqlite3.connect(self._sqlite_path(), timeout=30)) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("PRAGMA busy_timeout=30000")
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS graph_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    schema_version INTEGER NOT NULL,
+                    payload TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+            """)
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute("""
+                INSERT INTO graph_state (id, schema_version, payload, updated_at)
+                VALUES (1, 1, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    schema_version = excluded.schema_version,
+                    payload = excluded.payload,
+                    updated_at = excluded.updated_at
+            """, (payload, time.time()))
+            connection.commit()
+
+    def _read_sqlite_locked(self):
+        path = self._sqlite_path()
+        if not os.path.exists(path):
+            return None
+        with closing(sqlite3.connect(path, timeout=30)) as connection:
+            connection.execute("PRAGMA busy_timeout=30000")
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='graph_state'"
+            ).fetchone()
+            if not table:
+                return None
+            row = connection.execute(
+                "SELECT schema_version, payload FROM graph_state WHERE id=1"
+            ).fetchone()
+            if row is None:
+                return None
+            if row[0] != 1:
+                raise ValueError("Nieobsługiwana wersja schematu SQLite")
+            return json.loads(row[1])
+
+    def _save_json_mirror_locked(self):
+        """Keep the legacy JSON snapshot for export, inspection and rollback."""
         os.makedirs(DATA_DIR, exist_ok=True)
         temp_name = None
         try:
@@ -118,14 +170,32 @@ class SiecNeuronowa:
             if temp_name and os.path.exists(temp_name):
                 os.unlink(temp_name)
 
+    def _save_atomic_locked(self):
+        """Commit SQLite first, then refresh the backward-compatible JSON mirror."""
+        self._save_sqlite_locked()
+        self._save_json_mirror_locked()
+
     def _load_from_disk_locked(self):
-        if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
-            self.dane = json.loads(json.dumps(self.fundament))
-            self._save_atomic_locked()
-            return
+        sqlite_loaded = False
         try:
-            with open(PLIK_SIECI, "r", encoding="utf-8") as handle:
-                loaded = json.load(handle)
+            try:
+                loaded = self._read_sqlite_locked()
+                sqlite_loaded = loaded is not None
+            except (sqlite3.DatabaseError, ValueError, json.JSONDecodeError):
+                # Keep the JSON mirror available as a recovery source if SQLite
+                # is damaged; quarantine only the database file here.
+                db_path = self._sqlite_path()
+                if os.path.exists(db_path):
+                    os.replace(db_path, db_path + ".corrupt-" + str(int(time.time())))
+                loaded = None
+
+            if loaded is None:
+                if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
+                    self.dane = json.loads(json.dumps(self.fundament))
+                    self._save_atomic_locked()
+                    return
+                with open(PLIK_SIECI, "r", encoding="utf-8") as handle:
+                    loaded = json.load(handle)
             neurons = loaded.get("neurons") if isinstance(loaded, dict) else None
             synapses = loaded.get("synapses") if isinstance(loaded, dict) else None
             if not isinstance(neurons, dict) or not isinstance(synapses, list) or "n_logika" not in neurons:
@@ -160,16 +230,25 @@ class SiecNeuronowa:
                 if key not in existing_edges:
                     valid_synapses.append(dict(edge))
             self.dane = {"neurons": valid_neurons, "synapses": valid_synapses}
+            if not sqlite_loaded:
+                # One-time import of the legacy JSON file into SQLite.
+                self._save_atomic_locked()
+            elif not os.path.exists(PLIK_SIECI):
+                self._save_json_mirror_locked()
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
-            # Preserve a damaged file for diagnosis instead of silently destroying it.
-            if os.path.exists(PLIK_SIECI):
-                backup = PLIK_SIECI + ".corrupt-" + str(int(time.time()))
-                try:
-                    os.replace(PLIK_SIECI, backup)
-                except OSError:
-                    pass
-            self.dane = json.loads(json.dumps(self.fundament))
-            self._save_atomic_locked()
+            # Preserve invalid legacy JSON; a valid SQLite snapshot is not
+            # discarded merely because an old mirror is malformed.
+            if not sqlite_loaded:
+                if os.path.exists(PLIK_SIECI):
+                    backup = PLIK_SIECI + ".corrupt-" + str(int(time.time()))
+                    try:
+                        os.replace(PLIK_SIECI, backup)
+                    except OSError:
+                        pass
+                self.dane = json.loads(json.dumps(self.fundament))
+                self._save_atomic_locked()
+            else:
+                raise
 
     def laduj(self):
         with self.lock:

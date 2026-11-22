@@ -25,6 +25,19 @@ The current application exposes:
 - `/api/network` — current graph data
 - `/health` — health check
 
+## Storage and migration
+
+The graph store uses SQLite as its durable source of truth:
+- database: `$DATA_DIR/iskra.sqlite3`;
+- compatibility/export snapshot: `$DATA_DIR/wiedza.json`;
+- SQLite uses WAL journaling, a 30-second busy timeout and transactional writes;
+- on first start, an existing valid `wiedza.json` is imported automatically;
+- the JSON snapshot is retained for inspection, export and recovery if the SQLite database is damaged.
+
+Set `DATA_DIR` to a persistent writable directory on the hosting platform. A container's ordinary filesystem may be ephemeral: without a persistent disk, data can be lost on redeploy/restart. Do not point multiple independent hosts at a local SQLite file; horizontal multi-instance production should move to PostgreSQL.
+
+Before upgrading, take a copy of both `iskra.sqlite3` and `wiedza.json`. Keep the autonomous learning loop disabled during migration and deployment.
+
 ## LLM configuration
 
 Set keys only in the hosting provider's secret/environment settings. Never commit API keys.
