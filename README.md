@@ -5,7 +5,7 @@ Iskra AI is an experimental Polish-language assistant project. The commercial pr
 ## Current branch
 
 - `main`: original experimental knowledge-graph dashboard.
-- `commercial-mvp`: product plan, technical audit, configurable LLM provider router, and safer background-loop default.
+- `commercial-mvp`: product plan, technical audit, configurable LLM provider router, SQLite graph persistence, and security hardening in progress.
 
 The `commercial-mvp` branch is work in progress and has not yet been verified in a live Render deployment.
 
@@ -17,13 +17,18 @@ python -m venv .venv
 pip install -r requirements.txt
 export LLM_PROVIDER=deepseek
 export DEEPSEEK_API_KEY="..."
-python app.py
+export API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+gunicorn wsgi:app
 ```
 
-The current application exposes:
-- `/` — knowledge graph dashboard
-- `/api/network` — current graph data
-- `/health` — health check
+The production WSGI entry point is `wsgi:app`. It wraps Flask with token authentication. The `/health` endpoint remains public for hosting health checks; every other path requires authentication.
+
+Authentication methods:
+- `Authorization: Bearer <API_TOKEN>` for API clients;
+- `X-API-Token: <API_TOKEN>` for API clients;
+- HTTP Basic authentication for browser access (any username; use API_TOKEN as the password).
+
+If `API_TOKEN` is missing, the middleware fails closed with HTTP 503 on all non-health routes. Never use the development entry point `app:app` as a public production server because it bypasses the WSGI authentication wrapper.
 
 ## Storage and migration
 
@@ -57,4 +62,4 @@ The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOU
 
 ## Important limitations
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade persistence. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
