@@ -48,8 +48,15 @@ def add_security_headers(response):
 # =========================
 # MODULAR DOMAIN IMPORTS
 # =========================
-from iskra.knowledge.graph import SiecNeuronowa
+import iskra.knowledge.graph as _graph_store
 from iskra.llm.router import RouterProvider
+
+class SiecNeuronowa(_graph_store.SiecNeuronowa):
+    """Compatibility façade honoring legacy app.DATA_DIR overrides in tests/deployments."""
+    def __init__(self):
+        _graph_store.DATA_DIR = DATA_DIR
+        _graph_store.PLIK_SIECI = PLIK_SIECI
+        super().__init__()
 
 # =========================
 # AUTONOMICZNY SILNIK
