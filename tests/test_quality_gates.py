@@ -77,6 +77,19 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(network.dane["neurons"]["n_low"]["weight"], 0.0)
         self.assertEqual(network.dane["synapses"][-1]["strength"], 1.0)
 
+    def test_malformed_synapse_endpoints_are_ignored_without_corrupting_graph(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {},
+            "synapses": [
+                {"from": ["not", "hashable"], "to": "n_logika", "strength": 0.5},
+                {"from": "n_logika", "to": {"bad": "target"}, "strength": 0.5},
+            ],
+        })
+        restored = iskra.SiecNeuronowa()
+        self.assertEqual(len(restored.dane["neurons"]), 12)
+        self.assertEqual(len(restored.dane["synapses"]), 10)
+
     def test_synapses_with_unknown_endpoints_are_ignored(self):
         network = iskra.SiecNeuronowa()
         before = len(network.dane["synapses"])
