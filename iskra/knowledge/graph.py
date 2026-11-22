@@ -7,6 +7,9 @@ import threading
 import time
 from contextlib import contextmanager
 
+DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover
