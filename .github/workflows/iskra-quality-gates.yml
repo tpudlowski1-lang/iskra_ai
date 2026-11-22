@@ -2,7 +2,8 @@ name: Iskra quality gates
 
 on:
   pull_request:
-    branches: [commercial-mvp, iskra-multithread-stress]
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [commercial-mvp]
   push:
     branches: [iskra-full-quality-gates, iskra-unified-core]
   workflow_dispatch:
