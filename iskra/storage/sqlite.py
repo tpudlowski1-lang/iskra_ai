@@ -23,12 +23,17 @@ class SQLiteGraphStore:
         if database_path == ":memory:":
             raise ValueError("SQLiteGraphStore wymaga trwałej ścieżki pliku")
         self.database_path = os.path.abspath(database_path)
-        self.tenant_id = tenant_id.strip()
+        self._tenant_id = tenant_id.strip()
         parent = os.path.dirname(self.database_path)
         os.makedirs(parent, exist_ok=True)
         self._initialize()
         # Graph contents may be confidential; keep the local database private.
         os.chmod(self.database_path, 0o600)
+
+    @property
+    def tenant_id(self):
+        """Read-only tenant binding; all queries are scoped to this value."""
+        return self._tenant_id
 
     @contextmanager
     def _connection(self):
@@ -138,7 +143,7 @@ class SQLiteGraphStore:
                 SELECT node_id, label, weight, created
                 FROM graph_neurons WHERE tenant_id = ? ORDER BY node_id
                 """,
-                (self.tenant_id,),
+                (self._tenant_id,),
             ).fetchall()
             synapses = connection.execute(
                 """
@@ -146,7 +151,7 @@ class SQLiteGraphStore:
                 FROM graph_synapses WHERE tenant_id = ?
                 ORDER BY source_id, target_id
                 """,
-                (self.tenant_id,),
+                (self._tenant_id,),
             ).fetchall()
         return {
             "neurons": {
@@ -168,10 +173,10 @@ class SQLiteGraphStore:
         with self._connection() as connection:
             with connection:
                 connection.execute(
-                    "DELETE FROM graph_synapses WHERE tenant_id = ?", (self.tenant_id,)
+                    "DELETE FROM graph_synapses WHERE tenant_id = ?", (self._tenant_id,)
                 )
                 connection.execute(
-                    "DELETE FROM graph_neurons WHERE tenant_id = ?", (self.tenant_id,)
+                    "DELETE FROM graph_neurons WHERE tenant_id = ?", (self._tenant_id,)
                 )
                 connection.executemany(
                     """
@@ -179,7 +184,7 @@ class SQLiteGraphStore:
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     [
-                        (self.tenant_id, node_id, node["label"], node["weight"], node["created"])
+                        (self._tenant_id, node_id, node["label"], node["weight"], node["created"])
                         for node_id, node in clean["neurons"].items()
                     ],
                 )
@@ -189,7 +194,7 @@ class SQLiteGraphStore:
                     VALUES (?, ?, ?, ?)
                     """,
                     [
-                        (self.tenant_id, edge["from"], edge["to"], edge["strength"])
+                        (self._tenant_id, edge["from"], edge["to"], edge["strength"])
                         for edge in clean["synapses"]
                     ],
                 )
