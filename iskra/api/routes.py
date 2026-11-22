@@ -8,11 +8,16 @@ def create_api_blueprint(graph):
 
     @api.get("/api/network")
     def get_network():
+        # Each Gunicorn worker has its own in-memory graph snapshot. Reload it
+        # under the shared file lock before serving reads so writes from other
+        # processes become visible to this worker.
+        graph.laduj()
         with graph.lock:
             return jsonify(graph.dane)
 
     @api.get("/health")
     def health():
+        graph.laduj()
         with graph.lock:
             return jsonify({"status": "ok", "neurons": len(graph.dane["neurons"])})
 
