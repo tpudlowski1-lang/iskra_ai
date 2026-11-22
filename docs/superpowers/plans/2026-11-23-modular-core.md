@@ -36,11 +36,11 @@
 - Modify: `.github/workflows/iskra-quality-gates.yml`
 - Create: `tests/test_security_baseline.py`
 
-- [ ] Replace dashboard `innerHTML` rendering with DOM nodes and `textContent`.
-- [ ] Add baseline response security headers.
-- [ ] Add tests for safe dashboard rendering and headers.
-- [ ] Run the complete existing test suite and security tests.
-- [ ] Trigger GitHub Actions on this branch and inspect the actual run.
+- [x] Replace dashboard `innerHTML` rendering with DOM nodes and `textContent`.
+- [x] Add baseline response security headers.
+- [x] Add tests for safe dashboard rendering and headers.
+- [x] Run the complete existing test suite and security tests.
+- [x] Trigger GitHub Actions on this branch and inspect the actual run.
 
 ### Task 2: Package boundaries and compatibility façade
 
@@ -52,10 +52,10 @@
 - Modify: `app.py`
 - Create: focused import and compatibility tests.
 
-- [ ] Introduce immutable environment configuration with validated numeric bounds.
-- [ ] Keep `app.py` import compatibility and existing global names during extraction.
-- [ ] Ensure importing the application has no unexpected background side effects.
-- [ ] Run all tests.
+- [x] Introduce immutable environment configuration with validated numeric bounds.
+- [x] Keep `app.py` import compatibility and existing global names during extraction.
+- [x] Ensure importing the application has no unexpected background side effects.
+- [x] Run all tests.
 
 ### Task 3: Extract knowledge graph and provider router
 
@@ -67,10 +67,10 @@
 - Modify: `app.py`
 - Modify: tests to import both new modules and legacy façade.
 
-- [ ] Move graph and provider implementations without changing public behavior.
-- [ ] Keep compatibility aliases in `app.py`.
-- [ ] Add direct module-level tests.
-- [ ] Run all deterministic, thread, and process tests.
+- [x] Move graph and provider implementations without changing public behavior.
+- [x] Keep compatibility aliases in `app.py`.
+- [x] Add direct module-level tests.
+- [x] Run all deterministic, thread, and process tests.
 
 ### Task 4: Storage boundary and migration design
 
@@ -94,6 +94,6 @@
 
 - [ ] Add dependency/security checks that do not require secrets.
 - [ ] Add explicit deployment-readiness checklist.
-- [ ] Document unresolved tenant, auth, RAG, durable-storage, and observability blockers.
+- [x] Document unresolved tenant, auth, RAG, durable-storage, and observability blockers.
 - [ ] Request review before any merge.
 
