@@ -1,0 +1,39 @@
+name: Iskra quality gates
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [commercial-mvp]
+  push:
+    branches: [iskra-full-quality-gates, iskra-unified-core]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    env:
+      ENABLE_AUTONOMOUS_LOOP: "false"
+      LLM_PROVIDER: deepseek
+      LLM_FALLBACK_PROVIDERS: openai,gemini
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall -q app.py tests
+      - name: Run deterministic tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
