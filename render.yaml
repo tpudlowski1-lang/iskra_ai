@@ -6,17 +6,18 @@ services:
     buildCommand: |
       pip install -r requirements.txt
 
+    # WSGI wrapper enforces API_TOKEN before the dashboard/API are exposed.
     startCommand: |
-      gunicorn app:app --workers 2 --threads 4 --timeout 120
+      gunicorn wsgi:app --workers 2 --threads 4 --timeout 120
 
     envVars:
-
       - key: PYTHON_VERSION
         value: 3.11.9
 
-      # =========================
-      # ROUTER
-      # =========================
+      # Fail-closed authentication: create a long random secret in Render.
+      # Do not commit the real value to this file or repository.
+      - key: API_TOKEN
+        sync: false
 
       - key: LLM_PROVIDER
         value: openai
@@ -24,29 +25,14 @@ services:
       - key: LLM_FALLBACK_PROVIDERS
         value: gemini,deepseek
 
-      # Pętla badawcza nie może startować osobno w każdym workerze Gunicorn.
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
-
-      # =========================
-      # OPENAI
-      # =========================
 
       - key: OPENAI_MODEL
         value: gpt-4o-mini
 
-      # API KEY ustaw ręcznie w panelu Render
-
-      # =========================
-      # GEMINI
-      # =========================
-
-      # Model i klucz ustaw w panelu Render. Pusty model wyłącza ten fallback.
       - key: GEMINI_MODEL
         value: ""
 
-      # API KEY ustaw ręcznie w panelu Render (GEMINI_API_KEY).
-
     healthCheckPath: /health
-
     autoDeploy: true
