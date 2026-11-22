@@ -621,6 +621,10 @@ def get_network():
 
 
 
+def _knowledge_db_path():
+    return os.path.join(DATA_DIR, "iskra_knowledge.sqlite3")
+
+
 def _tenant_id():
     if request.environ.get("iskra.auth_role") != "tenant":
         return None

@@ -72,7 +72,7 @@ class ApiTokenMiddleware:
         if tenant_key and any(path == prefix or path.startswith(prefix + "/")
                               for prefix in self.TENANT_PATHS):
             tenant_id = knowledge.authenticate_tenant_key(
-                os.path.join(self.data_dir, "iskra.sqlite3"), tenant_key
+                os.path.join(self.data_dir, "iskra_knowledge.sqlite3"), tenant_key
             )
             if tenant_id:
                 environ["iskra.auth_role"] = "tenant"

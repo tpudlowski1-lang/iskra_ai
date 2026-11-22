@@ -12,7 +12,7 @@ from security import ApiTokenMiddleware
 class TenantKnowledgeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = os.path.join(self.tmp.name, "iskra.sqlite3")
+        self.db = os.path.join(self.tmp.name, "iskra_knowledge.sqlite3")
         self.a = knowledge.create_tenant(self.db, "Firma Alfa")
         self.b = knowledge.create_tenant(self.db, "Firma Beta")
 
