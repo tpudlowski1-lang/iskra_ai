@@ -1,0 +1,30 @@
+# Runtime persistence and recovery artifacts
+iskra.sqlite3
+iskra.sqlite3-*
+iskra.sqlite3-wal
+iskra.sqlite3-shm
+wiedza.json
+wiedza.json.*
+*.corrupt-*
+*.lock
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+keystore.properties
+
+# Python and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
