@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import threading
+import multiprocessing
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
@@ -10,6 +11,20 @@ os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
 
 import app as iskra
+
+
+
+def _multiprocess_graph_writer(data_dir, worker_id, updates_each):
+    import app as module
+    module.DATA_DIR = data_dir
+    module.PLIK_SIECI = os.path.join(data_dir, "wiedza.json")
+    network = module.SiecNeuronowa()
+    for index in range(updates_each):
+        node_id = f"process_{worker_id}_{index}"
+        network.aktualizuj_siec({
+            "neurons": {node_id: {"label": node_id, "weight": 0.7}},
+            "synapses": [{"from": "n_logika", "to": node_id, "strength": 0.6}],
+        })
 
 
 class IskraConcurrencyTests(unittest.TestCase):
@@ -44,6 +59,44 @@ class IskraConcurrencyTests(unittest.TestCase):
                     self.assertIn(synapse["from"], saved["neurons"])
                     self.assertIn(synapse["to"], saved["neurons"])
             finally:
+                iskra.PLIK_SIECI, iskra.DATA_DIR = old_path, old_dir
+
+    def test_multi_process_graph_updates_are_not_lost(self):
+        old_path, old_dir = iskra.PLIK_SIECI, iskra.DATA_DIR
+        workers, updates_each = 4, 5
+        with tempfile.TemporaryDirectory() as tmp:
+            iskra.DATA_DIR = tmp
+            iskra.PLIK_SIECI = os.path.join(tmp, "wiedza.json")
+            iskra.SiecNeuronowa()
+            context = multiprocessing.get_context("fork")
+            processes = [
+                context.Process(
+                    target=_multiprocess_graph_writer,
+                    args=(tmp, worker_id, updates_each),
+                )
+                for worker_id in range(workers)
+            ]
+            try:
+                for process in processes:
+                    process.start()
+                for process in processes:
+                    process.join(timeout=30)
+                    self.assertFalse(process.is_alive(), "Worker process timed out")
+                    self.assertEqual(process.exitcode, 0)
+                restored = iskra.SiecNeuronowa()
+                self.assertEqual(
+                    len(restored.dane["neurons"]),
+                    12 + workers * updates_each,
+                )
+                self.assertEqual(
+                    len(restored.dane["synapses"]),
+                    10 + workers * updates_each,
+                )
+            finally:
+                for process in processes:
+                    if process.is_alive():
+                        process.terminate()
+                        process.join()
                 iskra.PLIK_SIECI, iskra.DATA_DIR = old_path, old_dir
 
     def test_parallel_dashboard_reads(self):
