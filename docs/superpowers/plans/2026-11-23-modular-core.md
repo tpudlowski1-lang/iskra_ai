@@ -29,6 +29,8 @@
 
 ### Task 1: Security baseline and CI trigger
 
+**Status: complete on this branch.**
+
 **Files:**
 - Modify: `app.py`
 - Modify: `.github/workflows/iskra-quality-gates.yml`
@@ -41,6 +43,8 @@
 - [ ] Trigger GitHub Actions on this branch and inspect the actual run.
 
 ### Task 2: Package boundaries and compatibility façade
+
+**Status: complete for configuration, package boundaries, and worker opt-in; deeper module extraction continues incrementally.**
 
 **Files:**
 - Create: `iskra/__init__.py`, `iskra/config.py`
@@ -55,6 +59,8 @@
 
 ### Task 3: Extract knowledge graph and provider router
 
+**Status: complete; latest upstream graph hardening retained.**
+
 **Files:**
 - Create: `iskra/knowledge/graph.py`
 - Create: `iskra/llm/router.py`
@@ -68,6 +74,8 @@
 
 ### Task 4: Storage boundary and migration design
 
+**Status: protocol and migration policy added; database adapter and transactional migration remain deferred.**
+
 **Files:**
 - Create: `iskra/storage/__init__.py`, `iskra/storage/protocols.py`, `docs/DATA_MIGRATION.md`
 - Add interface contract tests.
@@ -77,6 +85,8 @@
 - [ ] Do not change the persisted format until migration tests exist.
 
 ### Task 5: Production readiness gates
+
+**Status: partial; readiness blockers documented.**
 
 **Files:**
 - Update: `.github/workflows/iskra-quality-gates.yml`
