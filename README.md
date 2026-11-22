@@ -14,15 +14,17 @@ All restructuring streams are coordinated in one source of truth:
 
 The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; their code is ported selectively after review, not merged wholesale.
 
-## Application entry points and current security status
+## Application entry points and security
 
 - `app.py` — compatibility entry point for Flask and existing imports.
-- `wsgi.py` — WSGI compatibility import; it does **not** add authentication.
+- `wsgi.py` — production WSGI entry point; wraps the Flask app with fail-closed API-token authentication from `security.py`.
 - `/` — knowledge graph dashboard.
 - `/api/network` — graph snapshot.
-- `/health` — health probe.
+- `/health` — public hosting health probe.
 
-The application currently has baseline HTTP security headers, but **does not yet implement application authentication, user accounts, tenant authorization or access control**. The dashboard and API must therefore be treated as non-private development surfaces. Do not expose confidential data or use this as a customer-facing SaaS. The previous WSGI middleware reference was invalid because its required root-level `security.py` module is not part of this canonical branch; the entry point has been corrected so it imports cleanly without pretending to secure requests.
+Every route except `/health` requires the shared `API_TOKEN`. Clients may send `Authorization: Bearer <API_TOKEN>`, `X-API-Token: <API_TOKEN>`, or HTTP Basic authentication with the token as the password. If `API_TOKEN` is unset, non-health routes fail closed with HTTP 503. Use `wsgi:app` for public deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper.
+
+This is only a shared administrator token, not a full identity system. Named user accounts, roles, tenant-specific credentials, request-scoped tenant authorization and application-wide resource ownership are not yet implemented. Do not expose customer documents or treat this as a production multi-tenant SaaS.
 
 ## Architecture
 
@@ -30,7 +32,8 @@ The application currently has baseline HTTP security headers, but **does not yet
 - `iskra/knowledge/graph.py` — graph model, twelve foundational pillars and JSON persistence.
 - `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini provider routing with JSON-object validation and fallback.
 - `iskra/api/routes.py` — injectable Flask API blueprint.
-- `iskra/security/headers.py` — baseline response security headers only.
+- `iskra/security/headers.py` — baseline response security headers.
+- `security.py` — shared API-token WSGI middleware.
 - `iskra/workers/autonomous.py` — opt-in autonomous graph-learning loop.
 - `iskra/storage/protocols.py` — storage interface.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite adapter prototype; it is **not connected to the live Flask graph path** and is not production tenant isolation.
@@ -67,4 +70,4 @@ GitHub Actions runs deterministic tests on Python 3.11 and 3.12 and a concurrenc
 
 ## Not production-ready as a multi-tenant SaaS
 
-The project does not yet provide application authentication, named user accounts, tenant authorization, private document ingestion, tenant-filtered RAG, billing, PostgreSQL deployment or production observability. The SQLite adapter alone does not provide these controls. Do not upload confidential customer documents or expose this as a paid multi-tenant service until the required controls are implemented and tested.
+The shared API token protects the WSGI entry point, but the project does not yet provide named user accounts, role-based authorization, tenant isolation, private document ingestion, tenant-filtered RAG, billing, PostgreSQL deployment or production observability. The SQLite adapter alone does not provide these controls. Do not upload confidential customer documents or expose this as a paid multi-tenant service until the required controls are implemented and tested.
