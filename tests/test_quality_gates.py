@@ -143,6 +143,33 @@ class IskraProviderTests(unittest.TestCase):
 
 
 class IskraApiContractTests(unittest.TestCase):
+
+    def test_network_endpoint_refreshes_state_written_by_another_worker(self):
+        previous_network = iskra.siec
+        try:
+            reader = iskra.SiecNeuronowa()
+            writer = iskra.SiecNeuronowa()
+            writer.aktualizuj_siec({
+                "neurons": {"n_from_other_worker": {
+                    "label": "Zapis z innego workera", "weight": 0.8
+                }},
+                "synapses": [{
+                    "from": "n_logika", "to": "n_from_other_worker",
+                    "strength": 0.7
+                }],
+            })
+            self.assertNotIn("n_from_other_worker", reader.dane["neurons"])
+            iskra.siec = reader
+            response = iskra.app.test_client().get("/api/network")
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(
+                "n_from_other_worker",
+                response.get_json()["neurons"],
+                "API odczytu powinno widzieć zapis wykonany przez inny proces",
+            )
+        finally:
+            iskra.siec = previous_network
+
     def test_health_endpoint_contract(self):
         response = iskra.app.test_client().get("/health")
         self.assertEqual(response.status_code, 200)
