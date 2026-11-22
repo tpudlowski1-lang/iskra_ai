@@ -176,8 +176,19 @@ class SiecNeuronowa:
         self._save_json_mirror_locked()
 
     def _load_from_disk_locked(self):
+        sqlite_loaded = False
         try:
-            loaded = self._read_sqlite_locked()
+            try:
+                loaded = self._read_sqlite_locked()
+                sqlite_loaded = loaded is not None
+            except (sqlite3.DatabaseError, ValueError, json.JSONDecodeError):
+                # Keep the JSON mirror available as a recovery source if SQLite
+                # is damaged; quarantine only the database file here.
+                db_path = self._sqlite_path()
+                if os.path.exists(db_path):
+                    os.replace(db_path, db_path + ".corrupt-" + str(int(time.time())))
+                loaded = None
+
             if loaded is None:
                 if not os.path.exists(PLIK_SIECI) or os.path.getsize(PLIK_SIECI) == 0:
                     self.dane = json.loads(json.dumps(self.fundament))
@@ -219,20 +230,25 @@ class SiecNeuronowa:
                 if key not in existing_edges:
                     valid_synapses.append(dict(edge))
             self.dane = {"neurons": valid_neurons, "synapses": valid_synapses}
-            # One-time migration: if this graph came from legacy JSON, persist it
-            # in SQLite before refreshing the compatibility snapshot.
-            self._save_atomic_locked()
-        except (OSError, ValueError, TypeError, json.JSONDecodeError, sqlite3.DatabaseError):
-            # Preserve a damaged file for diagnosis instead of silently destroying it.
-            for damaged_path in (self._sqlite_path(), PLIK_SIECI):
-                if os.path.exists(damaged_path):
-                    backup = damaged_path + ".corrupt-" + str(int(time.time()))
+            if not sqlite_loaded:
+                # One-time import of the legacy JSON file into SQLite.
+                self._save_atomic_locked()
+            elif not os.path.exists(PLIK_SIECI):
+                self._save_json_mirror_locked()
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            # Preserve invalid legacy JSON; a valid SQLite snapshot is not
+            # discarded merely because an old mirror is malformed.
+            if not sqlite_loaded:
+                if os.path.exists(PLIK_SIECI):
+                    backup = PLIK_SIECI + ".corrupt-" + str(int(time.time()))
                     try:
-                        os.replace(damaged_path, backup)
+                        os.replace(PLIK_SIECI, backup)
                     except OSError:
                         pass
-            self.dane = json.loads(json.dumps(self.fundament))
-            self._save_atomic_locked()
+                self.dane = json.loads(json.dumps(self.fundament))
+                self._save_atomic_locked()
+            else:
+                raise
 
     def laduj(self):
         with self.lock:
