@@ -2,9 +2,9 @@ name: Iskra multithread stress tests
 
 on:
   pull_request:
-    branches: [commercial-mvp]
+    branches: [commercial-mvp, refactor/modular-core]
   push:
-    branches: [iskra-multithread-stress]
+    branches: [iskra-multithread-stress, refactor/modular-core]
   workflow_dispatch:
 
 permissions:
