@@ -143,6 +143,33 @@ class IskraProviderTests(unittest.TestCase):
 
 
 class IskraApiContractTests(unittest.TestCase):
+
+    def test_api_reads_latest_graph_written_by_another_worker(self):
+        from flask import Flask
+        from iskra.api.routes import create_api_blueprint
+
+        reader = iskra.SiecNeuronowa()
+        writer = iskra.SiecNeuronowa()
+        writer.aktualizuj_siec({
+            "neurons": {"n_external_worker": {
+                "label": "Dane z innego workera", "weight": 0.8
+            }},
+            "synapses": [{
+                "from": "n_logika", "to": "n_external_worker",
+                "strength": 0.75
+            }],
+        })
+        self.assertNotIn("n_external_worker", reader.dane["neurons"])
+        test_app = Flask("graph-refresh-test")
+        test_app.register_blueprint(create_api_blueprint(reader))
+        response = test_app.test_client().get("/api/network")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "n_external_worker",
+            response.get_json()["neurons"],
+            "API musi odświeżać snapshot po zapisie z innego procesu",
+        )
+
     def test_health_endpoint_contract(self):
         response = iskra.app.test_client().get("/health")
         self.assertEqual(response.status_code, 200)
