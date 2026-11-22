@@ -12,6 +12,7 @@ from flask import Flask, jsonify, render_template_string
 # KONFIGURACJA
 # =========================
 from iskra.config import load_settings
+from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
 
 settings = load_settings()
@@ -204,15 +205,7 @@ DASHBOARD_HTML = """
 def index():
     return render_template_string(DASHBOARD_HTML)
 
-@app.route('/api/network')
-def get_network():
-    with siec.lock:
-        return jsonify(siec.dane)
-
-@app.route('/health')
-def health():
-    with siec.lock:
-        return jsonify({"status": "ok", "neurons": len(siec.dane["neurons"])})
+app.register_blueprint(create_api_blueprint(siec))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
