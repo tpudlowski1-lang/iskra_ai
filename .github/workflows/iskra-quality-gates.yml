@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [commercial-mvp, iskra-multithread-stress]
   push:
-    branches: [iskra-full-quality-gates]
+    branches: [iskra-full-quality-gates, iskra-unified-core]
   workflow_dispatch:
 
 permissions:
