@@ -5,16 +5,7 @@ import os
 import json
 import time
 import threading
-import tempfile
-import shutil
-import requests
-import re
-import math
-from contextlib import contextmanager
-try:
-    import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
-except ImportError:  # pragma: no cover - non-POSIX development environments
-    fcntl = None
+
 from flask import Flask, jsonify, render_template_string
 
 # =========================
