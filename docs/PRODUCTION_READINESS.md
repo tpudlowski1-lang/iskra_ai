@@ -9,13 +9,14 @@ This checklist is intentionally conservative. The modular refactor does not by i
 - [x] Runtime port and data directory validated.
 - [x] Dashboard graph labels are rendered with DOM `textContent`, not `innerHTML`.
 - [x] Baseline security headers added.
+- [x] Tenant-scoped transactional SQLite graph adapter added and tested; it is not yet wired into the live Flask application.
 - [x] Existing deterministic tests run on Python 3.11 and 3.12 in GitHub Actions.
 - [x] Existing multi-thread/process stress suite run in GitHub Actions.
 
 ## Not yet production-ready
 - [ ] Authentication, account lifecycle, and authorization.
 - [ ] Tenant-scoped data model and isolation tests.
-- [ ] Durable transactional PostgreSQL persistence and migration/rollback.
+- [ ] Durable transactional PostgreSQL persistence and migration/rollback; the SQLite adapter is a tested migration step, not a production tenant-isolation guarantee.
 - [ ] Private document upload, malware/type/size validation, and secure object storage.
 - [ ] Tenant-filtered retrieval, RAG evaluation, and source citations.
 - [ ] CSRF protection for future state-changing browser endpoints.
