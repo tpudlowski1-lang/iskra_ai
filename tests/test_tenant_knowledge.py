@@ -79,7 +79,7 @@ class TenantKnowledgeTests(unittest.TestCase):
             calls.append(environ.get("iskra.tenant_id"))
             start_response("200 OK", [])
             return [b"ok"]
-        middleware = ApiTokenMiddleware(app, token="admin-secret")
+        middleware = ApiTokenMiddleware(app, token="admin-secret", data_dir=self.tmp.name)
         def request(path, key):
             env = {"PATH_INFO": path, "HTTP_X_ISKRA_TENANT_KEY": key}
             result = {}

@@ -191,16 +191,18 @@ def add_document(db_path, tenant_id, filename, data):
     document_id = str(uuid.uuid4())
     initialize(db_path)
     with closing(_connect(db_path)) as connection:
+        connection.execute("BEGIN IMMEDIATE")
         tenant = connection.execute("SELECT 1 FROM tenants WHERE id=?", (tenant_id,)).fetchone()
         if not tenant:
+            connection.rollback()
             raise ValueError("Nieznana firma.")
         existing = connection.execute(
             "SELECT id FROM documents WHERE tenant_id=? AND sha256=?", (tenant_id, digest)
         ).fetchone()
         if existing:
+            connection.commit()
             return {"document_id": existing["id"], "filename": safe_name,
                     "chunks": 0, "duplicate": True}
-        connection.execute("BEGIN IMMEDIATE")
         connection.execute("""
             INSERT INTO documents(id, tenant_id, filename, extension, sha256, created_at)
             VALUES (?, ?, ?, ?, ?, ?)

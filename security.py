@@ -10,9 +10,25 @@ import knowledge
 class ApiTokenMiddleware:
     TENANT_PATHS = ("/api/documents", "/api/search")
 
-    def __init__(self, application, token=None):
+    def __init__(self, application, token=None, data_dir=None):
         self.application = application
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
+        self.data_dir = os.path.abspath(data_dir or os.environ.get("DATA_DIR", os.path.dirname(__file__)))
+
+    def _secured_application(self, environ, start_response):
+        def secured_start_response(status, headers, exc_info=None):
+            headers = list(headers)
+            existing = {name.lower() for name, _ in headers}
+            for name, value in (
+                ("X-Content-Type-Options", "nosniff"),
+                ("X-Frame-Options", "DENY"),
+                ("Referrer-Policy", "no-referrer"),
+                ("Cache-Control", "no-store"),
+            ):
+                if name.lower() not in existing:
+                    headers.append((name, value))
+            return start_response(status, headers, exc_info)
+        return self.application(environ, secured_start_response)
 
     @staticmethod
     def _response(start_response, status, payload, extra_headers=()):
@@ -50,19 +66,18 @@ class ApiTokenMiddleware:
             admin_token = environ.get("HTTP_X_API_TOKEN", "")
         if self.token and admin_token and hmac.compare_digest(admin_token, self.token):
             environ["iskra.auth_role"] = "admin"
-            return self.application(environ, start_response)
+            return self._secured_application(environ, start_response)
 
         tenant_key = environ.get("HTTP_X_ISKRA_TENANT_KEY", "")
         if tenant_key and any(path == prefix or path.startswith(prefix + "/")
                               for prefix in self.TENANT_PATHS):
-            data_dir = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(__file__)))
             tenant_id = knowledge.authenticate_tenant_key(
-                os.path.join(data_dir, "iskra.sqlite3"), tenant_key
+                os.path.join(self.data_dir, "iskra.sqlite3"), tenant_key
             )
             if tenant_id:
                 environ["iskra.auth_role"] = "tenant"
                 environ["iskra.tenant_id"] = tenant_id
-                return self.application(environ, start_response)
+                return self._secured_application(environ, start_response)
 
         if not self.token:
             return self._response(
