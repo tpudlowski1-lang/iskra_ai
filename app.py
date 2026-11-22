@@ -16,7 +16,9 @@ try:
     import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
 except ImportError:  # pragma: no cover - non-POSIX development environments
     fcntl = None
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, request
+
+import knowledge
 
 # =========================
 # KONFIGURACJA
@@ -30,6 +32,8 @@ REQUEST_TIMEOUT = 45
 REQUEST_RETRIES = 2
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = knowledge.MAX_UPLOAD_BYTES
+
 
 # =========================
 # SIECIOWA PAMIĘĆ GRAFOWA
@@ -615,7 +619,85 @@ def get_network():
     with siec.lock:
         return jsonify(siec.dane)
 
+
+
+def _tenant_id():
+    if request.environ.get("iskra.auth_role") != "tenant":
+        return None
+    return request.environ.get("iskra.tenant_id")
+
+
+@app.errorhandler(413)
+def upload_too_large(_error):
+    return jsonify({"error": "file_too_large", "message": "Maksymalny rozmiar pliku to 8 MB."}), 413
+
+
+@app.route("/admin/tenants", methods=["POST"])
+def create_tenant():
+    if request.environ.get("iskra.auth_role") != "admin":
+        return jsonify({"error": "admin_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        tenant = knowledge.create_tenant(SiecNeuronowa._sqlite_path(), payload.get("name"))
+    except ValueError as exc:
+        return jsonify({"error": "invalid_tenant", "message": str(exc)}), 400
+    return jsonify(tenant), 201
+
+
+@app.route("/api/documents", methods=["GET", "POST"])
+def documents():
+    tenant_id = _tenant_id()
+    if not tenant_id:
+        return jsonify({"error": "tenant_key_required"}), 403
+    db_path = SiecNeuronowa._sqlite_path()
+    if request.method == "GET":
+        return jsonify({"documents": knowledge.list_documents(db_path, tenant_id)})
+    uploaded = request.files.get("file")
+    if uploaded is None:
+        return jsonify({"error": "file_required"}), 400
+    try:
+        result = knowledge.add_document(
+            db_path, tenant_id, uploaded.filename, uploaded.read(knowledge.MAX_UPLOAD_BYTES + 1)
+        )
+    except RuntimeError as exc:
+        return jsonify({"error": "dependency_missing", "message": str(exc)}), 503
+    except ValueError as exc:
+        return jsonify({"error": "invalid_document", "message": str(exc)}), 400
+    return jsonify(result), 201
+
+
+@app.route("/api/documents/<document_id>", methods=["DELETE"])
+def remove_document(document_id):
+    tenant_id = _tenant_id()
+    if not tenant_id:
+        return jsonify({"error": "tenant_key_required"}), 403
+    deleted = knowledge.delete_document(SiecNeuronowa._sqlite_path(), tenant_id, document_id)
+    if not deleted:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"deleted": True})
+
+
+@app.route("/api/search", methods=["POST"])
+def search_documents():
+    tenant_id = _tenant_id()
+    if not tenant_id:
+        return jsonify({"error": "tenant_key_required"}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        results = knowledge.search_documents(
+            SiecNeuronowa._sqlite_path(), tenant_id, payload.get("query", ""),
+            payload.get("limit", 5),
+        )
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": "invalid_query", "message": str(exc)}), 400
+    return jsonify({
+        "results": results,
+        "message": "Brak dopasowań w dokumentach tej firmy." if not results else "Znaleziono fragmenty źródłowe.",
+    })
+
+
 @app.route('/health')
+
 def health():
     with siec.lock:
         return jsonify({"status": "ok", "neurons": len(siec.dane["neurons"])})

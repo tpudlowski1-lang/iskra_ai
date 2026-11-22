@@ -63,3 +63,26 @@ The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOU
 ## Important limitations
 
 This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+
+
+## Tenant document knowledge (pilot API)
+
+The authenticated administrator creates a company workspace:
+
+```http
+POST /admin/tenants
+Authorization: Bearer <API_TOKEN>
+Content-Type: application/json
+
+{"name":"Firma testowa"}
+```
+
+The response includes a one-time `api_key`. Store it securely; only its SHA-256 digest is persisted. Tenant API keys can access only:
+- `GET /api/documents`
+- `POST /api/documents` with multipart field `file`
+- `DELETE /api/documents/<document_id>`
+- `POST /api/search` with JSON `{"query":"...","limit":5}`
+
+Send the tenant key in `X-Iskra-Tenant-Key`. Tenant identity is derived from the validated key, never from a client-supplied tenant ID. Document records, chunks, retrieval, and deletion are scoped to that tenant in SQLite. Supported uploads: PDF, DOCX and TXT; maximum upload 8 MB, extracted text 1.5 million characters, 200 PDF pages. Search returns source excerpts, not an invented model answer.
+
+This is a controlled pilot foundation, not a complete SaaS identity system: it does not yet include named user accounts, roles, self-service key rotation, billing, object storage, or a generated conversational answer. Protect tenant keys as passwords and use HTTPS.
