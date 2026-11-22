@@ -68,6 +68,19 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertIn("n_logika", network.dane["neurons"])
 
+    def test_partial_neuron_update_preserves_existing_weight(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_logika": {"label": "Logika", "weight": 0.95}},
+            "synapses": [],
+        })
+        expected = network.dane["neurons"]["n_logika"]["weight"]
+        network.aktualizuj_siec({
+            "neurons": {"n_logika": {"label": "Logika — aktualizacja częściowa"}},
+            "synapses": [],
+        })
+        self.assertEqual(network.dane["neurons"]["n_logika"]["weight"], expected)
+
     def test_weights_are_clamped_to_unit_interval(self):
         network = iskra.SiecNeuronowa()
         network.aktualizuj_siec({
