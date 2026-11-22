@@ -126,60 +126,120 @@ class SiecNeuronowa:
             self.zapisz()
 
 # =========================
-# PROVIDER DEEPSEEK
+# ROUTER LLM — OPENAI / DEEPSEEK / GEMINI
 # =========================
-class DeepSeekProvider:
-    def __init__(self):
-        self.api_key = os.environ.get("DEEPSEEK_API_KEY", "")
-        self.url = "https://api.deepseek.com/v1/chat/completions"
-        self.model = "deepseek-chat"
-
-    def generate(self, prompt):
-        if not self.api_key:
-            print("BŁĄD: Brak klucza DEEPSEEK_API_KEY!")
-            return None
-        
-        headers = {
-            "Authorization": f"Bearer {self.api_key}", 
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.4,
-            "response_format": {"type": "json_object"}
-        }
-        
-        for _ in range(REQUEST_RETRIES):
-            try:
-                r = requests.post(self.url, headers=headers, json=data, timeout=REQUEST_TIMEOUT)
-                if r.status_code == 200:
-                    return r.json()["choices"][0]["message"]["content"]
-                else:
-                    print(f"DeepSeek API Error: {r.status_code}")
-            except Exception as e:
-                print(f"Błąd połączenia API: {e}")
-                time.sleep(3)
-        return None
-
 class RouterProvider:
+    """Jednolity router modeli z kolejnością primary + fallback z ENV."""
+
     def __init__(self):
-        self.deepseek = DeepSeekProvider()
+        self.primary = os.environ.get("LLM_PROVIDER", "deepseek").strip().lower()
+        fallback = os.environ.get("LLM_FALLBACK_PROVIDERS", "openai,gemini")
+        self.fallbacks = [x.strip().lower() for x in fallback.split(",") if x.strip()]
+        self.providers = {
+            "openai": self._openai,
+            "deepseek": self._deepseek,
+            "gemini": self._gemini,
+        }
 
     def clean_json(self, text):
         if not text:
             return None
         match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            return match.group(0)
-        return text
+        return match.group(0) if match else text
+
+    def _chat_completion(self, provider, prompt):
+        configs = {
+            "openai": {
+                "key": os.environ.get("OPENAI_API_KEY", ""),
+                "url": os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1/chat/completions"),
+                "model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            },
+            "deepseek": {
+                "key": os.environ.get("DEEPSEEK_API_KEY", ""),
+                "url": os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1/chat/completions"),
+                "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+            },
+        }
+        cfg = configs[provider]
+        if not cfg["key"]:
+            print(f"LLM {provider}: brak wymaganego klucza API — pomijam.")
+            return None
+        headers = {
+            "Authorization": f"Bearer {cfg['key']}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": cfg["model"],
+            "messages": [
+                {"role": "system", "content": "Return only a valid JSON object."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.3,
+            "response_format": {"type": "json_object"},
+        }
+        for attempt in range(REQUEST_RETRIES):
+            try:
+                response = requests.post(cfg["url"], headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+                if response.ok:
+                    return response.json()["choices"][0]["message"]["content"]
+                print(f"LLM {provider}: HTTP {response.status_code}")
+            except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
+                print(f"LLM {provider}: błąd żądania ({type(exc).__name__}).")
+            if attempt + 1 < REQUEST_RETRIES:
+                time.sleep(2)
+        return None
+
+    def _openai(self, prompt):
+        return self._chat_completion("openai", prompt)
+
+    def _deepseek(self, prompt):
+        return self._chat_completion("deepseek", prompt)
+
+    def _gemini(self, prompt):
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        model = os.environ.get("GEMINI_MODEL", "").strip()
+        if not api_key or not model:
+            print("LLM gemini: ustaw GEMINI_API_KEY oraz GEMINI_MODEL — pomijam.")
+            return None
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "responseMimeType": "application/json",
+            },
+        }
+        for attempt in range(REQUEST_RETRIES):
+            try:
+                response = requests.post(
+                    url,
+                    headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=REQUEST_TIMEOUT,
+                )
+                if response.ok:
+                    data = response.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                print(f"LLM gemini: HTTP {response.status_code}")
+            except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
+                print(f"LLM gemini: błąd żądania ({type(exc).__name__}).")
+            if attempt + 1 < REQUEST_RETRIES:
+                time.sleep(2)
+        return None
 
     def generate(self, prompt):
-        raw_res = self.deepseek.generate(prompt)
-        return self.clean_json(raw_res)
+        order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
+        for name in order:
+            provider = self.providers.get(name)
+            if provider is None:
+                print(f"LLM: nieznany provider '{name}' — pomijam.")
+                continue
+            result = provider(prompt)
+            if result:
+                print(f"LLM: odpowiedź uzyskana przez {name}.")
+                return self.clean_json(result)
+        print("LLM: wszystkie skonfigurowane providery zawiodły.")
+        return None
 
 # =========================
 # AUTONOMICZNY SILNIK
@@ -189,9 +249,16 @@ class IskraAutonomiczna:
         self.siec = siec
         self.router = RouterProvider()
         self.running = True
-        self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
-        self.thread.start()
-        print("=== AUTONOMICZNA ISKRA URUCHOMIONA (MATRYCA 12 FILARÓW) ===")
+        self.thread = None
+        # Gunicorn uruchamia wiele workerów. Pętla w tle przy imporcie modułu
+        # mnożyłaby procesy i koszty; włączamy ją wyłącznie świadomą zmienną ENV.
+        enabled = os.environ.get("ENABLE_AUTONOMOUS_LOOP", "false").strip().lower() in ("1", "true", "yes", "on")
+        if enabled:
+            self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
+            self.thread.start()
+            print("=== AUTONOMICZNA ISKRA: PĘTLA WŁĄCZONA ===")
+        else:
+            print("=== ISKRA: Pętla autonomiczna wyłączona (ENABLE_AUTONOMOUS_LOOP=false) ===")
 
     def petla_aktywnosci(self):
         print("Bot: Bezpieczny sen startowy (10 sekund)...")
