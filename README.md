@@ -1,55 +1,62 @@
-# Iskra AI
+# Iskra AI — Unified Core
 
-Iskra AI is an experimental Polish-language assistant project. The commercial product direction is a private knowledge assistant for small businesses: answers grounded in company documents, draft replies and offers, and clear source references.
+Iskra AI is a Polish-language knowledge-system project. This integration keeps its original twelve foundational pillars, graph-based knowledge model and autonomous learning concept while separating the code into a maintainable modular Flask monolith.
 
-## Modular refactor
+## Production entry point
 
-The approved modular-monolith refactor is being developed on `refactor/modular-core` and reviewed in [draft pull request #4](https://github.com/tpudlowski1-lang/iskra_ai/pull/4). It keeps the existing Flask/Gunicorn entry point while extracting the knowledge graph, LLM router, API routes, runtime configuration, security headers, and autonomous worker into the `iskra/` package.
-
-The dashboard renders graph data using DOM `textContent`. The provider router rejects malformed/non-object JSON and continues to the next configured provider. The legacy JSON graph format remains in place until a separately tested database migration is approved.
-
-See [production readiness](docs/PRODUCTION_READINESS.md) and [data migration policy](docs/DATA_MIGRATION.md). This branch is not yet a production multi-tenant SaaS.
-
-## Current branch
-
-- `main`: original experimental knowledge-graph dashboard.
-- `commercial-mvp`: product plan, technical audit, configurable LLM provider router, and safer background-loop default.
-
-The `commercial-mvp` branch is work in progress and has not yet been verified in a live Render deployment.
-
-## Run locally
+Use the authenticated WSGI entry point:
 
 ```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-export LLM_PROVIDER=deepseek
-export DEEPSEEK_API_KEY="..."
-python app.py
+gunicorn wsgi:app --workers 1 --timeout 120
 ```
 
-The current application exposes:
-- `/` — knowledge graph dashboard
-- `/api/network` — current graph data
-- `/health` — health check
+- `/` — knowledge graph dashboard.
+- `/api/network` — current graph snapshot.
+- `/health` — public hosting health probe.
 
-## LLM configuration
+All routes except `/health` require `API_TOKEN`. Clients may send `Authorization: Bearer <API_TOKEN>` or `X-API-Token: <API_TOKEN>`. Browser Basic authentication is also supported; use the token as the password. If `API_TOKEN` is unset, non-health routes fail closed with HTTP 503. Do not expose `app:app` directly on a public network.
 
-Set keys only in the hosting provider's secret/environment settings. Never commit API keys.
+## Architecture
 
-- `LLM_PROVIDER`: primary provider: `openai`, `deepseek`, or `gemini`.
+- `iskra/knowledge/graph.py` — twelve-pillar graph, validation, JSON persistence and POSIX file locking.
+- `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini provider routing with JSON-object validation and fallback.
+- `iskra/api/routes.py` — injectable Flask API blueprint. API reads refresh the worker's graph snapshot from disk before responding.
+- `iskra/config.py` — validated runtime configuration.
+- `iskra/security/` and `security.py` — HTTP security headers and WSGI token authentication.
+- `iskra/workers/autonomous.py` — opt-in autonomous graph-learning loop.
+- `iskra/storage/sqlite.py` — isolated transactional SQLite adapter prototype; it is **not connected to the live graph path** and does not imply multi-tenant production support.
+- `app.py` — compatibility façade preserving the existing Flask import and Render/Gunicorn integration.
+
+## Data and deployment
+
+The live graph currently remains in JSON at `$DATA_DIR/wiedza.json`. Writes use an atomic replace and a POSIX file lock; API reads reload the persisted snapshot so separate Gunicorn workers on the same filesystem see one another's updates.
+
+This is suitable only for a single application instance using a shared local filesystem that supports POSIX locks. It is not a distributed multi-instance store. Render's ordinary container filesystem may be ephemeral; without a persistent disk, graph data can be lost on restart or redeploy. Back up `wiedza.json` before deployment changes. The SQLite adapter is a future migration option, not the current source of truth.
+
+## LLM providers
+
+Configure secrets in the hosting provider; never commit API keys.
+
+- `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
 - `LLM_FALLBACK_PROVIDERS`: comma-separated fallback order.
-- `OPENAI_API_KEY`, `OPENAI_MODEL` (default model: `gpt-4o-mini`).
-- `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default model: `deepseek-chat`).
+- `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-4o-mini`).
+- `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-chat`).
 - `GEMINI_API_KEY`, `GEMINI_MODEL` (both required to enable Gemini).
 
-The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOUS_LOOP=true` only for a controlled single-process experiment. Do not enable it with multiple Gunicorn workers: each worker would start its own loop.
+## Autonomous worker
 
-## Product and engineering documents
+The autonomous loop is disabled by default. It starts only when both `ENABLE_AUTONOMOUS_LOOP=true` and `ISKRA_PROCESS_ROLE=worker` are set. Never enable it in a Gunicorn web process. A dedicated managed worker service and singleton lease/lock are still required before enabling it in production; the current Render configuration intentionally leaves it disabled.
 
-- [Commercial MVP plan](docs/PRODUCT_PLAN.md)
-- [Technical audit](docs/TECHNICAL_AUDIT.md)
+## Development and tests
 
-## Important limitations
+```bash
+python -m pip install -r requirements.txt
+python -m compileall -q app.py iskra tests
+python -m unittest discover -s tests -p "test_*.py" -v
+```
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade persistence. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+GitHub Actions runs deterministic tests on Python 3.11 and 3.12 plus thread/process stress tests.
+
+## Not production-ready as a multi-tenant SaaS
+
+The project does not yet provide user accounts, tenant authorization, private document ingestion, tenant-filtered RAG, billing, PostgreSQL deployment or production observability. The SQLite prototype alone does not provide these controls. Do not upload confidential customer documents or expose this as a paid multi-tenant service until those capabilities are designed, implemented and tested.
