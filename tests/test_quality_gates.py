@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import sqlite3
 import unittest
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
@@ -24,6 +25,62 @@ class IskraPersistenceTests(unittest.TestCase):
         network = iskra.SiecNeuronowa()
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertTrue(os.path.isfile(iskra.PLIK_SIECI))
+
+    def test_fresh_store_creates_sqlite_database_and_legacy_mirror(self):
+        network = iskra.SiecNeuronowa()
+        db_path = os.path.join(iskra.DATA_DIR, "iskra.sqlite3")
+        self.assertTrue(os.path.isfile(db_path))
+        self.assertTrue(os.path.isfile(iskra.PLIK_SIECI))
+        with sqlite3.connect(db_path) as connection:
+            row = connection.execute(
+                "SELECT schema_version, payload FROM graph_state WHERE id=1"
+            ).fetchone()
+        self.assertEqual(row[0], 1)
+        self.assertEqual(len(json.loads(row[1])["neurons"]), 12)
+
+    def test_legacy_json_is_imported_into_sqlite(self):
+        with open(iskra.PLIK_SIECI, "w", encoding="utf-8") as handle:
+            json.dump({
+                "neurons": {
+                    "n_logika": {"label": "Logika", "weight": 1.0},
+                    "n_imported": {"label": "Zaimportowany węzeł", "weight": 0.8},
+                },
+                "synapses": [
+                    {"from": "n_logika", "to": "n_imported", "strength": 0.7}
+                ],
+            }, handle)
+        network = iskra.SiecNeuronowa()
+        self.assertIn("n_imported", network.dane["neurons"])
+        with sqlite3.connect(os.path.join(iskra.DATA_DIR, "iskra.sqlite3")) as connection:
+            payload = connection.execute(
+                "SELECT payload FROM graph_state WHERE id=1"
+            ).fetchone()[0]
+        self.assertIn("n_imported", json.loads(payload)["neurons"])
+
+    def test_sqlite_remains_authoritative_if_json_mirror_is_missing(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_sqlite_only": {"label": "Z SQLite", "weight": 0.9}},
+            "synapses": [],
+        })
+        os.unlink(iskra.PLIK_SIECI)
+        restored = iskra.SiecNeuronowa()
+        self.assertIn("n_sqlite_only", restored.dane["neurons"])
+        self.assertTrue(os.path.isfile(iskra.PLIK_SIECI))
+
+    def test_corrupt_sqlite_recovers_from_json_mirror(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_recovery": {"label": "Odzyskany", "weight": 0.8}},
+            "synapses": [],
+        })
+        db_path = os.path.join(iskra.DATA_DIR, "iskra.sqlite3")
+        with open(db_path, "wb") as handle:
+            handle.write(b"not a sqlite database")
+        restored = iskra.SiecNeuronowa()
+        self.assertIn("n_recovery", restored.dane["neurons"])
+        self.assertTrue(os.path.isfile(db_path))
+        self.assertTrue(any(".corrupt-" in name for name in os.listdir(iskra.DATA_DIR)))
 
     def test_partial_legacy_graph_restores_all_twelve_pillars(self):
         with open(iskra.PLIK_SIECI, "w", encoding="utf-8") as handle:
