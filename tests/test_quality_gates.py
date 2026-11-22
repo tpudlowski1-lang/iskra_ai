@@ -35,6 +35,22 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertGreaterEqual(len(network.dane["synapses"]), 10)
 
+    def test_stale_compatibility_save_does_not_overwrite_newer_process_data(self):
+        network = iskra.SiecNeuronowa()
+        stale = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_newer": {"label": "Nowszy zapis", "weight": 0.9}},
+            "synapses": [{"from": "n_logika", "to": "n_newer", "strength": 0.8}],
+        })
+        stale.dane["neurons"]["n_local"] = {
+            "label": "Lokalny dodatek", "weight": 0.7, "created": 1
+        }
+        stale.zapisz()
+        restored = iskra.SiecNeuronowa()
+        self.assertIn("n_newer", restored.dane["neurons"])
+        self.assertIn("n_local", restored.dane["neurons"])
+        self.assertTrue(any(edge["to"] == "n_newer" for edge in restored.dane["synapses"]))
+
     def test_graph_survives_save_and_reload(self):
         network = iskra.SiecNeuronowa()
         network.aktualizuj_siec({
@@ -52,6 +68,19 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertIn("n_logika", network.dane["neurons"])
 
+    def test_partial_neuron_update_preserves_existing_weight(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_logika": {"label": "Logika", "weight": 0.95}},
+            "synapses": [],
+        })
+        expected = network.dane["neurons"]["n_logika"]["weight"]
+        network.aktualizuj_siec({
+            "neurons": {"n_logika": {"label": "Logika — aktualizacja częściowa"}},
+            "synapses": [],
+        })
+        self.assertEqual(network.dane["neurons"]["n_logika"]["weight"], expected)
+
     def test_weights_are_clamped_to_unit_interval(self):
         network = iskra.SiecNeuronowa()
         network.aktualizuj_siec({
@@ -60,6 +89,19 @@ class IskraPersistenceTests(unittest.TestCase):
         })
         self.assertEqual(network.dane["neurons"]["n_low"]["weight"], 0.0)
         self.assertEqual(network.dane["synapses"][-1]["strength"], 1.0)
+
+    def test_malformed_synapse_endpoints_are_ignored_without_corrupting_graph(self):
+        network = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {},
+            "synapses": [
+                {"from": ["not", "hashable"], "to": "n_logika", "strength": 0.5},
+                {"from": "n_logika", "to": {"bad": "target"}, "strength": 0.5},
+            ],
+        })
+        restored = iskra.SiecNeuronowa()
+        self.assertEqual(len(restored.dane["neurons"]), 12)
+        self.assertEqual(len(restored.dane["synapses"]), 10)
 
     def test_synapses_with_unknown_endpoints_are_ignored(self):
         network = iskra.SiecNeuronowa()
