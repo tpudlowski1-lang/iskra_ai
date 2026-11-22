@@ -35,6 +35,22 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertGreaterEqual(len(network.dane["synapses"]), 10)
 
+    def test_stale_compatibility_save_does_not_overwrite_newer_process_data(self):
+        network = iskra.SiecNeuronowa()
+        stale = iskra.SiecNeuronowa()
+        network.aktualizuj_siec({
+            "neurons": {"n_newer": {"label": "Nowszy zapis", "weight": 0.9}},
+            "synapses": [{"from": "n_logika", "to": "n_newer", "strength": 0.8}],
+        })
+        stale.dane["neurons"]["n_local"] = {
+            "label": "Lokalny dodatek", "weight": 0.7, "created": 1
+        }
+        stale.zapisz()
+        restored = iskra.SiecNeuronowa()
+        self.assertIn("n_newer", restored.dane["neurons"])
+        self.assertIn("n_local", restored.dane["neurons"])
+        self.assertTrue(any(edge["to"] == "n_newer" for edge in restored.dane["synapses"]))
+
     def test_graph_survives_save_and_reload(self):
         network = iskra.SiecNeuronowa()
         network.aktualizuj_siec({
