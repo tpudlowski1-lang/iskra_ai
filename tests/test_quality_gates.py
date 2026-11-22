@@ -25,6 +25,16 @@ class IskraPersistenceTests(unittest.TestCase):
         self.assertEqual(len(network.dane["neurons"]), 12)
         self.assertTrue(os.path.isfile(iskra.PLIK_SIECI))
 
+    def test_partial_legacy_graph_restores_all_twelve_pillars(self):
+        with open(iskra.PLIK_SIECI, "w", encoding="utf-8") as handle:
+            json.dump({
+                "neurons": {"n_logika": {"label": "Logika", "weight": 1.0}},
+                "synapses": [],
+            }, handle)
+        network = iskra.SiecNeuronowa()
+        self.assertEqual(len(network.dane["neurons"]), 12)
+        self.assertGreaterEqual(len(network.dane["synapses"]), 10)
+
     def test_graph_survives_save_and_reload(self):
         network = iskra.SiecNeuronowa()
         network.aktualizuj_siec({
