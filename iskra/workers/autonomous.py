@@ -15,12 +15,15 @@ class IskraAutonomiczna:
         # Gunicorn uruchamia wiele workerów. Pętla w tle przy imporcie modułu
         # mnożyłaby procesy i koszty; włączamy ją wyłącznie świadomą zmienną ENV.
         enabled = os.environ.get("ENABLE_AUTONOMOUS_LOOP", "false").strip().lower() in ("1", "true", "yes", "on")
-        if enabled:
+        process_role = os.environ.get("ISKRA_PROCESS_ROLE", "web").strip().lower()
+        # Never launch background work from a WSGI/Gunicorn web worker. A
+        # dedicated process must opt in with ISKRA_PROCESS_ROLE=worker.
+        if enabled and process_role == "worker":
             self.thread = threading.Thread(target=self.petla_aktywnosci, daemon=True)
             self.thread.start()
             print("=== AUTONOMICZNA ISKRA: PĘTLA WŁĄCZONA ===")
         else:
-            print("=== ISKRA: Pętla autonomiczna wyłączona (ENABLE_AUTONOMOUS_LOOP=false) ===")
+            print("=== ISKRA: Pętla autonomiczna wyłączona (wymaga ENABLE_AUTONOMOUS_LOOP=true i ISKRA_PROCESS_ROLE=worker) ===")
 
     def petla_aktywnosci(self):
         print("Bot: Bezpieczny sen startowy (10 sekund)...")
