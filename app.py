@@ -149,6 +149,15 @@ class SiecNeuronowa:
                         "from": source, "to": target,
                         "strength": self._bounded_number(edge.get("strength", 0.5)),
                     })
+            # Keep the original twelve pillars and their foundational links even
+            # when an older or manually edited snapshot is incomplete.
+            for node_id, node in self.fundament["neurons"].items():
+                valid_neurons.setdefault(node_id, dict(node))
+            existing_edges = {(edge["from"], edge["to"]) for edge in valid_synapses}
+            for edge in self.fundament["synapses"]:
+                key = (edge["from"], edge["to"])
+                if key not in existing_edges:
+                    valid_synapses.append(dict(edge))
             self.dane = {"neurons": valid_neurons, "synapses": valid_synapses}
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             # Preserve a damaged file for diagnosis instead of silently destroying it.
