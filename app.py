@@ -11,7 +11,7 @@ import requests
 import re
 import math
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 try:
     import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
 except ImportError:  # pragma: no cover - non-POSIX development environments
@@ -101,7 +101,7 @@ class SiecNeuronowa:
         """SQLite is the durable source of truth; one row stores a versioned graph snapshot."""
         os.makedirs(DATA_DIR, exist_ok=True)
         payload = json.dumps(self.dane, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-        with sqlite3.connect(self._sqlite_path(), timeout=30) as connection:
+        with closing(sqlite3.connect(self._sqlite_path(), timeout=30)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("PRAGMA busy_timeout=30000")
@@ -128,7 +128,7 @@ class SiecNeuronowa:
         path = self._sqlite_path()
         if not os.path.exists(path):
             return None
-        with sqlite3.connect(path, timeout=30) as connection:
+        with closing(sqlite3.connect(path, timeout=30)) as connection:
             connection.execute("PRAGMA busy_timeout=30000")
             table = connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='graph_state'"
