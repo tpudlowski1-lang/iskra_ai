@@ -144,7 +144,8 @@ class SiecNeuronowa:
                 if not isinstance(edge, dict):
                     continue
                 source, target = edge.get("from"), edge.get("to")
-                if source in valid_neurons and target in valid_neurons:
+                if (isinstance(source, str) and isinstance(target, str)
+                        and source in valid_neurons and target in valid_neurons):
                     valid_synapses.append({
                         "from": source, "to": target,
                         "strength": self._bounded_number(edge.get("strength", 0.5)),
@@ -240,7 +241,9 @@ class SiecNeuronowa:
                     if not isinstance(edge, dict):
                         continue
                     source, target = edge.get("from"), edge.get("to")
-                    if source not in self.dane["neurons"] or target not in self.dane["neurons"]:
+                    if (not isinstance(source, str) or not isinstance(target, str)
+                            or source not in self.dane["neurons"]
+                            or target not in self.dane["neurons"]):
                         continue
                     strength = self._bounded_number(edge.get("strength", 0.5))
                     key = (source, target)
