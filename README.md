@@ -1,41 +1,49 @@
 # Iskra AI — Unified Core
 
-Iskra AI is a Polish-language knowledge-system project. This integration keeps its original twelve foundational pillars, graph-based knowledge model and autonomous learning concept while separating the code into a maintainable modular Flask monolith.
+Iskra AI is an experimental Polish-language knowledge-system project. The canonical integration is a modular Flask monolith that preserves the original twelve foundational pillars, graph-based knowledge model, provider fallback behavior and existing HTTP contracts.
 
-## Production entry point
+## Current development program
 
-Use the authenticated WSGI entry point:
+All restructuring streams are coordinated in one source of truth:
 
-```bash
-gunicorn wsgi:app --workers 1 --timeout 120
-```
+- [Unified restructuring program](docs/UNIFIED_RESTRUCTURING_PROGRAM.md)
+- [Modular core design](docs/superpowers/specs/2026-11-23-modular-core-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-11-23-modular-core.md)
+- [Production readiness checklist](docs/PRODUCTION_READINESS.md)
+- [Data migration policy](docs/DATA_MIGRATION.md)
 
+The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; their code is ported selectively after review, not merged wholesale.
+
+## Application entry points and current security status
+
+- `app.py` — compatibility entry point for Flask and existing imports.
+- `wsgi.py` — WSGI compatibility import; it does **not** add authentication.
 - `/` — knowledge graph dashboard.
-- `/api/network` — current graph snapshot.
-- `/health` — public hosting health probe.
+- `/api/network` — graph snapshot.
+- `/health` — health probe.
 
-All routes except `/health` require `API_TOKEN`. Clients may send `Authorization: Bearer <API_TOKEN>` or `X-API-Token: <API_TOKEN>`. Browser Basic authentication is also supported; use the token as the password. If `API_TOKEN` is unset, non-health routes fail closed with HTTP 503. Do not expose `app:app` directly on a public network.
+The application currently has baseline HTTP security headers, but **does not yet implement application authentication, user accounts, tenant authorization or access control**. The dashboard and API must therefore be treated as non-private development surfaces. Do not expose confidential data or use this as a customer-facing SaaS. The previous WSGI middleware reference was invalid because its required root-level `security.py` module is not part of this canonical branch; the entry point has been corrected so it imports cleanly without pretending to secure requests.
 
 ## Architecture
 
-- `iskra/knowledge/graph.py` — twelve-pillar graph, validation, JSON persistence and POSIX file locking.
-- `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini provider routing with JSON-object validation and fallback.
-- `iskra/api/routes.py` — injectable Flask API blueprint. API reads refresh the worker's graph snapshot from disk before responding.
 - `iskra/config.py` — validated runtime configuration.
-- `iskra/security/` and `security.py` — HTTP security headers and WSGI token authentication.
+- `iskra/knowledge/graph.py` — graph model, twelve foundational pillars and JSON persistence.
+- `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini provider routing with JSON-object validation and fallback.
+- `iskra/api/routes.py` — injectable Flask API blueprint.
+- `iskra/security/headers.py` — baseline response security headers only.
 - `iskra/workers/autonomous.py` — opt-in autonomous graph-learning loop.
-- `iskra/storage/sqlite.py` — isolated transactional SQLite adapter prototype; it is **not connected to the live graph path** and does not imply multi-tenant production support.
-- `app.py` — compatibility façade preserving the existing Flask import and Render/Gunicorn integration.
+- `iskra/storage/protocols.py` — storage interface.
+- `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite adapter prototype; it is **not connected to the live Flask graph path** and is not production tenant isolation.
 
 ## Data and deployment
 
-The live graph currently remains in JSON at `$DATA_DIR/wiedza.json`. Writes use an atomic replace and a POSIX file lock; API reads reload the persisted snapshot so separate Gunicorn workers on the same filesystem see one another's updates.
+The live graph currently remains in JSON at `$DATA_DIR/wiedza.json`. Writes use atomic replacement and a POSIX file lock. API reads refresh the worker's graph snapshot from disk so workers sharing the same filesystem can see updates.
 
-This is suitable only for a single application instance using a shared local filesystem that supports POSIX locks. It is not a distributed multi-instance store. Render's ordinary container filesystem may be ephemeral; without a persistent disk, graph data can be lost on restart or redeploy. Back up `wiedza.json` before deployment changes. The SQLite adapter is a future migration option, not the current source of truth.
+This is not a distributed multi-instance store. Hosting filesystems may be ephemeral; without persistent storage, data can be lost on restart or redeploy. Back up `wiedza.json` before deployment changes. PostgreSQL is the target for concurrent, multi-tenant production use; it has not yet been implemented.
 
 ## LLM providers
 
-Configure secrets in the hosting provider; never commit API keys.
+Configure credentials only in hosting secrets/environment settings; never commit API keys.
 
 - `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
 - `LLM_FALLBACK_PROVIDERS`: comma-separated fallback order.
@@ -43,9 +51,9 @@ Configure secrets in the hosting provider; never commit API keys.
 - `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-chat`).
 - `GEMINI_API_KEY`, `GEMINI_MODEL` (both required to enable Gemini).
 
-## Autonomous worker
+## Autonomous work
 
-The autonomous loop is disabled by default. It starts only when both `ENABLE_AUTONOMOUS_LOOP=true` and `ISKRA_PROCESS_ROLE=worker` are set. Never enable it in a Gunicorn web process. A dedicated managed worker service and singleton lease/lock are still required before enabling it in production; the current Render configuration intentionally leaves it disabled.
+The autonomous loop is disabled by default. Do not enable it in a Gunicorn web process: each worker could start its own loop. A dedicated worker, singleton lease, idempotency and safe shutdown are still required before production use.
 
 ## Development and tests
 
@@ -55,8 +63,8 @@ python -m compileall -q app.py iskra tests
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-GitHub Actions runs deterministic tests on Python 3.11 and 3.12 plus thread/process stress tests.
+GitHub Actions runs deterministic tests on Python 3.11 and 3.12 and a concurrency stress suite.
 
 ## Not production-ready as a multi-tenant SaaS
 
-The project does not yet provide user accounts, tenant authorization, private document ingestion, tenant-filtered RAG, billing, PostgreSQL deployment or production observability. The SQLite prototype alone does not provide these controls. Do not upload confidential customer documents or expose this as a paid multi-tenant service until those capabilities are designed, implemented and tested.
+The project does not yet provide application authentication, named user accounts, tenant authorization, private document ingestion, tenant-filtered RAG, billing, PostgreSQL deployment or production observability. The SQLite adapter alone does not provide these controls. Do not upload confidential customer documents or expose this as a paid multi-tenant service until the required controls are implemented and tested.
