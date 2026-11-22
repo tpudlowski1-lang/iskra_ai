@@ -1,6 +1,6 @@
 """LLM provider routing with configurable primary and fallback order."""
+import json
 import os
-import re
 import time
 import requests
 
@@ -21,10 +21,20 @@ class RouterProvider:
         }
 
     def clean_json(self, text):
-        if not text:
+        """Extract the first complete JSON object; reject arrays and malformed text."""
+        if not isinstance(text, str) or not text.strip():
             return None
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        return match.group(0) if match else text
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(text[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                return json.dumps(value, ensure_ascii=False)
+        return None
 
     def _chat_completion(self, provider, prompt):
         configs = {
@@ -114,8 +124,12 @@ class RouterProvider:
                 print(f"LLM: nieznany provider '{name}' — pomijam.")
                 continue
             result = provider(prompt)
-            if result:
-                print(f"LLM: odpowiedź uzyskana przez {name}.")
-                return self.clean_json(result)
+            cleaned = self.clean_json(result)
+            if cleaned is None:
+                if result:
+                    print(f"LLM {name}: odpowiedź nie zawiera poprawnego obiektu JSON — pomijam.")
+                continue
+            print(f"LLM: odpowiedź uzyskana przez {name}.")
+            return cleaned
         print("LLM: wszystkie skonfigurowane providery zawiodły.")
         return None
