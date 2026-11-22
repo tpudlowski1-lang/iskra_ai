@@ -1,3 +1,5 @@
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,6 +55,11 @@ class SQLiteGraphStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.save(invalid)
         self.assertEqual(store.load(), original)
+
+    def test_database_file_permissions_are_private(self):
+        SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
+        mode = stat.S_IMODE(os.stat(self.db_path).st_mode)
+        self.assertEqual(mode & 0o077, 0)
 
     def test_empty_tenant_id_is_rejected(self):
         with self.assertRaises(ValueError):
