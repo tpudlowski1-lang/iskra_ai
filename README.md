@@ -2,6 +2,14 @@
 
 Iskra AI is an experimental Polish-language assistant project. The commercial product direction is a private knowledge assistant for small businesses: answers grounded in company documents, draft replies and offers, and clear source references.
 
+## Modular refactor
+
+The approved modular-monolith refactor is being developed on `refactor/modular-core` and reviewed in [draft pull request #4](https://github.com/tpudlowski1-lang/iskra_ai/pull/4). It keeps the existing Flask/Gunicorn entry point while extracting the knowledge graph, LLM router, API routes, runtime configuration, security headers, and autonomous worker into the `iskra/` package.
+
+The dashboard renders graph data using DOM `textContent`. The provider router rejects malformed/non-object JSON and continues to the next configured provider. The legacy JSON graph format remains in place until a separately tested database migration is approved.
+
+See [production readiness](docs/PRODUCTION_READINESS.md) and [data migration policy](docs/DATA_MIGRATION.md). This branch is not yet a production multi-tenant SaaS.
+
 ## Current branch
 
 - `main`: original experimental knowledge-graph dashboard.
