@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import time
 import uuid
+import threading
 import zipfile
 from contextlib import closing
 from xml.etree import ElementTree
@@ -21,6 +22,8 @@ MAX_EXTRACTED_CHARS = 1_500_000
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
 ALLOWED_EXTENSIONS = {".txt", ".pdf", ".docx"}
+_INITIALIZED_PATHS = set()
+_INIT_LOCK = threading.Lock()
 
 
 def _connect(db_path):
@@ -33,45 +36,52 @@ def _connect(db_path):
 
 
 def initialize(db_path):
-    with closing(_connect(db_path)) as connection:
+    normalized_path = os.path.abspath(db_path)
+    if normalized_path in _INITIALIZED_PATHS:
+        return
+    with _INIT_LOCK:
+        if normalized_path in _INITIALIZED_PATHS:
+            return
+        with closing(_connect(normalized_path)) as connection:
         connection.execute("""
-            CREATE TABLE IF NOT EXISTS tenants (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                api_key_hash TEXT NOT NULL UNIQUE,
-                created_at REAL NOT NULL
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS documents (
-                id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-                filename TEXT NOT NULL,
-                extension TEXT NOT NULL,
-                sha256 TEXT NOT NULL,
-                created_at REAL NOT NULL,
-                UNIQUE(tenant_id, sha256)
-            )
-        """)
-        connection.execute("""
-            CREATE TABLE IF NOT EXISTS document_chunks (
-                id TEXT PRIMARY KEY,
-                tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-                document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-                chunk_index INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                UNIQUE(document_id, chunk_index)
-            )
-        """)
-        connection.execute("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts
-            USING fts5(chunk_id UNINDEXED, tenant_id UNINDEXED,
-                       document_id UNINDEXED, filename UNINDEXED,
-                       content, tokenize='unicode61')
-        """)
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id)")
-        connection.execute("CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON document_chunks(tenant_id)")
-        connection.commit()
+                CREATE TABLE IF NOT EXISTS tenants (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    api_key_hash TEXT NOT NULL UNIQUE,
+                    created_at REAL NOT NULL
+                )
+            """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS documents (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    filename TEXT NOT NULL,
+                    extension TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    UNIQUE(tenant_id, sha256)
+                )
+            """)
+            connection.execute("""
+                CREATE TABLE IF NOT EXISTS document_chunks (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+                    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                    chunk_index INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    UNIQUE(document_id, chunk_index)
+                )
+            """)
+            connection.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts
+                USING fts5(chunk_id UNINDEXED, tenant_id UNINDEXED,
+                           document_id UNINDEXED, filename UNINDEXED,
+                           content, tokenize='unicode61')
+            """)
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON document_chunks(tenant_id)")
+            connection.commit()
+            _INITIALIZED_PATHS.add(normalized_path)
 
 
 def _key_hash(api_key):
@@ -262,5 +272,39 @@ def delete_document(db_path, tenant_id, document_id):
                            (document_id, tenant_id))
         connection.execute("DELETE FROM documents WHERE id=? AND tenant_id=?",
                            (document_id, tenant_id))
+        connection.commit()
+    return True
+
+
+def list_tenants(db_path):
+    initialize(db_path)
+    with closing(_connect(db_path)) as connection:
+        rows = connection.execute(
+            "SELECT id, name, created_at FROM tenants ORDER BY created_at DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def rotate_tenant_key(db_path, tenant_id):
+    initialize(db_path)
+    api_key = "isk_" + secrets.token_urlsafe(36)
+    with closing(_connect(db_path)) as connection:
+        cursor = connection.execute(
+            "UPDATE tenants SET api_key_hash=? WHERE id=?",
+            (_key_hash(api_key), tenant_id),
+        )
+        connection.commit()
+    return api_key if cursor.rowcount else None
+
+
+def delete_tenant(db_path, tenant_id):
+    initialize(db_path)
+    with closing(_connect(db_path)) as connection:
+        exists = connection.execute("SELECT 1 FROM tenants WHERE id=?", (tenant_id,)).fetchone()
+        if not exists:
+            return False
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("DELETE FROM document_chunks_fts WHERE tenant_id=?", (tenant_id,))
+        connection.execute("DELETE FROM tenants WHERE id=?", (tenant_id,))
         connection.commit()
     return True

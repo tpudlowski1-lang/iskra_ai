@@ -632,16 +632,38 @@ def upload_too_large(_error):
     return jsonify({"error": "file_too_large", "message": "Maksymalny rozmiar pliku to 8 MB."}), 413
 
 
-@app.route("/admin/tenants", methods=["POST"])
-def create_tenant():
+@app.route("/admin/tenants", methods=["GET", "POST"])
+def admin_tenants():
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
+    db_path = SiecNeuronowa._sqlite_path()
+    if request.method == "GET":
+        return jsonify({"tenants": knowledge.list_tenants(db_path)})
     payload = request.get_json(silent=True) or {}
     try:
-        tenant = knowledge.create_tenant(SiecNeuronowa._sqlite_path(), payload.get("name"))
+        tenant = knowledge.create_tenant(db_path, payload.get("name"))
     except ValueError as exc:
         return jsonify({"error": "invalid_tenant", "message": str(exc)}), 400
     return jsonify(tenant), 201
+
+
+@app.route("/admin/tenants/<tenant_id>/rotate-key", methods=["POST"])
+def admin_rotate_tenant_key(tenant_id):
+    if request.environ.get("iskra.auth_role") != "admin":
+        return jsonify({"error": "admin_required"}), 403
+    key = knowledge.rotate_tenant_key(SiecNeuronowa._sqlite_path(), tenant_id)
+    if not key:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"tenant_id": tenant_id, "api_key": key})
+
+
+@app.route("/admin/tenants/<tenant_id>", methods=["DELETE"])
+def admin_delete_tenant(tenant_id):
+    if request.environ.get("iskra.auth_role") != "admin":
+        return jsonify({"error": "admin_required"}), 403
+    if not knowledge.delete_tenant(SiecNeuronowa._sqlite_path(), tenant_id):
+        return jsonify({"error": "not_found"}), 404
+    return jsonify({"deleted": True})
 
 
 @app.route("/api/documents", methods=["GET", "POST"])
