@@ -218,8 +218,8 @@ class SiecNeuronowa:
                         continue
                     if not isinstance(node, dict):
                         continue
-                    incoming_weight = self._bounded_number(node.get("weight", 0.5))
                     if node_id not in self.dane["neurons"]:
+                        incoming_weight = self._bounded_number(node.get("weight", 0.5))
                         self.dane["neurons"][node_id] = {
                             "label": str(node.get("label", "Nieznany"))[:500],
                             "weight": incoming_weight,
@@ -228,6 +228,11 @@ class SiecNeuronowa:
                     else:
                         old_weight = self._bounded_number(
                             self.dane["neurons"][node_id].get("weight", 0.5)
+                        )
+                        # A partial update that omits weight must not drift the
+                        # persisted value toward an artificial default of 0.5.
+                        incoming_weight = self._bounded_number(
+                            node.get("weight", old_weight), default=old_weight
                         )
                         self.dane["neurons"][node_id]["weight"] = (
                             old_weight * 0.7 + incoming_weight * 0.3
