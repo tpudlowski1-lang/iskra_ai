@@ -30,6 +30,21 @@ REQUEST_RETRIES = 2
 
 app = Flask(__name__)
 
+@app.after_request
+def add_security_headers(response):
+    """Set conservative browser security defaults for the dashboard and API."""
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; "
+        "frame-ancestors 'none'",
+    )
+    return response
+
 # =========================
 # SIECIOWA PAMIĘĆ GRAFOWA
 # =========================
@@ -473,23 +488,38 @@ DASHBOARD_HTML = """
                 document.getElementById('count-s').textContent = d.synapses.length;
                 
                 const nList = document.getElementById('neurons-list');
-                nList.innerHTML = '';
-                const escapeHtml = (value) => String(value).replace(/[&<>"']/g, ch => ({
-                    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-                }[ch]));
-                Object.entries(d.neurons).forEach(([id, n]) => {
-                    const weight = Number(n.weight);
-                    nList.innerHTML += `<li><span>${escapeHtml(n.label)}</span><span class="badge">Waga: ${Number.isFinite(weight) ? weight.toFixed(2) : '—'}</span></li>`;
+                nList.replaceChildren();
+                Object.entries(d.neurons || {}).forEach(([id, neuron]) => {
+                    const item = document.createElement('li');
+                    const label = document.createElement('span');
+                    label.textContent = String(neuron.label ?? id);
+                    const badge = document.createElement('span');
+                    badge.className = 'badge';
+                    const weight = Number(neuron.weight);
+                    badge.textContent = `Waga: ${Number.isFinite(weight) ? weight.toFixed(2) : '—'}`;
+                    item.append(label, badge);
+                    nList.append(item);
                 });
 
                 const sList = document.getElementById('synapses-list');
-                sList.innerHTML = '';
-                d.synapses.sort((a,b) => b.strength - a.strength).slice(0, 25).forEach(s => {
-                    const od = escapeHtml(d.neurons[s.from]?.label || s.from);
-                    const do_ = escapeHtml(d.neurons[s.to]?.label || s.to);
-                    const strength = Number(s.strength);
-                    sList.innerHTML += `<li><span>${od} → ${do_}</span><span class="badge" style="background:#0284c7">Moc: ${Number.isFinite(strength) ? strength.toFixed(2) : '—'}</span></li>`;
-                });
+                sList.replaceChildren();
+                [...(Array.isArray(d.synapses) ? d.synapses : [])]
+                    .sort((a, b) => Number(b.strength) - Number(a.strength))
+                    .slice(0, 25)
+                    .forEach(synapse => {
+                        const item = document.createElement('li');
+                        const relation = document.createElement('span');
+                        const source = d.neurons?.[synapse.from]?.label ?? synapse.from;
+                        const target = d.neurons?.[synapse.to]?.label ?? synapse.to;
+                        relation.textContent = `${source} → ${target}`;
+                        const badge = document.createElement('span');
+                        badge.className = 'badge';
+                        badge.style.backgroundColor = '#0284c7';
+                        const strength = Number(synapse.strength);
+                        badge.textContent = `Moc: ${Number.isFinite(strength) ? strength.toFixed(2) : '—'}`;
+                        item.append(relation, badge);
+                        sList.append(item);
+                    });
             } catch(e) {}
         }
         // Odświeżanie raz na 15 sekund, żeby darmowy serwer działał stabilnie
