@@ -7,6 +7,7 @@ import math
 import os
 import sqlite3
 import time
+from contextlib import contextmanager
 
 
 class SQLiteGraphStore:
@@ -19,12 +20,21 @@ class SQLiteGraphStore:
             raise ValueError("tenant_id jest zbyt długi")
         if not isinstance(database_path, str) or not database_path:
             raise ValueError("database_path musi być niepustą ścieżką")
-        self.database_path = database_path
+        if database_path == ":memory:":
+            raise ValueError("SQLiteGraphStore wymaga trwałej ścieżki pliku")
+        self.database_path = os.path.abspath(database_path)
         self.tenant_id = tenant_id.strip()
-        if database_path != ":memory:":
-            parent = os.path.dirname(os.path.abspath(database_path))
-            os.makedirs(parent, exist_ok=True)
+        parent = os.path.dirname(self.database_path)
+        os.makedirs(parent, exist_ok=True)
         self._initialize()
+
+    @contextmanager
+    def _connection(self):
+        connection = self._connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
 
     def _connect(self):
         connection = sqlite3.connect(self.database_path, timeout=10)
@@ -34,7 +44,7 @@ class SQLiteGraphStore:
         return connection
 
     def _initialize(self):
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS graph_neurons (
@@ -120,7 +130,7 @@ class SQLiteGraphStore:
         return {"neurons": clean_neurons, "synapses": clean_synapses}
 
     def load(self):
-        with self._connect() as connection:
+        with self._connection() as connection:
             neurons = connection.execute(
                 """
                 SELECT node_id, label, weight, created
@@ -153,7 +163,7 @@ class SQLiteGraphStore:
 
     def save(self, graph):
         clean = self._validate_graph(graph)
-        with self._connect() as connection:
+        with self._connection() as connection:
             with connection:
                 connection.execute(
                     "DELETE FROM graph_synapses WHERE tenant_id = ?", (self.tenant_id,)
