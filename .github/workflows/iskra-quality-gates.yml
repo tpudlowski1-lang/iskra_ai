@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [commercial-mvp]
   push:
-    branches: [iskra-full-quality-gates, iskra-unified-core, iskra-sqlite-migration, iskra-api-security]
+    branches: [iskra-full-quality-gates, iskra-unified-core, iskra-sqlite-migration, iskra-api-security, iskra-tenant-rag]
   workflow_dispatch:
 
 permissions:
@@ -34,6 +34,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Compile Python sources
-        run: python -m compileall -q app.py tests
+        run: python -m compileall -q app.py knowledge.py security.py tests
       - name: Run deterministic tests
         run: python -m unittest discover -s tests -p "test_*.py" -v

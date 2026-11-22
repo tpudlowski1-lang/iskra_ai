@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [commercial-mvp]
   push:
-    branches: [iskra-multithread-stress]
+    branches: [iskra-multithread-stress, iskra-tenant-rag]
   workflow_dispatch:
 
 permissions:
