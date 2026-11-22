@@ -27,6 +27,8 @@ class SQLiteGraphStore:
         parent = os.path.dirname(self.database_path)
         os.makedirs(parent, exist_ok=True)
         self._initialize()
+        # Graph contents may be confidential; keep the local database private.
+        os.chmod(self.database_path, 0o600)
 
     @contextmanager
     def _connection(self):
