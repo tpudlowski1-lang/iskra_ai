@@ -61,6 +61,11 @@ class SQLiteGraphStoreTests(unittest.TestCase):
         mode = stat.S_IMODE(os.stat(self.db_path).st_mode)
         self.assertEqual(mode & 0o077, 0)
 
+    def test_tenant_scope_cannot_be_reassigned(self):
+        store = SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
+        with self.assertRaises(AttributeError):
+            store.tenant_id = "tenant-b"
+
     def test_empty_tenant_id_is_rejected(self):
         with self.assertRaises(ValueError):
             SQLiteGraphStore(self.db_path, tenant_id=" ")
