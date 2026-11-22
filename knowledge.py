@@ -22,7 +22,7 @@ MAX_EXTRACTED_CHARS = 1_500_000
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
 ALLOWED_EXTENSIONS = {".txt", ".pdf", ".docx"}
-_INITIALIZED_PATHS = set()
+_INITIALIZED_PATHS = {}
 _INIT_LOCK = threading.Lock()
 
 
@@ -37,10 +37,18 @@ def _connect(db_path):
 
 def initialize(db_path):
     normalized_path = os.path.abspath(db_path)
-    if normalized_path in _INITIALIZED_PATHS:
+    try:
+        current_inode = os.stat(normalized_path).st_ino
+    except OSError:
+        current_inode = None
+    if current_inode is not None and _INITIALIZED_PATHS.get(normalized_path) == current_inode:
         return
     with _INIT_LOCK:
-        if normalized_path in _INITIALIZED_PATHS:
+        try:
+            current_inode = os.stat(normalized_path).st_ino
+        except OSError:
+            current_inode = None
+        if current_inode is not None and _INITIALIZED_PATHS.get(normalized_path) == current_inode:
             return
         with closing(_connect(normalized_path)) as connection:
             connection.execute("""
@@ -81,7 +89,7 @@ def initialize(db_path):
             connection.execute("CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON document_chunks(tenant_id)")
             connection.commit()
-            _INITIALIZED_PATHS.add(normalized_path)
+            _INITIALIZED_PATHS[normalized_path] = os.stat(normalized_path).st_ino
 
 
 def _key_hash(api_key):

@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 
@@ -178,3 +179,21 @@ class TenantApiIntegrationTests(unittest.TestCase):
             "/api/documents/" + upload.get_json()["document_id"],
             headers={"X-Iskra-Tenant-Key": key_b}
         ).status_code, 404)
+
+
+class TenantSchemaRecoveryTests(unittest.TestCase):
+    def test_schema_is_recreated_when_sqlite_file_is_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, "iskra.sqlite3")
+            tenant = knowledge.create_tenant(db_path, "Firma przed awarią")
+            backup = db_path + ".backup"
+            os.replace(db_path, backup)
+            with sqlite3.connect(db_path):
+                pass
+            knowledge.initialize(db_path)
+            with sqlite3.connect(db_path) as connection:
+                tables = {row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )}
+            self.assertIn("tenants", tables)
+            self.assertIsNone(knowledge.authenticate_tenant_key(db_path, tenant["api_key"]))
