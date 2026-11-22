@@ -1,4 +1,5 @@
 """Fail-closed WSGI authentication for Iskra administrator and tenant API keys."""
+import base64
 import hmac
 import json
 import os
@@ -35,7 +36,18 @@ class ApiTokenMiddleware:
 
         authorization = environ.get("HTTP_AUTHORIZATION", "")
         scheme, separator, credentials = authorization.partition(" ")
-        admin_token = credentials.strip() if separator and scheme.lower() == "bearer" else ""
+        admin_token = ""
+        if separator and scheme.lower() == "bearer":
+            admin_token = credentials.strip()
+        elif separator and scheme.lower() == "basic":
+            try:
+                decoded = base64.b64decode(credentials.strip(), validate=True).decode("utf-8")
+                _username, colon, password = decoded.partition(":")
+                admin_token = password if colon else ""
+            except (ValueError, UnicodeDecodeError):
+                admin_token = ""
+        if not admin_token:
+            admin_token = environ.get("HTTP_X_API_TOKEN", "")
         if self.token and admin_token and hmac.compare_digest(admin_token, self.token):
             environ["iskra.auth_role"] = "admin"
             return self.application(environ, start_response)
