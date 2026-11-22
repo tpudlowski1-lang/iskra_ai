@@ -1,4 +1,4 @@
-"""Persistent knowledge graph domain model (legacy JSON-compatible implementation)."""
+"""Persistent knowledge graph domain model (latest unified-core implementation)."""
 import json
 import math
 import os
@@ -7,13 +7,13 @@ import threading
 import time
 from contextlib import contextmanager
 
-DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
-
 try:
     import fcntl
 except ImportError:  # pragma: no cover
     fcntl = None
+
+DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 class SiecNeuronowa:
     def __init__(self):
@@ -82,10 +82,10 @@ class SiecNeuronowa:
             with tempfile.NamedTemporaryFile(
                 "w", delete=False, dir=DATA_DIR, encoding="utf-8"
             ) as tmp:
+                temp_name = tmp.name
                 json.dump(self.dane, tmp, ensure_ascii=False, indent=2, allow_nan=False)
                 tmp.flush()
                 os.fsync(tmp.fileno())
-                temp_name = tmp.name
             os.replace(temp_name, PLIK_SIECI)
             temp_name = None
             try:
@@ -126,7 +126,8 @@ class SiecNeuronowa:
                 if not isinstance(edge, dict):
                     continue
                 source, target = edge.get("from"), edge.get("to")
-                if source in valid_neurons and target in valid_neurons:
+                if (isinstance(source, str) and isinstance(target, str)
+                        and source in valid_neurons and target in valid_neurons):
                     valid_synapses.append({
                         "from": source, "to": target,
                         "strength": self._bounded_number(edge.get("strength", 0.5)),
@@ -158,8 +159,27 @@ class SiecNeuronowa:
                 self._load_from_disk_locked()
 
     def zapisz(self):
+        """Flush local additions without overwriting newer data from another worker.
+
+        Graph mutations should use aktualizuj_siec(), which performs the complete
+        read-modify-write transaction. This compatibility method is additive:
+        persisted values win for IDs already present on disk.
+        """
         with self.lock:
+            local_snapshot = json.loads(json.dumps(self.dane))
             with self._file_lock():
+                self._load_from_disk_locked()
+                for node_id, node in local_snapshot.get("neurons", {}).items():
+                    self.dane["neurons"].setdefault(node_id, node)
+                known_edges = {
+                    (edge["from"], edge["to"])
+                    for edge in self.dane["synapses"]
+                }
+                for edge in local_snapshot.get("synapses", []):
+                    key = (edge.get("from"), edge.get("to"))
+                    if key[0] in self.dane["neurons"] and key[1] in self.dane["neurons"] and key not in known_edges:
+                        self.dane["synapses"].append(edge)
+                        known_edges.add(key)
                 self._save_atomic_locked()
 
     def aktualizuj_siec(self, nowa_struktura):
@@ -180,8 +200,8 @@ class SiecNeuronowa:
                         continue
                     if not isinstance(node, dict):
                         continue
-                    incoming_weight = self._bounded_number(node.get("weight", 0.5))
                     if node_id not in self.dane["neurons"]:
+                        incoming_weight = self._bounded_number(node.get("weight", 0.5))
                         self.dane["neurons"][node_id] = {
                             "label": str(node.get("label", "Nieznany"))[:500],
                             "weight": incoming_weight,
@@ -190,6 +210,11 @@ class SiecNeuronowa:
                     else:
                         old_weight = self._bounded_number(
                             self.dane["neurons"][node_id].get("weight", 0.5)
+                        )
+                        # A partial update that omits weight must not drift the
+                        # persisted value toward an artificial default of 0.5.
+                        incoming_weight = self._bounded_number(
+                            node.get("weight", old_weight), default=old_weight
                         )
                         self.dane["neurons"][node_id]["weight"] = (
                             old_weight * 0.7 + incoming_weight * 0.3
@@ -203,7 +228,9 @@ class SiecNeuronowa:
                     if not isinstance(edge, dict):
                         continue
                     source, target = edge.get("from"), edge.get("to")
-                    if source not in self.dane["neurons"] or target not in self.dane["neurons"]:
+                    if (not isinstance(source, str) or not isinstance(target, str)
+                            or source not in self.dane["neurons"]
+                            or target not in self.dane["neurons"]):
                         continue
                     strength = self._bounded_number(edge.get("strength", 0.5))
                     key = (source, target)
