@@ -20,30 +20,16 @@ from flask import Flask, jsonify, render_template_string
 # =========================
 # KONFIGURACJA
 # =========================
-PORT = int(os.environ.get("PORT", 10000))
-DATA_DIR = os.path.abspath(os.environ.get("DATA_DIR", os.path.dirname(__file__)))
+from iskra.config import load_settings
+from iskra.security.headers import install_security_headers
+
+settings = load_settings()
+PORT = settings.port
+DATA_DIR = settings.data_dir
 os.makedirs(DATA_DIR, exist_ok=True)
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
-REQUEST_TIMEOUT = 45
-REQUEST_RETRIES = 2
-
-app = Flask(__name__)
-
-@app.after_request
-def add_security_headers(response):
-    """Set conservative browser security defaults for the dashboard and API."""
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "no-referrer")
-    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    response.headers.setdefault(
-        "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; "
-        "frame-ancestors 'none'",
-    )
-    return response
+app = install_security_headers(Flask(__name__))
 
 # =========================
 # MODULAR DOMAIN IMPORTS
