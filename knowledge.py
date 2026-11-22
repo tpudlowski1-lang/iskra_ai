@@ -43,7 +43,7 @@ def initialize(db_path):
         if normalized_path in _INITIALIZED_PATHS:
             return
         with closing(_connect(normalized_path)) as connection:
-        connection.execute("""
+            connection.execute("""
                 CREATE TABLE IF NOT EXISTS tenants (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
