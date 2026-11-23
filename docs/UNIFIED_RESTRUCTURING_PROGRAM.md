@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4; do not merge automatically  
+**Current reviews:** draft PR #4 (modular core) and draft PR #28 (security and tenant storage); do not merge automatically  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
