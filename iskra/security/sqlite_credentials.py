@@ -54,9 +54,22 @@ class SQLiteCredentialStore:
 
     def _initialize(self):
         try:
-            # Restrict the database file immediately after SQLite creates it.
-            with self._connection() as connection:
+            # Create the file with owner-only permissions before SQLite opens it.
+            if os.path.islink(self.database_path):
+                raise OSError("Credential database path must not be a symbolic link")
+            try:
+                descriptor = os.open(
+                    self.database_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                    0o600,
+                )
+            except FileExistsError:
+                if os.path.islink(self.database_path):
+                    raise OSError("Credential database path must not be a symbolic link")
                 os.chmod(self.database_path, 0o600)
+            else:
+                os.close(descriptor)
+            with self._connection() as connection:
                 with connection:
                     connection.execute(
                         """
