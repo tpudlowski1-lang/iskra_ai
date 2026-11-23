@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask
 
 from iskra.api.routes import create_api_blueprint
-from iskra.storage.sqlite import SQLiteGraphStore
+from iskra.storage.tenant import TenantGraphStoreFactory
 from security import ApiTokenMiddleware
 
 
@@ -55,8 +55,7 @@ class TenantGraphApiTests(unittest.TestCase):
 
         graph = Graph()
 
-        def store_factory(tenant_id):
-            return SQLiteGraphStore(self.database, tenant_id=tenant_id)
+        store_factory = TenantGraphStoreFactory(self.database)
 
         app = Flask(__name__)
         app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
