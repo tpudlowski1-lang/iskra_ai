@@ -48,6 +48,10 @@ const connectEnd = source.indexOf('\n  logoutButton.addEventListener', connectSt
 const connectHandler = source.slice(connectStart, connectEnd);
 const loginExchangeIndex = connectHandler.indexOf('fetch("/api/browser/session"');
 assert.ok(loginExchangeIndex > 0, "login must exchange the one-time API token for a browser session");
+assert.ok(connectHandler.indexOf('tokenInput.value = ""') < loginExchangeIndex,
+  "clear the DOM token field before sending the one-time exchange request");
+assert.ok(connectHandler.includes("candidate = \"\";"),
+  "release the local token reference after the exchange completes");
 assert.ok(connectHandler.indexOf("credentialList.replaceChildren()") < loginExchangeIndex);
 assert.ok(connectHandler.indexOf('showIssuedToken("")') < loginExchangeIndex);
 assert.ok(connectHandler.indexOf("documentList.replaceChildren()") < loginExchangeIndex);
