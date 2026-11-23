@@ -52,6 +52,19 @@ class RouterPayloadValidationTests(unittest.TestCase):
         self.assertIsNone(router.generate("sensitive test prompt"))
         self.assertEqual(calls, ["deepseek"])
 
+    def test_request_allowlist_intersects_deployment_allowlist_and_blocks_fallback(self):
+        router = RouterProvider()
+        router.primary = "deepseek"
+        router.fallbacks = ["openai"]
+        router.allowed_providers = {"deepseek", "openai"}
+        calls = []
+        router.providers = {
+            "deepseek": lambda _: calls.append("deepseek") or "not json",
+            "openai": lambda _: calls.append("openai") or '{"ok": true}',
+        }
+        self.assertIsNone(router.generate("tenant data", allowed_providers={"deepseek"}))
+        self.assertEqual(calls, ["deepseek"])
+
     def test_custom_system_prompt_is_context_local_and_reset_after_generate(self):
         with patch.dict(os.environ, {"LLM_ALLOWED_PROVIDERS": "deepseek", "LLM_PROVIDER": "deepseek"}):
             router = RouterProvider()

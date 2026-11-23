@@ -15,6 +15,7 @@ from iskra.storage.tenant import TenantGraphStoreFactory
 from iskra.documents.factory import DocumentRepositoryFactory
 from iskra.documents.service import DocumentService
 from iskra.assistant.chat import KnowledgeChatService
+from iskra.llm.tenant_policy import TenantProviderPolicy
 
 settings = load_settings()
 PORT = settings.port
@@ -50,7 +51,8 @@ bot = IskraAutonomiczna(siec)
 
 document_repository = DocumentRepositoryFactory.from_settings(settings).build()
 document_service = DocumentService(document_repository)
-chat_service = KnowledgeChatService(document_service, bot.router)
+tenant_provider_policy = TenantProviderPolicy.from_environment()
+chat_service = KnowledgeChatService(document_service, bot.router, tenant_provider_policy)
 DOCUMENT_INGESTION_ENABLED = os.environ.get("ISKRA_ENABLE_DOCUMENT_INGESTION", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # =========================

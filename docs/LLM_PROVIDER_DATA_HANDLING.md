@@ -18,19 +18,24 @@ Implemented:
 - The worker prompt is restricted to a fixed public taxonomy; arbitrary mutable graph content is excluded.
 
 Not implemented:
-- Per-tenant provider routing or per-tenant provider allowlists. A deployment-level `LLM_ALLOWED_PROVIDERS` allowlist now blocks every provider not explicitly named; an empty/unset list blocks all router calls.
+- Per-tenant provider allowlists are implemented on the provider-policy feature branch (PR #80, carried into Draft PR #88) through `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant list is intersected with deployment-wide `LLM_ALLOWED_PROVIDERS`; either missing approval blocks the provider. Missing tenant entries deny by default. This is server-side configuration only, not a consent UI or proof that the operator has obtained lawful consent.
 - User-facing notice/consent and controls for external processing.
-- Prompt-level PII/secret detection, redaction or data minimization.
+- Complete DLP, reliable PII detection, document classification or secret detection/redaction for every possible format. A draft best-effort minimizer now redacts several common token/secret patterns, email addresses, IBANs and PEM private-key blocks from tenant chat questions/excerpts before provider calls; it is not exhaustive and can miss sensitive data.
 - Provider-specific retention, region, training-use or deletion configuration.
 - A central record of which provider received which prompt, with safe data classification metadata.
 - A local-only inference mode enforced by policy.
 - A guarantee that provider-side retention/deletion behavior matches Iskra's intended retention policy.
 
+## Best-effort outbound minimization in draft PR
+
+`iskra/llm/data_minimization.py` applies deterministic patterns to tenant chat question text and retrieved excerpts before serialization. It targets common bearer/API/cloud tokens, JWT-like strings, password/secret assignments, PEM private keys, email addresses and IBANs. Document filenames are not sent to the model. The filter is defense-in-depth only: it can miss unknown formats, phone numbers, names, addresses, free-form personal details and other sensitive content. It is not a DLP scanner, anonymization guarantee or legal basis for external processing.
+
 ## Release requirements before customer data can be sent to an external model
 
 1. Define data classes (public, internal, confidential, personal/special-category) and prohibit secrets/credentials in prompts.
 2. Decide which data classes may be sent to each provider; default-deny confidential and personal data until contract, region, retention and transfer reviews are complete.
-3. Maintain the server-side `LLM_ALLOWED_PROVIDERS` allowlist as default-deny. Do not rely on user-supplied prompt text to choose a provider; provider approval still requires contractual and data-classification review.
+3. Maintain both server-side allowlists as default-deny: `LLM_ALLOWED_PROVIDERS` and `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant map is JSON object keyed by exact tenant ID, for example `{"tenant-acme":["deepseek"]}`. A provider is eligible only when present in both lists. Do not rely on user-supplied prompt text to choose a provider.
+4. Keep the tenant map empty or omit a tenant until the operator has independently documented the customer's processing instructions, legal basis and provider review. This environment variable is a technical gate, not a consent record.; provider approval still requires contractual and data-classification review.
 4. Add tenant-scoped context construction and strict data minimization; never serialize the global graph into a tenant request.
 5. Add deterministic redaction for credentials and high-confidence sensitive identifiers before any network call; treat this as defense in depth, not a guarantee.
 6. Provide a local-only mode whose policy rejects all external network providers, not merely a UI preference.
@@ -128,4 +133,4 @@ Before enabling any provider for a commercial tenant, record the legal entity/ac
 
 The router now applies the same deployment-level provider allowlist to the primary and every fallback provider. An unset or empty `LLM_ALLOWED_PROVIDERS` blocks all registered external provider calls before a request is made. The Render blueprint keeps this variable empty and disables auto-deploy until an operator explicitly approves both provider processing and deployment.
 
-The autonomous worker prompt contains only a fixed public taxonomy. This reduces one previously identified data-transfer risk, but it does not redact normal user prompts. There is no per-tenant allowlist, consent UI, automatic PII/secret redaction, customer-facing privacy controls or network egress firewall. Customer-data processing by external models remains NOT APPROVED until account-specific provider terms, DPA, data location, retention, deletion and transfer review are complete.
+The autonomous worker prompt contains only a fixed public taxonomy. This reduces one previously identified data-transfer risk, but it does not redact normal user prompts. Per-tenant allowlist code exists on the provider-policy feature branch and is carried into Draft PR #88; there is still no consent UI, automatic PII/secret redaction for every prompt path, customer-facing privacy controls or network egress firewall. Tenant chat questions/excerpts receive best-effort minimization, but other prompt paths are not automatically redacted. Customer-data processing by external models remains NOT APPROVED until account-specific provider terms, DPA, data location, retention, deletion and transfer review are complete.

@@ -13,6 +13,7 @@ from iskra.documents.service import DocumentService
 from iskra.documents.parsers import parse_document
 from iskra.assistant.chat import KnowledgeChatService
 from iskra.security.principal import Principal
+from iskra.llm.tenant_policy import TenantProviderPolicy
 from security import ApiTokenMiddleware
 
 
@@ -23,10 +24,11 @@ def token_hash(token):
 class FakeRouter:
     def __init__(self):
         self.calls = []
+        self.allowed_providers = {"deepseek"}
         self.response_override = None
         self.return_none = False
 
-    def generate(self, prompt, system_prompt=None):
+    def generate(self, prompt, system_prompt=None, allowed_providers=None):
         payload = json.loads(prompt)
         self.calls.append((payload, system_prompt))
         if self.return_none:
@@ -35,7 +37,7 @@ class FakeRouter:
             return self.response_override
         source = payload["sources"][0]
         return json.dumps({
-            "answer": f"Informacja z dokumentu {source['filename']}.",
+            "answer": f"Informacja z dokumentu {source['document_id']}.",
             "citation_ids": [source["document_id"]],
         })
 
@@ -68,7 +70,14 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
                 return None
 
         self.router = FakeRouter()
-        self.chat_service = KnowledgeChatService(self.document_service, self.router)
+        self.chat_service = KnowledgeChatService(
+            self.document_service,
+            self.router,
+            TenantProviderPolicy({
+                "tenant-alpha": ["deepseek"],
+                "tenant-beta": ["deepseek"],
+            }),
+        )
         credentials = json.dumps([
             {"token_sha256": token_hash("alpha-member-token"), "subject": "member-a", "tenant_id": "tenant-alpha", "roles": ["member"]},
             {"token_sha256": token_hash("alpha-admin-token"), "subject": "admin-a", "tenant_id": "tenant-alpha", "roles": ["admin"]},
@@ -165,6 +174,18 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.get_json()["error"], "invalid_model_response")
+
+    def test_tenant_without_explicit_provider_policy_gets_503_without_router_call(self):
+        self.chat_service.provider_policy = TenantProviderPolicy({
+            "tenant-beta": ["deepseek"],
+        })
+        response = self.client.post(
+            "/api/tenant/chat",
+            headers=self.auth("alpha-member-token"),
+            json={"question": "ALPHA-SECRET"},
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.router.calls, [])
 
     def test_chat_returns_503_when_no_provider_is_allowlisted(self):
         self.router.return_none = True
