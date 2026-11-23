@@ -89,6 +89,7 @@ class FullBackupArchiveTests(unittest.TestCase):
         restore_archive(str(archive), str(target))
         with sqlite3.connect(target / "data/graph.sqlite3") as db:
             self.assertEqual(db.execute("SELECT value FROM records").fetchone()[0], "reserved-path")
+
     def test_requires_explicit_quiescence_acknowledgement(self):
         with self.assertRaises(BackupError):
             create_archive(self.resources(), str(self.archive), writes_paused=False)
