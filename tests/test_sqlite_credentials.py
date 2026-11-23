@@ -106,10 +106,10 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         self.assertEqual(self.store.authenticate(issued.token), self.principal)
 
     def test_rotation_rejects_revoked_credentials(self):
-        expired = self.store.issue(self.principal, expires_at=4_000_000_000)
-        self.store.revoke(expired.credential_id)
+        issued = self.store.issue(self.principal, expires_at=4_000_000_000)
+        self.store.revoke(issued.credential_id)
         with self.assertRaises(ValueError):
-            self.store.rotate(expired.credential_id)
+            self.store.rotate(issued.credential_id)
 
     def test_rotation_rejects_expired_credentials(self):
         issued = self.store.issue(self.principal)
