@@ -54,14 +54,23 @@ python -m scripts.migrate_tenant_sqlite_to_postgres \
 
 Only after reviewing the backup, checksum, report, target role and restore plan should an operator add `--apply` and a secret-managed `--postgres-dsn`. Use `--replace-existing` only for a deliberately approved overwrite. This tool migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
 
+## Runtime selection
+
+The application has an explicit opt-in backend selector:
+- `ISKRA_TENANT_STORAGE_BACKEND=sqlite` (default) keeps the current local SQLite tenant store.
+- `ISKRA_TENANT_STORAGE_BACKEND=postgres` selects `PostgresGraphStore`.
+- `ISKRA_POSTGRES_DSN` is required when the PostgreSQL backend is selected.
+
+The configuration is validated at startup. The PostgreSQL adapter is imported lazily, and tenant scope still comes only from the verified Principal. A configured DSN does not apply migrations automatically.
+
 ## Deployment and migration status
 
-This is a tested adapter, schema and dry-run-first migration utility, not a live migration of Iskra's production tenant database or legacy global JSON graph. The Flask API still uses the existing graph service. Do not set a production PostgreSQL DSN or route customer traffic to this adapter until:
+The adapter, schema, opt-in selector and dry-run-first migration utility are implemented and CI-tested. This is not yet a production database cutover or a rehearsal against the user's real tenant data. Keep SQLite as the default until a staging migration and restore drill are complete. Do not enable the PostgreSQL backend for customer traffic until:
 - a real production backup and restore rehearsal is completed; the utility's transactional rollback is tested in CI;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
 - the runtime role is verified as non-superuser and non-BYPASSRLS;
 - cross-tenant read/write/delete and missing-context tests pass against the production-like database;
-- application services are wired to derive tenant scope only from the authenticated Principal.
+- application services are wired to derive tenant scope only from the authenticated Principal (the current tenant API uses the principal-bound factory).
 
 CI starts an ephemeral PostgreSQL 16 service, applies the migration as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real database RLS integration tests using that runtime role.
