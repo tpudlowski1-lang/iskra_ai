@@ -15,11 +15,14 @@ class TenantProviderPolicy:
     def __init__(self, tenant_allowlists):
         if not isinstance(tenant_allowlists, dict):
             raise ValueError("Polityka providerów musi być obiektem JSON")
+        if len(tenant_allowlists) > 10000:
+            raise ValueError("Polityka zawiera zbyt wiele tenantów")
         normalized = {}
         for tenant_id, providers in tenant_allowlists.items():
-            if not isinstance(tenant_id, str) or not tenant_id.strip() or len(tenant_id) > 255:
+            if (not isinstance(tenant_id, str) or not tenant_id.strip()
+                    or tenant_id != tenant_id.strip() or len(tenant_id) > 255):
                 raise ValueError("Nieprawidłowy identyfikator tenant w polityce providerów")
-            if not isinstance(providers, list):
+            if not isinstance(providers, list) or len(providers) > len(SUPPORTED_PROVIDERS):
                 raise ValueError("Lista providerów dla tenant musi być tablicą")
             selected = set()
             for provider in providers:
