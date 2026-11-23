@@ -143,7 +143,9 @@ Verified evidence on that exact HEAD:
 - Adversarial corpus [45122333072](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122333072): SUCCESS on Python 3.11/3.12.
 - Dependency/license inventory [45122332992](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122332992): SUCCESS.
 
-The repository still does **not** have evidence of a production deployment or sale readiness:
+The repository still does **not** have evidence of a production deployment or sale readiness. The current application is a graph dashboard/API, not yet an end-user chat assistant: there is no authenticated chat route or chat UI, and the tenant-scoped DocumentService is not wired into HTTP routes or a retrieval-to-answer pipeline. See PRODUCT_MARKET_HYPOTHESIS.md.
+
+
 - No production-like staging PostgreSQL migration, durable hosting volume, backup restore/rollback rehearsal or production smoke test.
 - The license inventory reports 28 Python distributions; psycopg and psycopg-binary are LGPL-3.0-only and require qualified legal/distribution review. No full IP/license clearance has been completed.
 - External LLM processing is default-deny at deployment level; Render leaves LLM_ALLOWED_PROVIDERS empty and autoDeploy false. There is no per-tenant provider policy, consent UI, ordinary-prompt PII/secret redaction or network egress firewall. Customer-data processing by external LLMs remains NOT APPROVED pending provider-specific terms, DPA, region, retention, deletion and transfer review.
