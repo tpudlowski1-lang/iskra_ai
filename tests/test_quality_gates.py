@@ -127,6 +127,7 @@ class IskraPersistenceTests(unittest.TestCase):
 class IskraProviderTests(unittest.TestCase):
     def test_router_stops_after_first_success(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
@@ -140,6 +141,7 @@ class IskraProviderTests(unittest.TestCase):
 
     def test_unknown_provider_is_skipped(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek"}
         calls = []
         router.primary = "not-a-provider"
         router.fallbacks = ["deepseek"]
