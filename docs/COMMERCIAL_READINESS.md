@@ -143,7 +143,7 @@ Verified evidence on that exact HEAD:
 - Adversarial corpus [45122333072](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122333072): SUCCESS on Python 3.11/3.12.
 - Dependency/license inventory [45122332992](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122332992): SUCCESS.
 
-The repository still does **not** have evidence of a production deployment or sale readiness. Draft PR #79 stacks the authenticated tenant-scoped chat API and a minimal token-in-memory chat UI on the integration candidate. It is not yet merged, has no public signup/account recovery or server-side conversation history, and upload remains admin-only and disabled by default. See PRODUCT_MARKET_HYPOTHESIS.md and KNOWLEDGE_CHAT_API.md.
+The repository still does **not** have evidence of a production deployment or sale readiness. Draft PR #89 is the rebased release candidate combining authenticated tenant chat, a minimal token-in-memory UI, tenant provider allowlists, best-effort outbound minimization and tenant credential administration. It is not yet merged into the canonical release, has no public signup/account recovery/MFA/billing or server-side conversation history, and upload remains admin-only and disabled by default. See PRODUCT_MARKET_HYPOTHESIS.md and KNOWLEDGE_CHAT_API.md.
 
 
 - No production-like staging PostgreSQL migration, durable hosting volume, backup restore/rollback rehearsal or production smoke test.
