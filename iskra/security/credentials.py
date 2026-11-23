@@ -12,6 +12,7 @@ import os
 import secrets
 import sqlite3
 import time
+from contextlib import contextmanager
 from typing import Protocol
 
 from iskra.security.principal import Principal
@@ -57,8 +58,16 @@ class SQLiteCredentialStore:
         connection.execute("PRAGMA busy_timeout = 10000")
         return connection
 
+    @contextmanager
+    def _connection(self):
+        connection = self._connect()
+        try:
+            yield connection
+        finally:
+            connection.close()
+
     def _initialize(self):
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS api_credentials (
