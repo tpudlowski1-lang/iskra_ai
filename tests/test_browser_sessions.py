@@ -209,13 +209,33 @@ class BrowserSessionSecurityTests(unittest.TestCase):
 
         same_origin = client.post(
             "/mutate",
+            base_url="https://iskra.test",
             headers={
                 "Authorization": f"Basic {basic}",
                 "Origin": "https://iskra.test",
-                "Host": "iskra.test",
             },
         )
         self.assertEqual(same_origin.status_code, 200)
+
+        downgrade_origin = client.post(
+            "/mutate",
+            base_url="https://iskra.test",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "http://iskra.test",
+            },
+        )
+        self.assertEqual(downgrade_origin.status_code, 403)
+
+        wrong_port = client.post(
+            "/mutate",
+            base_url="https://iskra.test",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "https://iskra.test:8443",
+            },
+        )
+        self.assertEqual(wrong_port.status_code, 403)
 
     def test_browser_session_expires(self):
         now = time.time()
