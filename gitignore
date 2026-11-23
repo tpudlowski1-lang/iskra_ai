@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
-chroma_db/
-iskra_data/
