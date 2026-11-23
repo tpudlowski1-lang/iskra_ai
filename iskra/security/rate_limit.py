@@ -31,6 +31,12 @@ def create_rate_limiter(app, environ=None, default_limits=None):
     storage_uri = str(env.get("RATELIMIT_STORAGE_URI", "memory://")).strip()
     if not storage_uri:
         raise ValueError("RATELIMIT_STORAGE_URI nie może być puste")
+    # Unit/integration test runs issue intentionally high-volume parallel requests.
+    # Disable the application-wide default limiter only in an explicitly marked
+    # test process; dedicated limiter tests use a separate Flask app without this flag.
+    testing = str(env.get("ISKRA_TESTING", "")).strip().lower() in {"1", "true", "yes", "on"}
+    if testing:
+        app.config["RATELIMIT_ENABLED"] = False
     limits = default_limits if default_limits is not None else ["60 per minute"]
     limiter = Limiter(
         key_func=rate_limit_key,
