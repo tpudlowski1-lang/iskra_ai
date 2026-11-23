@@ -58,11 +58,13 @@ def create_api_blueprint(graph, tenant_store_factory=None):
             for edge in graph.fundament.get("synapses", [])
             if isinstance(edge, dict)
         }
-        submitted_edges = {
-            (edge.get("from"), edge.get("to"))
-            for edge in submitted_synapses
-            if isinstance(edge, dict)
-        } if isinstance(submitted_synapses, list) else set()
+        submitted_edges = set()
+        if isinstance(submitted_synapses, list):
+            for edge in submitted_synapses:
+                if (isinstance(edge, dict)
+                        and isinstance(edge.get("from"), str)
+                        and isinstance(edge.get("to"), str)):
+                    submitted_edges.add((edge["from"], edge["to"]))
         if not required_edges.issubset(submitted_edges):
             return jsonify({"error": "foundational_connections_required"}), 400
 
