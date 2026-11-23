@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4; do not merge automatically  
+**Current reviews:** draft PR #4 (modular core) and draft PR #28 (security and tenant storage); do not merge automatically  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -77,18 +77,21 @@ These streams can be investigated in parallel, but code is integrated in depende
 
 ### Stream B — Security and identity
 - Retain the existing fail-closed shared `API_TOKEN` WSGI gate as the initial administrator boundary.
-- Define principal, role, tenant context, authentication provider, and authorization policy interfaces.
-- Extend the shared-token gate into explicit route policies; add tenant credentials only when bound to server-side principals.
-- Add tests for missing/invalid credentials, role boundaries, IDOR, tenant spoofing, cross-tenant reads/writes/deletes, and secret redaction.
-- Exit gate: negative authorization tests pass before any tenant feature is enabled.
+- Principal, allowed roles, server-derived tenant context and deny-by-default route policies are implemented.
+- The shared `API_TOKEN` remains the compatibility system administrator credential; hashed static credentials and an opt-in SQLite credential registry support tenant principals, expiry and revocation.
+- WSGI resolves identity only from verified credentials. Tenant API routes pass the complete Principal into the tenant store factory; client tenant IDs are ignored.
+- Tests cover missing/invalid credentials, role boundaries, tenant spoofing, cross-tenant reads/writes, expiry, revocation and backend failure.
+- Remaining: user provisioning/account lifecycle, controlled token issuance/rotation, audit events and operational secret management.
+- Exit gate for production identity is still open until those lifecycle and operational controls are completed.
 
 ### Stream C — Persistence and migration
 - Keep the existing JSON format as an import/export compatibility format.
 - Keep the current SQLite adapter for tests; audit the older SQLite graph-snapshot prototype separately.
-- Add PostgreSQL schema and migrations for graph, tenant, user, document metadata, audit events, and migration versioning.
-- Implement dry-run import, byte-for-byte backup, semantic graph comparison, twelve-pillar validation, transactional commit, and rollback.
-- Enable database-backed operation only behind an explicit feature flag and only after staging verification.
-- Exit gate: migration, isolation, concurrency, restore, and rollback tests pass.
+- PostgreSQL graph schema v1, composite tenant keys, foreign keys and RLS ENABLE + FORCE migration are implemented.
+- `PostgresGraphStore` derives scope from Principal and sets a transaction-local tenant context; CI verifies it against PostgreSQL 16 with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
+- Live tenant API currently uses the tenant-scoped SQLite adapter; the legacy global graph remains JSON. PostgreSQL is not yet wired into the live app.
+- Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON-to-PostgreSQL cutover, rollback and restore drills.
+- Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
 ### Stream D — Documents and retrieval
 - Rebuild the tenant document prototype behind modular service/repository interfaces.
@@ -144,7 +147,19 @@ Every integration commit must run:
 
 A passing unit suite is not a production-readiness claim. The release record must list exact workflow URLs, commit SHA, Python versions, test counts, skipped tests, and any remaining blockers.
 
-## 8. Current blockers — do not mark production-ready
+## 8. Implementation snapshot — 2026-11-23
+
+The following is implemented in the current review chain (PR #28) and verified by CI on commit `92ebb804404f5157c4567d7fd37ad2fde515ce4d`:
+
+- Request principal and role policy; server-side credential resolution.
+- Optional persistent SQLite credential registry with digest-only token storage, expiry and revocation.
+- Tenant API backed by principal-bound SQLite graph storage, with atomic initialization of the twelve foundational pillars.
+- PostgreSQL graph schema and adapter prototype with RLS policies, tested on PostgreSQL 16.
+- Python 3.11 and 3.12: 104 tests each; compileall and pip-audit passed.
+
+This does not mean the PostgreSQL backend is live or the application is production-ready. The current live tenant API uses SQLite; the legacy global graph remains on JSON. PostgreSQL migration/cutover, backup/restore, account provisioning, audit events and staging operations remain outstanding.
+
+## 9. Current blockers — do not mark production-ready
 
 - Shared API-token authentication exists at the WSGI boundary, but named user lifecycle, roles, and request-scoped tenant authorization are not implemented.
 - The current SQLite adapter is not wired into the live Flask application.
@@ -153,7 +168,7 @@ A passing unit suite is not a production-readiness claim. The release record mus
 - Dedicated worker leases, observability, staging verification, and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
 
-## 9. Definition of done
+## 10. Definition of done
 
 The restructuring program is complete only when:
 1. One canonical modular codebase contains the reviewed contributions from the historical branches.
