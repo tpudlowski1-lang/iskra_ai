@@ -39,4 +39,6 @@ The abbreviated example above is illustrative only; a valid update must contain 
 
 The API binds each `SQLiteGraphStore` instance to the authenticated tenant. By default the database file is `DATA_DIR/iskra_tenants.sqlite3`; set `ISKRA_TENANT_DB_PATH` to choose another path. SQLite uses tenant-scoped composite primary/foreign keys, transactional snapshot replacement, and private file permissions.
 
+The graph store creates its final parent directory with mode `0700`, sets the database file to `0600`, rejects a symlink parent directory, and opens the database file with `O_NOFOLLOW` where the platform supports it. These checks reduce accidental exposure and common symlink-path attacks; they are not a substitute for a private deployment data directory, filesystem ownership controls, or a hardened multi-process storage design. Do not allow untrusted local users to modify the storage directory.
+
 This is an initial single-instance persistence layer. Do not deploy it for horizontally scaled production workloads or treat local ephemeral storage as durable. PostgreSQL, migration tooling, backup/restore drills, account lifecycle, credential revocation, and audit events are still required for production multi-tenant operation.
