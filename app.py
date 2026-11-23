@@ -10,7 +10,7 @@ from flask import Flask, jsonify, render_template_string
 from iskra.config import load_settings
 from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
-from iskra.storage.sqlite import SQLiteGraphStore
+from iskra.storage.tenant import TenantGraphStoreFactory
 
 settings = load_settings()
 PORT = settings.port
@@ -142,12 +142,13 @@ TENANT_DB_PATH = os.path.abspath(
 )
 
 
-def tenant_store_factory(tenant_id):
-    """Bind every SQLite repository to the authenticated principal's tenant."""
-    return SQLiteGraphStore(TENANT_DB_PATH, tenant_id=tenant_id)
-
-
-app.register_blueprint(create_api_blueprint(siec, tenant_store_factory=tenant_store_factory))
+tenant_graph_store_factory = TenantGraphStoreFactory(TENANT_DB_PATH)
+app.register_blueprint(
+    create_api_blueprint(
+        siec,
+        tenant_store_factory=tenant_graph_store_factory.for_principal,
+    )
+)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
