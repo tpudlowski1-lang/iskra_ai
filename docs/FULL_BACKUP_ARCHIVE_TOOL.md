@@ -27,3 +27,7 @@ Repeat `--sqlite NAME=PATH` for each active SQLite store. Repeat `--json NAME=PA
 The example paths do not assert which resources are active on a particular host. Operators must inspect actual deployment settings and list only active stores; an active required resource must not be omitted. The tool cannot stop external processes or guarantee a single transaction across independent databases. For a common point in time, writes and workers must be quiesced before invocation.
 
 PostgreSQL, object storage, and hosting secrets require separate provider-native backup and recovery procedures. This archive does not handle them. Production backup/restore has not been performed by this code change.
+
+## Integrity and authenticity
+
+The SHA-256 values detect accidental corruption and verify that restored bytes match the manifest. They do not authenticate who created the archive: an attacker able to replace both the archive and its manifest can recompute the hashes. For production, store archives in access-controlled, encrypted backup storage and add a separately managed signature or HMAC key; never place that key in the archive. This utility does not implement archive signing or encryption.
