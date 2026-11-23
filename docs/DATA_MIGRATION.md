@@ -19,3 +19,8 @@ SQLite is appropriate for local development and isolated tests. PostgreSQL is th
 
 ## Rollback
 If any validation, import, or staging smoke test fails, keep the previous deployment and restore the original JSON snapshot. Never overwrite the source file during migration.
+
+
+## Staging execution and DSN safety
+
+For the full preflight, separate database identities, role checks, staging acceptance tests and rollback procedure, follow [PostgreSQL staging runbook](POSTGRES_STAGING_RUNBOOK.md). The migration CLI resolves the destination from explicit `--postgres-dsn`, then `ISKRA_POSTGRES_MIGRATION_DSN`, then `ISKRA_POSTGRES_DSN`. It intentionally does not guess from generic `DATABASE_URL`, which may point to an unrelated service database. Use a dedicated migration credential with `NOSUPERUSER NOBYPASSRLS`, no table ownership and only the required graph-table DML grants.
