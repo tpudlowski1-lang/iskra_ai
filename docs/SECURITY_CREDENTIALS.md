@@ -20,10 +20,10 @@ Example (use a newly generated digest and never commit a real token):
 ]
 ```
 
-Generate a digest locally without printing or storing the raw token in the repository:
+Use a high-entropy random token (not a human-chosen password). Generate and hash it locally; never store it in the repository:
 
 ```sh
-python -c "import getpass,hashlib; t=getpass.getpass('New API token: '); print(hashlib.sha256(t.encode()).hexdigest())"
+python -c "import secrets,hashlib; t=secrets.token_urlsafe(32); print('TOKEN='+t); print('SHA256='+hashlib.sha256(t.encode()).hexdigest())"
 ```
 
 Set the JSON as a protected environment variable in the deployment platform. Keep the raw token with its intended user. Rotate a credential by replacing its digest in the server-side configuration. Malformed credential configuration fails closed with HTTP 503; unknown credentials receive HTTP 401.
@@ -32,7 +32,7 @@ Set the JSON as a protected environment variable in the deployment platform. Kee
 
 - The middleware derives the principal only after validating a server-side credential.
 - `tenant_id` supplied in a URL, query string, body, or request header is never trusted.
-- The legacy global `/api/network` endpoint requires the `admin` role.
+- The legacy global `/api/network` endpoint requires both the `admin` role and the `system` tenant scope; a tenant administrator cannot read it.
 - `/health` remains public and does not receive an authenticated principal.
 - The existing dashboard shell contains no tenant data; its graph API call is administrator-only.
 
