@@ -16,7 +16,7 @@ try:
     import fcntl  # POSIX file lock: protects shared JSON state across Gunicorn workers
 except ImportError:  # pragma: no cover - non-POSIX development environments
     fcntl = None
-from flask import Flask, jsonify, render_template_string, request
+from flask import Flask, jsonify, render_template, render_template_string, request
 
 import knowledge
 from embeddings import EmbeddingProvider
@@ -613,6 +613,11 @@ DASHBOARD_HTML = """
 </body>
 </html>
 """
+
+@app.route('/workspace')
+def tenant_workspace():
+    return render_template('workspace.html')
+
 
 @app.route('/')
 def index():
