@@ -1,12 +1,8 @@
 # Runtime persistence and recovery artifacts
-iskra.sqlite3
-iskra.sqlite3-*
-iskra.sqlite3-wal
-iskra.sqlite3-shm
-iskra_tenants.sqlite3
-iskra_tenants.sqlite3-*
-wiedza.json
-wiedza.json.*
+/iskra.sqlite3*
+/iskra_tenants.sqlite3*
+/wiedza.json
+/wiedza.json.*
 *.corrupt-*
 *.lock
 
@@ -21,6 +17,18 @@ wiedza.json.*
 *.jks
 *.keystore
 keystore.properties
+/credentials.sqlite3*
+
+# Local runtime data, vector stores, documents and backups
+/chroma_db/
+/iskra_data/
+/private_documents/
+/backups/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
 
 # Python and test artifacts
 __pycache__/
@@ -30,33 +38,3 @@ __pycache__/
 htmlcov/
 .venv/
 venv/
-
-# Local runtime data, vector stores, tenant credentials and backups
-chroma_db/
-iskra_data/
-backups/
-private_documents/
-credentials.sqlite3
-credentials.sqlite3-*
-private_documents.sqlite3
-*.sqlite3-wal
-*.sqlite3-shm
-# Additional local credentials and document/backup stores
-credentials.sqlite3
-private_documents/
-backups/
-chroma_db/
-iskra_data/
-*.sqlite
-*.sqlite3
-*.sqlite3-*
-*.db
-*.db-*
-
-# Explicitly anchor sensitive runtime stores and their contents.
-/credentials.sqlite3
-/credentials.sqlite3-*
-/private_documents/
-/private_documents/**
-/backups/
-/backups/**
