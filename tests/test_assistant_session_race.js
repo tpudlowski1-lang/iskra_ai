@@ -25,11 +25,13 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function harness(apiRequest) {
+function harness(fetch, apiRequest) {
   const sandbox = {
     sessionGeneration: 1,
     sessionRoles: [],
+    csrfToken: "",
     accountPanel: { hidden: true },
+    fetch,
     apiRequest,
     loadCredentialsCalls: 0,
     loadCredentials: async () => {
@@ -44,10 +46,23 @@ function harness(apiRequest) {
   return context;
 }
 
-async function staleFetchResponseCannotChangeSession() {
+function assertSessionUnchanged(context) {
+  assert.deepEqual(Array.from(context.sessionRoles), []);
+  assert.equal(context.accountPanel.hidden, true);
+  assert.equal(context.loadCredentialsCalls, 0);
+}
+
+async function staleBootstrapFetchResponseCannotChangeSession() {
   const fetchResult = deferred();
   let jsonCalls = 0;
-  const context = harness(() => fetchResult.promise);
+  let apiCalls = 0;
+  const context = harness(
+    () => fetchResult.promise,
+    async () => {
+      apiCalls += 1;
+      throw new Error("tenant API must not be called for stale bootstrap");
+    }
+  );
 
   const pending = context.loadSessionUnderTest();
   context.sessionGeneration = 2;
@@ -55,25 +70,79 @@ async function staleFetchResponseCannotChangeSession() {
     ok: true,
     json: async () => {
       jsonCalls += 1;
-      return { roles: ["admin"] };
+      return { csrf_token: "csrf" };
     },
   });
 
   await pending;
-  assert.deepEqual(Array.from(context.sessionRoles), []);
-  assert.equal(context.accountPanel.hidden, true);
-  assert.equal(context.loadCredentialsCalls, 0);
+  assertSessionUnchanged(context);
   assert.equal(jsonCalls, 0);
+  assert.equal(apiCalls, 0);
 }
 
-async function staleJsonResponseCannotChangeSession() {
+async function staleBootstrapJsonResponseCannotChangeSession() {
   const jsonResult = deferred();
   let markJsonStarted;
   const jsonStarted = new Promise((resolve) => {
     markJsonStarted = resolve;
   });
-  const context = harness(() =>
-    Promise.resolve({
+  let apiCalls = 0;
+  const context = harness(
+    async () => ({
+      ok: true,
+      json: () => {
+        markJsonStarted();
+        return jsonResult.promise;
+      },
+    }),
+    async () => {
+      apiCalls += 1;
+      throw new Error("tenant API must not be called for stale bootstrap JSON");
+    }
+  );
+
+  const pending = context.loadSessionUnderTest();
+  await jsonStarted;
+  context.sessionGeneration = 2;
+  jsonResult.resolve({ csrf_token: "csrf" });
+  await pending;
+
+  assertSessionUnchanged(context);
+  assert.equal(apiCalls, 0);
+}
+
+async function staleTenantFetchResponseCannotChangeSession() {
+  const tenantResponse = deferred();
+  let jsonCalls = 0;
+  const context = harness(
+    async () => ({ ok: true, json: async () => ({ csrf_token: "csrf" }) }),
+    () => tenantResponse.promise
+  );
+
+  const pending = context.loadSessionUnderTest();
+  context.sessionGeneration = 2;
+  tenantResponse.resolve({
+    ok: true,
+    json: async () => {
+      jsonCalls += 1;
+      return { roles: ["admin"] };
+    },
+  });
+  await pending;
+
+  assertSessionUnchanged(context);
+  assert.equal(jsonCalls, 0);
+}
+
+async function staleTenantJsonResponseCannotChangeSession() {
+  const jsonResult = deferred();
+  let markJsonStarted;
+  const jsonStarted = new Promise((resolve) => {
+    markJsonStarted = resolve;
+  });
+  const context = harness(
+    async () => ({ ok: true, json: async () => ({ csrf_token: "csrf" }) }),
+    async () => ({
       ok: true,
       json: () => {
         markJsonStarted();
@@ -84,20 +153,19 @@ async function staleJsonResponseCannotChangeSession() {
 
   const pending = context.loadSessionUnderTest();
   await jsonStarted;
-
   context.sessionGeneration = 2;
   jsonResult.resolve({ roles: ["admin"] });
   await pending;
 
-  assert.deepEqual(Array.from(context.sessionRoles), []);
-  assert.equal(context.accountPanel.hidden, true);
-  assert.equal(context.loadCredentialsCalls, 0);
+  assertSessionUnchanged(context);
 }
 
 (async () => {
-  await staleFetchResponseCannotChangeSession();
-  await staleJsonResponseCannotChangeSession();
-  process.stdout.write("assistant session race regression: PASS (2 cases)\n");
+  await staleBootstrapFetchResponseCannotChangeSession();
+  await staleBootstrapJsonResponseCannotChangeSession();
+  await staleTenantFetchResponseCannotChangeSession();
+  await staleTenantJsonResponseCannotChangeSession();
+  process.stdout.write("assistant session race regression: PASS (4 cases)\n");
 })().catch((error) => {
   process.stderr.write(String(error && error.stack || error) + "\n");
   process.exitCode = 1;
