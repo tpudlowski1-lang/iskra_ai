@@ -29,7 +29,7 @@ class PostgresGraphStoreTests(unittest.TestCase):
                             NOSUPERUSER NOBYPASSRLS;
                     END IF;
                 END;
-                $
+                $$
                 """
             )
             connection.execute(
