@@ -83,9 +83,11 @@
   }
 
   async function loadCredentials() {
+    const generation = sessionGeneration;
     const response = await apiRequest("/api/tenant/credentials");
     if (!response.ok) throw new Error("Nie udało się pobrać listy dostępów.");
     const data = await response.json();
+    if (generation !== sessionGeneration) return;
     credentialList.replaceChildren();
     (Array.isArray(data.credentials) ? data.credentials : []).forEach((credential) => {
       const item = document.createElement("li");
@@ -160,11 +162,13 @@
   }
 
   async function loadDocuments() {
+    const generation = sessionGeneration;
     const response = await apiRequest("/api/tenant/documents");
     if (!response.ok) {
       throw new Error(response.status === 401 ? "Token nieprawidłowy lub wygasł." : "Nie udało się pobrać listy dokumentów.");
     }
     const data = await response.json();
+    if (generation !== sessionGeneration) return;
     const documents = Array.isArray(data.documents) ? data.documents : [];
     documentList.replaceChildren();
     documents.forEach((doc) => {
@@ -219,6 +223,7 @@
     sessionRoles = [];
     credentialList.replaceChildren();
     showIssuedToken("");
+    copyTokenButton.textContent = "Kopiuj token";
     sendButton.disabled = true;
     messages.replaceChildren();
     addMessage("assistant", "Sesja została zakończona. Strona odrzuciła referencję do tokena.");
