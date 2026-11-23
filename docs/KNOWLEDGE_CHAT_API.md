@@ -29,3 +29,8 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 - No live provider calls, customer documents or production deployment were used in CI.
 
 This API is a technical foundation for an MVP, not evidence of production or commercial readiness.
+
+
+## Minimal browser interface
+
+A minimal responsive UI is served at /assistant. The user pastes an API token into a password field; JavaScript holds it in memory only and does not use localStorage or sessionStorage. The token is cleared on disconnect or page reload. The UI uses textContent for model output and citation labels. There is no public signup, account recovery, HTTP-only browser session, or chat history; token-based access is intended for a controlled pilot, not public SaaS.
