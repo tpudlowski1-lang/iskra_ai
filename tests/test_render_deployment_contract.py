@@ -29,5 +29,16 @@ class RenderDeploymentContractTests(unittest.TestCase):
         self.assertIn("key: ENABLE_AUTONOMOUS_LOOP\n        value: false", manifest)
 
 
+
+    def test_render_explicitly_allows_only_configured_llm_providers_and_declares_secrets(self):
+        manifest = (Path(__file__).resolve().parents[1] / "render.yaml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("key: LLM_ALLOWED_PROVIDERS\n        value: openai,deepseek", manifest)
+        self.assertIn("key: LLM_FALLBACK_PROVIDERS\n        value: deepseek", manifest)
+        self.assertIn("key: OPENAI_API_KEY\n        sync: false", manifest)
+        self.assertIn("key: DEEPSEEK_API_KEY\n        sync: false", manifest)
+        self.assertNotIn("GEMINI_API_KEY", manifest)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
