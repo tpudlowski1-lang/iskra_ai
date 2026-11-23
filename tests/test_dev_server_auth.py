@@ -20,6 +20,17 @@ class DevelopmentEntrypointSecurityTests(unittest.TestCase):
         self.assertEqual(private.status_code, 503)
         self.assertEqual(private.get_json()["error"], "service_not_configured")
 
+    def test_direct_development_wsgi_accepts_server_configured_token(self):
+        client = Client(
+            iskra_app.create_development_wsgi_app(environ={"API_TOKEN": "local-test-admin"}),
+            Response,
+        )
+        response = client.get(
+            "/api/network",
+            headers={"Authorization": "Bearer local-test-admin"},
+        )
+        self.assertEqual(response.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
