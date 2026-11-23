@@ -231,6 +231,8 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
     try:
         with _open_regular_nofollow(archive_path) as archive_handle, zipfile.ZipFile(archive_handle, "r") as archive:
             infos = archive.infolist()
+            if os.fstat(archive_handle.fileno()).st_size > MAX_ARCHIVE_BYTES:
+                raise BackupError("Plik archiwum przekracza maksymalny rozmiar")
             if sum(info.file_size for info in infos) > MAX_ARCHIVE_BYTES:
                 raise BackupError("Archiwum przekracza limit rozpakowania")
             manifests = [i for i in infos if i.filename == MANIFEST_NAME]
@@ -274,19 +276,28 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
                     raise BackupError(f"Niezgodny rozmiar zasobu: {name}")
                 destination = staging / name
                 destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                data = archive.read(name)
-                if hashlib.sha256(data).hexdigest() != entry.get("sha256"):
-                    raise BackupError(f"Niezgodna suma SHA-256: {name}")
+                if info.file_size > MAX_RESOURCE_BYTES:
+                    raise BackupError(f"Zasób przekracza limit: {name}")
+                digest = hashlib.sha256()
+                total = 0
                 descriptor = os.open(destination, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                with os.fdopen(descriptor, "wb") as handle:
-                    handle.write(data)
-                    handle.flush()
-                    os.fsync(handle.fileno())
+                with archive.open(info, "r") as source_handle, os.fdopen(descriptor, "wb") as output:
+                    for chunk in iter(lambda: source_handle.read(1024 * 1024), b""):
+                        total += len(chunk)
+                        if total > MAX_RESOURCE_BYTES:
+                            raise BackupError(f"Zasób przekracza limit: {name}")
+                        digest.update(chunk)
+                        output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+                if total != entry["size"] or digest.hexdigest() != entry.get("sha256"):
+                    raise BackupError(f"Niezgodny rozmiar lub suma SHA-256: {name}")
                 if entry["kind"] == "sqlite":
                     _validate_sqlite(destination)
                 else:
                     try:
-                        json.loads(data.decode("utf-8"))
+                        with destination.open("r", encoding="utf-8") as json_handle:
+                            json.load(json_handle)
                     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                         raise BackupError(f"Niepoprawny JSON w archiwum: {name}") from exc
             actual = {info.filename for info in infos}
