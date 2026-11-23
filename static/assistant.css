@@ -94,3 +94,15 @@ textarea { display: block; resize: vertical; min-height: 60px; max-height: 180px
   .message { max-width: 94%; }
   .footer { flex-direction: column; }
 }
+
+.account-panel { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.credential-form { display: grid; gap: 8px; margin: 14px 0; }
+.credential-form label { color: var(--muted); font-size: 11px; }
+.credential-form input, .credential-form select { width: 100%; min-width: 0; padding: 9px 10px; color: var(--text); background: rgba(3, 12, 17, .78); border: 1px solid rgba(120, 170, 166, .24); border-radius: 8px; }
+.credential-form button { padding: 9px 10px; font-size: 12px; }
+.issued-token-panel { margin: 12px 0; padding: 12px; border: 1px solid rgba(77, 225, 193, .28); border-radius: 10px; background: rgba(77, 225, 193, .06); }
+.issued-token-panel textarea { font-size: 10px; overflow-wrap: anywhere; }
+.credential-list { list-style: none; padding: 0; margin: 12px 0; }
+.credential-item { display: grid; gap: 8px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 9px; color: #c9dfdc; font-size: 11px; overflow-wrap: anywhere; }
+.credential-actions { display: flex; gap: 6px; }
+.credential-actions button { font-size: 10px; padding: 5px 8px; }
