@@ -44,6 +44,17 @@ class TenantCredentialApiTests(unittest.TestCase):
     def auth(token):
         return {"Authorization": f"Bearer {token}"}
 
+    def test_authenticated_session_endpoint_returns_only_own_principal(self):
+        response = self.client.get(
+            "/api/tenant/session",
+            headers=self.auth(self.alpha_member_token),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"subject": "alpha-member", "tenant_id": "tenant-alpha", "roles": ["member"]},
+        )
+
     def test_tenant_admin_can_issue_member_token_bound_to_their_tenant(self):
         response = self.client.post(
             "/api/tenant/credentials",
