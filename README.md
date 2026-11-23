@@ -34,6 +34,7 @@ This is **not yet a complete customer account product**: self-service signup, ac
 - `iskra/knowledge/graph.py` — legacy global graph, twelve pillars and JSON persistence.
 - `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini routing with JSON-object validation and fallback.
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
+- `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
 - `iskra/security/` — principal, policy, credential and SQLite credential registry modules.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
