@@ -105,11 +105,22 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
             self.store.rotate(issued.credential_id, roles={"admin"})
         self.assertEqual(self.store.authenticate(issued.token), self.principal)
 
-    def test_rotation_rejects_expired_or_revoked_credentials(self):
+    def test_rotation_rejects_revoked_credentials(self):
         expired = self.store.issue(self.principal, expires_at=4_000_000_000)
         self.store.revoke(expired.credential_id)
         with self.assertRaises(ValueError):
             self.store.rotate(expired.credential_id)
+
+    def test_rotation_rejects_expired_credentials(self):
+        issued = self.store.issue(self.principal)
+        with self.store._connection() as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE api_credentials SET expires_at = 1 WHERE credential_id = ?",
+                    (issued.credential_id,),
+                )
+        with self.assertRaises(ValueError):
+            self.store.rotate(issued.credential_id)
 
     def test_audit_limit_is_bounded(self):
         with self.assertRaises(ValueError):
