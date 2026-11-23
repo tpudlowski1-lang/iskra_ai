@@ -2,12 +2,14 @@
 
 Iskra AI is an experimental Polish-language assistant project. The commercial product direction is a private knowledge assistant for small businesses: answers grounded in company documents, draft replies and offers, and clear source references.
 
-## Current branch
+## Active engineering branches
 
 - `main`: original experimental knowledge-graph dashboard.
-- `commercial-mvp`: product plan, technical audit, configurable LLM provider router, SQLite graph persistence, and security hardening in progress.
+- `iskra-full-quality-gates`: persistence and quality/stress-test work.
+- `iskra-unified-integrated`: integrated application, SQLite persistence, WSGI token middleware and security tests.
+- `iskra-integration-hardening`: controlled continuation branch based on `iskra-unified-integrated`; CI triggers and integration status are maintained here.
 
-The `commercial-mvp` branch is work in progress and has not yet been verified in a live Render deployment.
+The integration branches have diverged. Do not merge them blindly; review file-level differences and run CI first.
 
 ## Run locally
 
@@ -59,7 +61,8 @@ The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOU
 
 - [Commercial MVP plan](docs/PRODUCT_PLAN.md)
 - [Technical audit](docs/TECHNICAL_AUDIT.md)
+- [Unified Core integration status](docs/INTEGRATION_STATUS.md)
 
 ## Important limitations
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
