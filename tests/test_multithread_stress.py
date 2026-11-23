@@ -108,7 +108,10 @@ class IskraConcurrencyTests(unittest.TestCase):
             client = client_app.test_client()
             barrier.wait()
             for __ in range(reads_each):
-                response = client.get("/api/network")
+                from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+                response = client.get(
+                    "/api/network", environ_overrides={PRINCIPAL_ENV_KEY: SYSTEM_ADMIN}
+                )
                 if response.status_code != 200:
                     return response.status_code
                 payload = response.get_json()
