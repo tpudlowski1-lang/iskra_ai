@@ -72,18 +72,23 @@
   }
 
   async function loadSession() {
+    const generation = sessionGeneration;
     const response = await apiRequest("/api/tenant/session");
+    if (generation !== sessionGeneration) return;
     if (!response.ok) {
       throw new Error(response.status === 401 ? "Token nieprawidłowy lub wygasł." : "Nie udało się sprawdzić uprawnień.");
     }
     const session = await response.json();
+    if (generation !== sessionGeneration) return;
     sessionRoles = Array.isArray(session.roles) ? session.roles : [];
     accountPanel.hidden = !sessionRoles.includes("admin");
     if (sessionRoles.includes("admin")) {
       try {
         await loadCredentials();
       } catch (error) {
-        addMessage("assistant", error.message || "Panel zarządzania dostępami jest niedostępny.");
+        if (generation === sessionGeneration) {
+          addMessage("assistant", error.message || "Panel zarządzania dostępami jest niedostępny.");
+        }
       }
     }
   }
