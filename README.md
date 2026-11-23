@@ -13,6 +13,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 - [Data migration policy](docs/DATA_MIGRATION.md)
 - [Tenant knowledge chat API](docs/KNOWLEDGE_CHAT_API.md)
 - [LLM provider allowlist policy](docs/LLM_PROVIDER_ALLOWLIST.md)
+- [Tenant account lifecycle API](docs/TENANT_ACCOUNT_LIFECYCLE.md)
 - [LLM provider data handling](docs/LLM_PROVIDER_DATA_HANDLING.md)
 - [Autonomous worker data minimization](docs/AUTONOMOUS_WORKER_DATA_MINIMIZATION.md)
 - [Dependency/license inventory](docs/DEPENDENCY_LICENSE_AUDIT.md)
@@ -26,7 +27,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 
 The shared system `API_TOKEN` protects the legacy application routes. The security modules also implement hashed tenant credential storage, expiry/revocation and operator issue/rotate/revoke commands. Verified tenant principals are derived from credentials on the server; tenant scope must never come from request input.
 
-This is **not yet a complete customer account product**: self-service signup, account recovery, customer-managed credential lifecycle, billing and a complete tenant administration UI are not finished. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
+This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. A minimal tenant-admin console exists on the stacked tenant-account feature branch, but it is not yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
 
 ## Architecture
 
@@ -34,8 +35,9 @@ This is **not yet a complete customer account product**: self-service signup, ac
 - `iskra/knowledge/graph.py` — legacy global graph, twelve pillars and JSON persistence.
 - `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini routing with JSON-object validation and fallback.
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
+- `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
-- `iskra/security/` — principal, policy, credential and SQLite credential registry modules.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. The tenant-account feature branch (PR #82, including the squash-merged admin-console work from PR #84) contains tenant-scoped credential lifecycle endpoints and a minimal `/assistant` admin console; it remains a draft feature stack.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
 - `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
 - `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
