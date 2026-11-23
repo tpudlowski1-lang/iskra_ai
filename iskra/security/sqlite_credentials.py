@@ -165,7 +165,7 @@ class SQLiteCredentialStore:
         if expiry is not None and expiry <= now:
             raise ValueError("Token musi wygasać w przyszłości")
         actor = self._validate_actor(actor)
-        credential_id = secrets.token_urlsafe(18)
+        credential_id = "cred_" + secrets.token_urlsafe(18)
         token = secrets.token_urlsafe(48)
         roles_json = json.dumps(sorted(principal.roles), separators=(",", ":"))
         with self._connection() as connection:
@@ -254,7 +254,7 @@ class SQLiteCredentialStore:
         actor = self._validate_actor(actor)
         now = time.time()
         expiry_override = self._timestamp(expires_at, "expires_at")
-        new_id = secrets.token_urlsafe(18)
+        new_id = "cred_" + secrets.token_urlsafe(18)
         new_token = secrets.token_urlsafe(48)
 
         with self._connection() as connection:
