@@ -339,6 +339,10 @@ class SQLiteCredentialStore:
             raise ValueError("Browser session expiry must be within eight hours")
         with self._connection() as connection:
             with connection:
+                connection.execute(
+                    "DELETE FROM browser_sessions WHERE expires_at <= ? OR (revoked_at IS NOT NULL AND revoked_at <= ?)",
+                    (now, now - 30 * 24 * 60 * 60),
+                )
                 credential = connection.execute(
                     """
                     SELECT subject, tenant_id, roles_json, expires_at, revoked_at
