@@ -11,7 +11,7 @@ Every database operation:
 4. reads or writes only the bound tenant;
 5. commits or rolls back and closes the connection.
 
-The migration `migrations/0001_tenant_graph.sql` creates tenant-keyed graph tables, composite foreign keys, and PostgreSQL row-level security (RLS) policies with both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`. Missing tenant context returns no rows and rejects writes. The application query also includes explicit tenant predicates as defense in depth.
+The migrations are applied in order: `0001_tenant_graph.sql` creates tenant-keyed graph tables; `0002_tenant_documents.sql` creates tenant documents and chunks with composite keys, composite foreign keys and a generated `tsvector` plus GIN index. Both migrations enable and force RLS. Missing tenant context returns no rows and rejects writes. Application queries also include explicit tenant predicates as defense in depth.
 
 ## Database role requirements
 
@@ -24,7 +24,8 @@ CREATE ROLE iskra_app LOGIN PASSWORD '<managed-secret>' NOSUPERUSER NOBYPASSRLS;
 GRANT CONNECT ON DATABASE iskra TO iskra_app;
 GRANT USAGE ON SCHEMA public TO iskra_app;
 GRANT SELECT, INSERT, UPDATE, DELETE
-ON iskra_graph_neurons, iskra_graph_synapses TO iskra_app;
+ON iskra_graph_neurons, iskra_graph_synapses,
+   iskra_tenant_documents, iskra_tenant_document_chunks TO iskra_app;
 ```
 
 Apply the migration with a separate schema-owner/migration identity before deploying application code. The application runtime role should not own the tables and must not have `BYPASSRLS`.
@@ -56,12 +57,12 @@ Only after reviewing the backup, checksum, report, target role and restore plan 
 
 ## Deployment and migration status
 
-The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
+The tenant graph and internal document repository can select SQLite (default) or PostgreSQL through validated server-side settings and repository factories. `PostgresDocumentRepository` requires a verified Principal on every operation and applies the same transaction-local tenant scope. PostgreSQL remains opt-in and is not the default. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. The document service still has no HTTP routes and does not generate RAG answers. Do not route production customer traffic to PostgreSQL until:
 - a backup and repeatable migration/rollback procedure exists;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
 - the runtime role is verified as non-superuser and non-BYPASSRLS;
 - cross-tenant read/write/delete and missing-context tests pass against the production-like database;
-- application services are wired to derive tenant scope only from the authenticated Principal; the runtime factory now enforces this selection.
+- application services are wired to derive tenant scope only from the authenticated Principal; the graph and document factories enforce this selection.
 
-CI starts an ephemeral PostgreSQL 16 service, applies the migration as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real database RLS integration tests using that runtime role.
+CI starts an ephemeral PostgreSQL 16 service, applies migrations 0001 and 0002 as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real graph/document RLS integration tests using that runtime role.
