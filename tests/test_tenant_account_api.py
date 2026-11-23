@@ -1,4 +1,3 @@
-import hashlib
 import tempfile
 import unittest
 
@@ -30,7 +29,7 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.app.register_blueprint(create_api_blueprint(Graph()))
         self.app.wsgi_app = ApiTokenMiddleware(
             self.app.wsgi_app,
-            token="",
+            token="system-admin-token",
             credentials_json="",
             credential_store=self.store,
         )
@@ -167,12 +166,11 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.assertEqual(issued["tenant_id"], "tenant-alpha")
 
     def test_reserved_system_admin_cannot_use_tenant_account_api(self):
-        system = self.store.issue if False else None
         response = self.client.get(
             "/api/tenant/credentials",
-            headers={"Authorization": "Bearer invalid"},
+            headers=self.auth("system-admin-token"),
         )
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":
