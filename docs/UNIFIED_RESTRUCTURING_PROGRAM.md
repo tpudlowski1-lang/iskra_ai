@@ -80,9 +80,11 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Principal, allowed roles, server-derived tenant context and deny-by-default route policies are implemented.
 - The shared `API_TOKEN` remains the compatibility system administrator credential; hashed static credentials and an opt-in SQLite credential registry support tenant principals, expiry and revocation.
 - WSGI resolves identity only from verified credentials. Tenant API routes pass the complete Principal into the tenant store factory; client tenant IDs are ignored.
+- Local credential operator CLI requires explicit confirmation, requires an extra flag for admin-role issuance, and uses the same credential database as WSGI.
 - The global compatibility graph is system-admin-only; tenant routes reject the system principal and scope all graph operations to the verified tenant.
 - Tests cover missing/invalid credentials, role boundaries, tenant spoofing, cross-tenant reads/writes, expiry, revocation, backend failure and tenant initialization races.
-- Remaining: user provisioning/account lifecycle, controlled token issuance/rotation, audit events and operational secret management.
+- Local operator CLI now supports issue/rotate/revoke/audit; lifecycle events are transactionally recorded, rotation cannot elevate roles, and raw tokens never enter audit records.
+- Remaining: public user provisioning/account lifecycle, recovery, self-service rotation and operational secret delivery/key management.
 - Exit gate for production identity is still open until those lifecycle and operational controls are completed.
 
 ### Stream C — Persistence and migration
