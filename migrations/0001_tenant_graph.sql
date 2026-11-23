@@ -60,8 +60,8 @@ BEGIN
             USING (tenant_id = current_setting('iskra.tenant_id', true))
             WITH CHECK (tenant_id = current_setting('iskra.tenant_id', true));
     END IF;
-END
-$$;
+END;
+$;
 
 INSERT INTO iskra_schema_migrations(version) VALUES (1)
 ON CONFLICT (version) DO NOTHING;
