@@ -4,7 +4,7 @@
 
 This branch adds bounded PDF/DOCX/TXT parsers, a private tenant-scoped SQLite repository and a Principal-bound service. **No document HTTP routes are registered.** The code is not available to customers and must not be treated as production-ready RAG.
 
-The service is intentionally kept behind the application boundary. The default service parser now runs in a spawned, resource-limited process; the remaining operational controls and a stronger OS/container sandbox are still required.
+The service is intentionally kept behind the application boundary. No HTTP routes are registered and no customer uploads are enabled. The default service parser now runs in a spawned, resource-limited process; the remaining operational controls and a stronger OS/container sandbox are still required.
 
 ## Current limits
 
@@ -15,13 +15,14 @@ The service is intentionally kept behind the application boundary. The default s
 - Chunks: 1,000 characters with 150-character overlap; maximum 2,000 chunks.
 - Supported formats: PDF, DOCX, TXT.
 - PDF parsing uses pypdf 7.1.1; DOCX XML parsing uses defusedxml 0.7.1.
-- SQLite search is tenant-filtered lexical FTS5; PostgreSQL search uses parameterized `plainto_tsquery('simple', ...)` and a GIN index. Both return excerpts with source IDs. No embedding, reranker or generated answer is implemented.
+- Search is tenant-filtered lexical FTS5 and returns excerpts with source IDs. No embedding, reranker or generated answer is implemented.
 
 ## Security properties
 
 - Every service method requires a verified `Principal`; system principal is rejected.
 - Tenant scope is derived only from `Principal.tenant_id`, never from request data.
-- The repository uses composite tenant/document/chunk keys and a composite foreign key.
+- The SQLite repository uses composite tenant/document/chunk keys and a composite foreign key.
+- The PostgreSQL repository uses the same composite tenant keys/FK, generated `tsvector`, GIN index and RLS ENABLE + FORCE; every operation requires a verified Principal and transaction-local tenant scope.
 - FTS search joins on tenant ID, document ID and chunk ID, then filters by tenant ID.
 - Document/chunk/FTS writes and deletes are transactional.
 - Duplicate detection is scoped by tenant.
@@ -34,16 +35,15 @@ The service is intentionally kept behind the application boundary. The default s
 - This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
-- SQLite is single-instance only. PostgreSQL document/chunk tables, composite tenant keys, FORCE RLS and GIN full-text index are implemented in migration `0002_tenant_documents.sql` and tested with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
-- `ISKRA_DOCUMENT_STORAGE_BACKEND=postgres` selects the PostgreSQL repository through the internal factory; SQLite remains the default. The shared `ISKRA_POSTGRES_DSN` is required and migrations are never applied automatically.
+- SQLite is single-instance only. A PostgreSQL document repository and migration `0002_tenant_documents.sql` are now available and integration-tested with a separate NOSUPERUSER/NOBYPASSRLS role; PostgreSQL remains opt-in.
 - FTS5 is lexical retrieval only. Retrieved content must be treated as untrusted data; no model prompt or answer generation is connected.
-- The service and repository factory are not wired into `app.py` or WSGI and have no public routes.
+- The service is not wired into `app.py` or WSGI and has no public routes.
 
 ## Required next gates
 
 1. Add a dedicated low-privilege OS/container worker with no network access and enforce CPU/RAM/time quotas.
 2. Extend adversarial PDF/ZIP/XML fixtures with process-kill, decompression and memory exhaustion cases.
-3. Rehearse the PostgreSQL document migration, backup/restore and staging cutover.
+3. Add PostgreSQL document/chunk schema, composite tenant keys and RLS.
 4. Add malware scanning/quarantine strategy, audit events, quotas, retention and secure backup/restore.
 5. Add route-level authorization and end-to-end cross-tenant read/search/delete tests.
 6. Add retrieval evaluation, prompt-injection tests and citations before any generated answer.
