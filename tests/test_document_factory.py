@@ -46,6 +46,7 @@ class DocumentRepositoryFactoryTests(unittest.TestCase):
                 port=10000,
                 data_dir=directory,
                 tenant_storage_backend="postgres",
+                document_storage_backend="postgres",
                 postgres_dsn="postgresql://app:secret@localhost/iskra",
             )
             postgres_repository = DocumentRepositoryFactory.from_settings(postgres_settings).build()
