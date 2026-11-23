@@ -38,11 +38,16 @@ def load_api_credentials(raw):
         if digest in credentials:
             raise CredentialConfigError("Duplicate token_sha256 in credential configuration")
         try:
-            credentials[digest] = Principal(
+            principal = Principal(
                 subject=record.get("subject"),
                 tenant_id=record.get("tenant_id"),
                 roles=frozenset(record.get("roles", [])),
             )
+            if principal.tenant_id == "system":
+                raise CredentialConfigError(
+                    "The reserved system tenant may only use the fixed SYSTEM_ADMIN identity"
+                )
+            credentials[digest] = principal
         except (TypeError, ValueError) as exc:
             raise CredentialConfigError(f"Credential entry {index} has an invalid principal") from exc
 
