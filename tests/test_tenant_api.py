@@ -2,6 +2,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask
@@ -73,6 +74,44 @@ class TenantGraphApiTests(unittest.TestCase):
 
     def auth(self, token):
         return {"Authorization": f"Bearer {token}"}
+
+    def test_load_or_initialize_preserves_an_existing_tenant_graph(self):
+        store = SQLiteGraphStore(self.database, tenant_id="tenant-existing")
+        existing = make_foundation()
+        existing["neurons"]["tenant-private"] = {
+            "label": "Istniejące dane", "weight": 0.7, "created": 4.0
+        }
+        store.save(existing)
+
+        result = store.load_or_initialize(make_foundation())
+
+        self.assertIn("tenant-private", result["neurons"])
+        self.assertEqual(result, store.load())
+
+    def test_concurrent_first_reads_initialize_tenant_exactly_once(self):
+        tenant_id = "tenant-concurrent"
+        stores = [
+            SQLiteGraphStore(self.database, tenant_id=tenant_id)
+            for _ in range(8)
+        ]
+
+        def initialize(index):
+            graph = make_foundation()
+            graph["neurons"][f"initializer-{index}"] = {
+                "label": f"initializer-{index}", "weight": 0.5, "created": float(index)
+            }
+            return stores[index].load_or_initialize(graph)
+
+        with ThreadPoolExecutor(max_workers=len(stores)) as executor:
+            snapshots = list(executor.map(initialize, range(len(stores))))
+
+        self.assertTrue(all(snapshot == snapshots[0] for snapshot in snapshots))
+        markers = [
+            node_id for node_id in snapshots[0]["neurons"]
+            if node_id.startswith("initializer-")
+        ]
+        self.assertEqual(len(markers), 1)
+        self.assertEqual(len(snapshots[0]["neurons"]), len(PILLARS) + 1)
 
     def test_tenant_get_starts_with_all_twelve_foundational_pillars(self):
         response = self.client.get("/api/tenant/network", headers=self.auth(self.token_a))
