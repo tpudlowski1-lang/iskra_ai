@@ -26,14 +26,12 @@ def create_api_blueprint(graph, tenant_store_factory=None):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
         principal = principal_from_environ(request.environ)
         try:
-            store = tenant_store_factory(principal.tenant_id)
-            snapshot = store.load()
-            if not snapshot["neurons"]:
-                # Each tenant starts with the same twelve foundational pillars,
-                # but all subsequent graph data is stored in its own tenant scope.
-                store.save(graph.fundament)
-                snapshot = store.load()
+            # The factory receives the verified principal, not a caller tenant ID.
+            store = tenant_store_factory(principal)
+            snapshot = store.load_or_initialize(graph.fundament)
             return jsonify(snapshot)
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
         except (OSError, sqlite3.Error):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
 
@@ -70,7 +68,7 @@ def create_api_blueprint(graph, tenant_store_factory=None):
 
         principal = principal_from_environ(request.environ)
         try:
-            store = tenant_store_factory(principal.tenant_id)
+            store = tenant_store_factory(principal)
             store.save(payload)
             return jsonify({
                 "status": "saved",
@@ -78,6 +76,8 @@ def create_api_blueprint(graph, tenant_store_factory=None):
                 "neurons": len(payload.get("neurons", {})),
                 "synapses": len(payload.get("synapses", [])),
             })
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
         except ValueError as exc:
             return jsonify({"error": "invalid_graph_payload", "message": str(exc)}), 400
         except (OSError, sqlite3.Error):
