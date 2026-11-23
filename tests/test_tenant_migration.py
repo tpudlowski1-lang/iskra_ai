@@ -12,6 +12,7 @@ from scripts.migrate_tenant_sqlite_to_postgres import (
     create_private_backup,
     migrate_snapshots,
     read_tenant_snapshots,
+    resolve_postgres_dsn,
     sha256_file,
 )
 
@@ -42,6 +43,35 @@ class TenantMigrationUtilityTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_migration_dsn_prefers_dedicated_setting_and_never_guesses_database_url(self):
+        self.assertEqual(
+            resolve_postgres_dsn(
+                environ={
+                    "ISKRA_POSTGRES_MIGRATION_DSN": "postgresql://migration",
+                    "ISKRA_POSTGRES_DSN": "postgresql://runtime",
+                    "DATABASE_URL": "postgresql://unrelated",
+                }
+            ),
+            "postgresql://migration",
+        )
+        self.assertEqual(
+            resolve_postgres_dsn(
+                environ={
+                    "ISKRA_POSTGRES_DSN": "postgresql://runtime",
+                    "DATABASE_URL": "postgresql://unrelated",
+                }
+            ),
+            "postgresql://runtime",
+        )
+        self.assertEqual(
+            resolve_postgres_dsn(environ={"DATABASE_URL": "postgresql://unrelated"}),
+            "",
+        )
+        self.assertEqual(
+            resolve_postgres_dsn("postgresql://explicit", environ={}),
+            "postgresql://explicit",
+        )
 
     def test_backup_is_consistent_private_and_hashable(self):
         backup = create_private_backup(self.source, self.backup_dir)
