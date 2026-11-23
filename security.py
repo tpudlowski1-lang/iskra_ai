@@ -4,11 +4,14 @@ import hmac
 import json
 import os
 
+from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY
+
 
 class ApiTokenMiddleware:
     def __init__(self, application, token=None):
         self.application = application
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
+        self.principal = SYSTEM_ADMIN
 
     @staticmethod
     def _provided_token(environ):
@@ -69,4 +72,7 @@ class ApiTokenMiddleware:
                     headers.append((name, value))
             return start_response(status, headers, exc_info)
 
+        # Identity is attached only after successful credential verification.
+        # Request parameters and headers can never override this server-side value.
+        environ[PRINCIPAL_ENV_KEY] = self.principal
         return self.application(environ, secured_start_response)
