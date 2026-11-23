@@ -2,7 +2,7 @@
 
 ## Scope
 
-Draft PR #82 adds API operations for a tenant administrator to manage API credentials within the administrator's authenticated tenant. It does not add public signup, password authentication, account recovery, email verification, billing or an end-user admin interface.
+Draft PR #82 adds API operations for a tenant administrator to manage API credentials within the administrator's authenticated tenant. Draft PR #83 adds a minimal tenant-admin console inside /assistant for listing, issuing, rotating and revoking credentials. It does not add public signup, password authentication, account recovery, email verification or billing.
 
 ## Prerequisites
 
