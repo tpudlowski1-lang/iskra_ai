@@ -14,6 +14,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] SQLite tenant graph first-read initialization is atomic and concurrency-tested.
 - [x] PostgreSQL graph adapter and migration with RLS ENABLE + FORCE are implemented and integration-tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - [x] Dry-run-first SQLite tenant migration utility creates private backups, checksums, validates snapshots, refuses overwrites by default, migrates all tenants in one transaction and verifies semantic read-back before commit.
+- [x] Internal tenant document service with bounded PDF/DOCX/TXT parsing, private SQLite/FTS5 repository and resource-limited parser process; no HTTP routes or customer uploads are enabled.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 
 ## Not yet production-ready
@@ -21,7 +22,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
-- [ ] Document service PR #34 is still separate and unexposed: require OS/container sandboxing, malware quarantine, PostgreSQL document schema/RLS, audit, quotas, retention and secure backup/restore before routes or uploads.
+- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox, malware quarantine, PostgreSQL document schema/RLS, audit events, quotas, retention and secure backup/restore. The current worker is resource-limited but still runs under the application OS user.
 - [ ] Tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
