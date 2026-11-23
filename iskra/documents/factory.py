@@ -24,7 +24,7 @@ class DocumentRepositoryFactory:
 
     @classmethod
     def from_settings(cls, settings):
-        backend = getattr(settings, "tenant_storage_backend", None)
+        backend = getattr(settings, "document_storage_backend", None)
         data_dir = getattr(settings, "data_dir", None)
         postgres_dsn = getattr(settings, "postgres_dsn", "")
         sqlite_path = None
