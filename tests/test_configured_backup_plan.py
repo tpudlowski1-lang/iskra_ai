@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from scripts.backup_iskra_data import BackupError, configured_backup_plan, main
 
@@ -71,7 +72,7 @@ class ConfiguredBackupPlanTests(unittest.TestCase):
         self.assertNotIn("sqlite/private_documents.sqlite3", {item["name"] for item in plan["resources"]})
 
     def test_create_from_config_fails_closed_when_postgres_is_active(self):
-        with unittest.mock.patch.dict(
+        with patch.dict(
             os.environ,
             {
                 "DATA_DIR": str(self.data_dir),
