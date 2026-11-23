@@ -26,6 +26,11 @@ services:
       # Provider allowlist is deny-by-default in the runtime router.
       - key: LLM_ALLOWED_PROVIDERS
         value: ""
+      # Per-tenant approval is separately deny-by-default; configure only after review.
+      - key: ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON
+        value: "{}"
+      - key: ISKRA_ENABLE_DOCUMENT_INGESTION
+        value: "false"
 
       # Add secret values in the Render dashboard; never commit API keys.
       - key: OPENAI_API_KEY
