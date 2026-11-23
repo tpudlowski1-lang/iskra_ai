@@ -246,8 +246,9 @@
 
   connectForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const candidate = tokenInput.value.trim();
+    let candidate = tokenInput.value.trim();
     if (!candidate || credentialMutationPending) return;
+    tokenInput.value = "";
     connectButton.disabled = true;
     tokenInput.disabled = true;
     setStatus("Sprawdzam dostęp…");
@@ -284,7 +285,6 @@
       if (generation !== sessionGeneration) return;
       await loadDocuments();
       if (generation !== sessionGeneration) return;
-      tokenInput.value = "";
       workspace.hidden = false;
       logoutButton.hidden = false;
       sendButton.disabled = false;
@@ -302,6 +302,8 @@
       csrfToken = "";
       setStatus(error.message || "Nie udało się połączyć.", true);
     } finally {
+      candidate = "";
+      tokenInput.value = "";
       connectButton.disabled = credentialMutationPending;
       tokenInput.disabled = credentialMutationPending;
     }
