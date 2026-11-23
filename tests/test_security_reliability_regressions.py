@@ -53,11 +53,12 @@ class RouterResilienceTests(unittest.TestCase):
         def broken(_):
             calls.append(("primary", _ACTIVE_DEADLINE.get()))
             raise TimeoutError("simulated provider timeout")
-        router.primary = "primary"
-        router.fallbacks = ["fallback"]
+        router.primary = "deepseek"
+        router.fallbacks = ["openai"]
+        router.allowed_providers = {"deepseek", "openai"}
         router.providers = {
-            "primary": broken,
-            "fallback": lambda _: calls.append(("fallback", _ACTIVE_DEADLINE.get())) or '{"answer": "ok"}',
+            "deepseek": broken,
+            "openai": lambda _: calls.append(("fallback", _ACTIVE_DEADLINE.get())) or '{"answer": "ok"}',
         }
         self.assertEqual(router.generate("hello"), '{"answer": "ok"}')
         self.assertEqual([item[0] for item in calls], ["primary", "fallback"])
