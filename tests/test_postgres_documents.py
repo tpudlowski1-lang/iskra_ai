@@ -61,10 +61,10 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
 
     def test_tenant_scoped_add_search_list_and_delete(self):
         alpha = self.service.add_document(
-            self.alpha, "alpha.txt", b"Poufna oferta ALFA-440 dla najemcy."
+            self.alpha, "alpha.txt", "Poufna oferta ALFA-440 dla najemcy.".encode("utf-8")
         )
         beta = self.service.add_document(
-            self.beta, "beta.txt", b"Poufna oferta BETA-550 dla najemcy."
+            self.beta, "beta.txt", "Poufna oferta BETA-550 dla najemcy.".encode("utf-8")
         )
         self.assertEqual(len(self.service.list_documents(self.alpha)), 1)
         self.assertEqual(len(self.service.list_documents(self.beta)), 1)
@@ -78,7 +78,7 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
         self.assertEqual(self.service.list_documents(self.alpha), [])
 
     def test_duplicate_detection_is_scoped_to_tenant(self):
-        data = b"Ta sama treść dokumentu dla dwóch różnych tenantów."
+        data = "Ta sama treść dokumentu dla dwóch różnych tenantów.".encode("utf-8")
         first = self.service.add_document(self.alpha, "first.txt", data)
         duplicate = self.service.add_document(self.alpha, "renamed.txt", data)
         other_tenant = self.service.add_document(self.beta, "same.txt", data)
