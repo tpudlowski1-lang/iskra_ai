@@ -71,5 +71,41 @@ class SQLiteGraphStoreTests(unittest.TestCase):
             SQLiteGraphStore(self.db_path, tenant_id=" ")
 
 
+
+    def test_load_or_initialize_preserves_an_existing_tenant_graph(self):
+        store = SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
+        initial = {
+            "neurons": {"n_initial": {"label": "Existing", "weight": 0.7, "created": 1}},
+            "synapses": [],
+        }
+        default = {
+            "neurons": {"n_default": {"label": "Default", "weight": 1.0, "created": 1}},
+            "synapses": [],
+        }
+        store.save(initial)
+        self.assertEqual(store.load_or_initialize(default), initial)
+
+    def test_concurrent_first_reads_atomically_initialize_tenant(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+
+        store = SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
+        default = {
+            "neurons": {"n_default": {"label": "Default", "weight": 1.0, "created": 1}},
+            "synapses": [],
+        }
+        workers = 8
+        barrier = threading.Barrier(workers)
+
+        def initialize(_):
+            barrier.wait()
+            return store.load_or_initialize(default)
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            snapshots = list(pool.map(initialize, range(workers)))
+
+        self.assertTrue(all(snapshot == default for snapshot in snapshots))
+        self.assertEqual(store.load(), default)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
