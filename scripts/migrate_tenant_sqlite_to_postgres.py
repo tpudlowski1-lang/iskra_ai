@@ -95,31 +95,68 @@ def verify_private_backup(backup_path, expected_sha256):
 
 
 def restore_private_backup(backup_path, target_path, expected_sha256):
-    """Atomically restore a verified backup to a NEW path; never overwrite."""
-    verified = verify_private_backup(backup_path, expected_sha256)
+    """Restore a checksum-verified snapshot from one opened inode to a NEW path."""
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise MigrationError("Wymagana jest poprawna suma SHA-256 kopii")
     target = os.path.abspath(target_path)
-    if target == verified["path"]:
+    source = os.path.abspath(backup_path)
+    if target == source:
         raise MigrationError("Ścieżka docelowa nie może wskazywać pliku kopii")
     directory = os.path.dirname(target)
     os.makedirs(directory, mode=0o700, exist_ok=True)
-    descriptor, temporary = tempfile.mkstemp(prefix=".iskra-restore-", dir=directory)
+
+    # Open once without following symlinks. Hash, validate and publish the same
+    # private staged bytes; do not verify one pathname and later reopen it.
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        with os.fdopen(descriptor, "wb") as output, open(verified["path"], "rb") as source:
-            shutil.copyfileobj(source, output, length=1024 * 1024)
+        source_fd = os.open(source, flags)
+    except OSError as exc:
+        raise MigrationError("Kopia musi być istniejącym zwykłym plikiem") from exc
+
+    descriptor, temporary = tempfile.mkstemp(prefix=".iskra-restore-", dir=directory)
+    digest = hashlib.sha256()
+    try:
+        with os.fdopen(source_fd, "rb") as input_file, os.fdopen(descriptor, "wb") as output:
+            if not os.path.isfile(source) or not __import__("stat").S_ISREG(os.fstat(input_file.fileno()).st_mode):
+                raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
+            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+                output.write(chunk)
             output.flush()
             os.fsync(output.fileno())
+
+        actual = digest.hexdigest()
+        if not hmac.compare_digest(actual, expected_sha256.lower()):
+            raise MigrationError("Suma SHA-256 kopii nie zgadza się")
+
+        try:
+            with closing(sqlite3.connect(f"file:{temporary}?mode=ro", uri=True)) as connection:
+                integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise MigrationError("Kontrola integralności kopii SQLite nie powiodła się")
+                if connection.execute("PRAGMA foreign_key_check").fetchall():
+                    raise MigrationError("Kopia SQLite zawiera naruszenia kluczy obcych")
+                tables = {
+                    row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                if not {"graph_neurons", "graph_synapses"}.issubset(tables):
+                    raise MigrationError("Kopia nie zawiera schematu grafu tenantów")
+        except sqlite3.DatabaseError as exc:
+            raise MigrationError("Plik kopii nie jest poprawną bazą SQLite") from exc
+
         os.chmod(temporary, 0o600)
-        # A hard-link publish is atomic and fails if target already exists.
+        # Hard-link publication is atomic and never replaces an existing path.
         os.link(temporary, target)
         os.unlink(temporary)
+        directory_fd = os.open(directory, os.O_RDONLY)
         try:
-            directory_fd = os.open(directory, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        except OSError:
-            pass
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except FileExistsError:
         raise MigrationError("Plik docelowy już istnieje; odtwarzanie przerwane bez nadpisania") from None
     except Exception:
@@ -130,7 +167,7 @@ def restore_private_backup(backup_path, target_path, expected_sha256):
         raise
     return {
         "restored_path": target,
-        "sha256": verified["sha256"],
+        "sha256": actual,
         "bytes": os.path.getsize(target),
         "status": "restored_verified",
     }
