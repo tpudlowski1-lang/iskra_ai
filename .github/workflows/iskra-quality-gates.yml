@@ -34,6 +34,7 @@ jobs:
       ISKRA_TEST_POSTGRES_ADMIN_DSN: postgresql://postgres:postgres@localhost:5432/iskra_test
       ISKRA_TEST_POSTGRES_APP_DSN: postgresql://iskra_app_test:iskra_test_password@localhost:5432/iskra_test
       ENABLE_AUTONOMOUS_LOOP: "false"
+      ISKRA_TESTING: "true"
       ISKRA_RATE_LIMIT_ENABLED: "false"
       LLM_PROVIDER: deepseek
       LLM_FALLBACK_PROVIDERS: openai,gemini
