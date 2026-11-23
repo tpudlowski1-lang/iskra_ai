@@ -86,6 +86,15 @@ class TenantMigrationUtilityTests(unittest.TestCase):
         with open(restored, "rb") as handle:
             self.assertEqual(handle.read(), b"keep-existing-content")
 
+    def test_restore_rejects_symlink_backup(self):
+        backup = create_private_backup(self.source, self.backup_dir)
+        link = os.path.join(self.tmp.name, "backup-link.sqlite3")
+        os.symlink(backup, link)
+        restored = os.path.join(self.tmp.name, "restored-from-link.sqlite3")
+        with self.assertRaises(MigrationError):
+            restore_private_backup(link, restored, sha256_file(backup))
+        self.assertFalse(os.path.exists(restored))
+
     def test_backup_verification_rejects_non_sqlite_file(self):
         corrupt = os.path.join(self.tmp.name, "corrupt.sqlite3")
         with open(corrupt, "wb") as handle:
