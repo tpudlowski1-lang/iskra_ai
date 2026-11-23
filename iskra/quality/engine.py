@@ -35,7 +35,7 @@ def evaluate_response(response: str, checks: dict[str, Any]) -> list[CheckResult
 
     max_words = checks.get("max_words")
     if max_words is not None:
-        count = len(re.findall(r"\\b[\\w'-]+\\b", response, flags=re.UNICODE))
+        count = len(re.findall(r"\b[\w'-]+\b", response, flags=re.UNICODE))
         passed = count <= int(max_words)
         results.append(CheckResult("max_words", passed, f"{count} <= {max_words}" if passed else f"{count} > {max_words}"))
 
