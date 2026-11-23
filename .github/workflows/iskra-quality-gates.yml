@@ -3,7 +3,7 @@ name: Iskra unified quality gates
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [iskra-unified-core, refactor/modular-core, security/credential-store-v2, security/wsgi-auth-integration-v1, integration/full-release-candidate-v1]
+    branches: [iskra-unified-core, refactor/modular-core, security/credential-store-v2, security/wsgi-auth-integration-v1, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1]
   push:
     branches: [refactor/modular-core, storage/postgresql-tenant, integration/full-release-candidate-v1]
   workflow_dispatch:
