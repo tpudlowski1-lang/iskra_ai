@@ -10,6 +10,7 @@ import uuid
 from iskra.security.principal import Principal
 from iskra.documents.parsers import (
     ALLOWED_EXTENSIONS,
+    CHUNK_OVERLAP,
     CHUNK_SIZE,
     MAX_CHUNKS,
     MAX_EXTRACTED_CHARS,
