@@ -95,6 +95,9 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON/SQLite-to-PostgreSQL cutover, rollback and restore drills.
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
+- A dry-run-first SQLite tenant DB migration utility creates a private online backup and SHA-256 manifest, validates source snapshots, refuses overwrites by default, and migrates all tenants in one transaction with semantic read-back before commit.
+- Remaining: run the migration against a production-like backup, rehearse restore, define cutover/rollback operations, and separately decide how the legacy global JSON graph is retained or migrated.
+
 ### Stream D — Documents and retrieval
 - Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its useful ideas are retained, but the monolithic branch is not merged.
 - Rebuild the tenant document prototype behind modular service/repository interfaces.

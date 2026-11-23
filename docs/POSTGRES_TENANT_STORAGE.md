@@ -31,6 +31,29 @@ Apply the migration with a separate schema-owner/migration identity before deplo
 
 The custom transaction-local setting is a defense against accidental unscoped queries and application-layer tenant mistakes. It is not a substitute for preventing SQL injection or for protecting against arbitrary malicious code running with the application's database credentials.
 
+## SQLite tenant database migration
+
+The operator utility `python -m scripts.migrate_tenant_sqlite_to_postgres` is dry-run-first:
+
+- creates a consistent SQLite backup using the online backup API;
+- writes the backup and manifest with private filesystem permissions (directory 0700, files 0600);
+- records a SHA-256 checksum without including the PostgreSQL DSN or secrets;
+- validates every source tenant graph before connecting to PostgreSQL;
+- reports tenant and graph counts without changing PostgreSQL by default;
+- requires explicit `--apply` to write;
+- refuses to overwrite any target tenant unless `--replace-existing` is also explicitly supplied;
+- migrates every tenant in one PostgreSQL transaction and verifies semantic read-back before commit, so an error rolls back the entire migration.
+
+Example dry run:
+
+```bash
+python -m scripts.migrate_tenant_sqlite_to_postgres \
+  --source /path/to/iskra_tenants.sqlite3 \
+  --backup-dir /secure/iskra-backups
+```
+
+Only after reviewing the backup, checksum, report, target role and restore plan should an operator set `ISKRA_POSTGRES_DSN` through the secret manager and add `--apply`. Avoid passing secrets as command-line arguments because process listings may expose them. Use `--replace-existing` only for a deliberately approved overwrite. This utility migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
+
 ## Deployment and migration status
 
 The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
