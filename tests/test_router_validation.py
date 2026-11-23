@@ -1,5 +1,7 @@
 import json
+import os
 import unittest
+from unittest.mock import patch
 
 from iskra.llm.router import RouterProvider
 
@@ -13,11 +15,22 @@ class RouterPayloadValidationTests(unittest.TestCase):
             {"neurons": {}, "synapses": []},
         )
 
-    def test_non_object_provider_response_falls_through_to_next_provider(self):
+    def test_external_providers_are_disabled_when_allowlist_is_empty(self):
+        with patch.dict(os.environ, {"LLM_ALLOWED_PROVIDERS": ""}):
+            router = RouterProvider()
+        calls = []
+        router.providers = {
+            "deepseek": lambda _: calls.append("deepseek") or '{"ok": true}',
+        }
+        self.assertIsNone(router.generate("sensitive test prompt"))
+        self.assertEqual(calls, [])
+
+    def test_non_object_provider_response_falls_through_to_allowlisted_provider(self):
         router = RouterProvider()
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai"]
+        router.allowed_providers = {"deepseek", "openai"}
         router.providers = {
             "deepseek": lambda _: calls.append("deepseek") or "[]",
             "openai": lambda _: calls.append("openai") or '{"neurons": {}, "synapses": []}',
@@ -26,12 +39,31 @@ class RouterPayloadValidationTests(unittest.TestCase):
         self.assertEqual(json.loads(result), {"neurons": {}, "synapses": []})
         self.assertEqual(calls, ["deepseek", "openai"])
 
+    def test_unapproved_fallback_never_receives_prompt(self):
+        router = RouterProvider()
+        calls = []
+        router.primary = "deepseek"
+        router.fallbacks = ["openai"]
+        router.allowed_providers = {"deepseek"}
+        router.providers = {
+            "deepseek": lambda _: calls.append("deepseek") or "not json",
+            "openai": lambda _: calls.append("openai") or '{"ok": true}',
+        }
+        self.assertIsNone(router.generate("sensitive test prompt"))
+        self.assertEqual(calls, ["deepseek"])
+
     def test_invalid_json_provider_response_is_rejected(self):
         router = RouterProvider()
         router.primary = "deepseek"
         router.fallbacks = []
+        router.allowed_providers = {"deepseek"}
         router.providers = {"deepseek": lambda _: "not json"}
         self.assertIsNone(router.generate("test"))
+
+    def test_unknown_allowlist_entries_do_not_enable_any_provider(self):
+        with patch.dict(os.environ, {"LLM_ALLOWED_PROVIDERS": "deepssek,local"}):
+            router = RouterProvider()
+        self.assertEqual(router.allowed_providers, set())
 
 
 if __name__ == "__main__":
