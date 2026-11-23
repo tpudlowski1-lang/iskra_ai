@@ -25,6 +25,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 ## Not yet production-ready
 - [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
 - [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
+- [ ] Complete production-grade DLP/data classification and prove that outbound minimization covers the application's supported data classes; the current regex minimizer is best-effort only.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [x] SQLite private-path hardening rejects symlinked ancestors and applies 0700/0600 permissions (TOCTOU/OS ownership limits documented).
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
