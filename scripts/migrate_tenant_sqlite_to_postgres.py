@@ -448,11 +448,21 @@ def write_private_manifest(path, payload):
         raise
 
 
+def resolve_postgres_dsn(cli_value=None, environ=None):
+    """Resolve the migration target explicitly; never guess from DATABASE_URL."""
+    if isinstance(cli_value, str) and cli_value.strip():
+        return cli_value.strip()
+    env = os.environ if environ is None else environ
+    migration_dsn = str(env.get("ISKRA_POSTGRES_MIGRATION_DSN", "") or "").strip()
+    runtime_dsn = str(env.get("ISKRA_POSTGRES_DSN", "") or "").strip()
+    return migration_dsn or runtime_dsn or ""
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="Ścieżka do iskra_tenants.sqlite3")
     parser.add_argument("--backup-dir", required=True, help="Prywatny katalog kopii")
-    parser.add_argument("--postgres-dsn", default=os.environ.get("ISKRA_POSTGRES_DSN") or os.environ.get("DATABASE_URL"))
+    parser.add_argument("--postgres-dsn", default=resolve_postgres_dsn(), help="Docelowy DSN; najpierw ISKRA_POSTGRES_MIGRATION_DSN, następnie ISKRA_POSTGRES_DSN")
     parser.add_argument("--apply", action="store_true", help="Wykonaj zapis do PostgreSQL; bez tego tylko dry-run")
     parser.add_argument("--replace-existing", action="store_true", help="Jawnie zastąp istniejące grafy tenantów")
     args = parser.parse_args(argv)
