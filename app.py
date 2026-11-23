@@ -10,6 +10,7 @@ from flask import Flask, jsonify, render_template_string
 from iskra.config import load_settings
 from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
+from iskra.security.rate_limit import create_rate_limiter
 from iskra.storage.tenant import TenantGraphStoreFactory
 
 settings = load_settings()
@@ -20,6 +21,7 @@ PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 app = install_security_headers(Flask(__name__))
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+limiter = create_rate_limiter(app)
 
 # =========================
 # MODULAR DOMAIN IMPORTS
