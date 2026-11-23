@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current reviews:** PR #4 (modular core) and PR #29 (tenant data migration tooling); do not merge automatically  
+**Current reviews:** PR #4 (modular core) and PR #30 (tenant data migration tooling); do not merge automatically  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -152,8 +152,8 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 - PR #28 has been merged into the canonical integration branch `refactor/modular-core` at `ce228e04abf2c523c36d2ac31beb41370ecece0a`.
 - The merge includes trusted request principals, role policy, digest-only credential storage with expiry/revocation, the principal-bound SQLite tenant API, PostgreSQL graph schema/adapter and RLS tests.
-- PR #29 adds dry-run-first SQLite tenant database backup and PostgreSQL migration tooling. Its CI result is pending and must be recorded against its exact HEAD.
-- The live tenant API currently uses SQLite; PostgreSQL is not yet activated in the live application. The separate legacy global JSON graph is retained.
+- PR #30 adds dry-run-first SQLite tenant database backup and PostgreSQL migration tooling, and carries tests for opt-in PostgreSQL runtime selection. Its CI result is pending and must be recorded against its exact HEAD.
+- The live tenant API currently uses SQLite; PostgreSQL is available behind explicit `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` settings, but SQLite remains the default until a staging migration and restore drill pass. The separate legacy global JSON graph is retained.
 
 Do not infer production readiness from a merged code PR. Production database cutover, real backup/restore rehearsal, account provisioning and operational audit remain open.
 
