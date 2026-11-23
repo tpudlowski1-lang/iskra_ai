@@ -23,7 +23,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
-- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. Draft PR #82 adds tenant-admin API issue/list/rotate/revoke operations with tenant scoping, but no admin UI, recovery or onboarding flow.
+- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. Draft PR #82 adds tenant-admin API issue/list/rotate/revoke operations with tenant scoping, and Draft PR #83 adds a minimal `/assistant` admin console. Neither is merged or production-approved; public signup, recovery and full onboarding are still absent.
 - [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
 - [ ] Complete production-grade DLP/data classification and prove that outbound minimization covers the application's supported data classes; the current regex minimizer is best-effort only.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
