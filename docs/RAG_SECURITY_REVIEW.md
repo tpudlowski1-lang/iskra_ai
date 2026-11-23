@@ -111,4 +111,4 @@ Storage interfaces must accept the trusted Principal or an already-verified tena
 
 ## Status
 
-Historical prototype: audited as a reference only. No document ingestion or customer RAG code has been enabled in the modular production path. The next implementation stage is a separately tested, feature-flagged document service with secure parsing and tenant-safe persistence.
+Historical prototype: audited as a reference only. A separate draft PR #34 now contains bounded PDF/DOCX/TXT parsing, a tenant-scoped SQLite/FTS5 repository, a Principal-bound service and a resource-limited spawned parser process. It has no HTTP routes and is not merged into the modular core. The worker still runs under the same OS user and is not a full sandbox; public uploads remain disabled pending a low-privilege OS/container boundary, PostgreSQL document schema/RLS and the remaining operational gates.
