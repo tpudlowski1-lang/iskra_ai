@@ -27,7 +27,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 
 The shared system `API_TOKEN` protects the legacy application routes. The security modules also implement hashed tenant credential storage, expiry/revocation and operator issue/rotate/revoke commands. Verified tenant principals are derived from credentials on the server; tenant scope must never come from request input.
 
-This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. Draft PR #88 carries the tenant-scoped credential API, provider policy and minimal tenant-admin console, but they are not yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
+This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. Draft PR #89 carries the tenant-scoped chat/API, provider policy, outbound minimization and minimal tenant-admin console, but these features are not yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ This is **not yet a complete customer account product**: public signup, account 
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
 - `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
-- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. Draft PR #88 carries tenant-scoped credential lifecycle endpoints, provider policy and a minimal `/assistant` admin console on a rebased feature stack.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. Draft PR #89 carries tenant-scoped credential lifecycle endpoints, provider policy and a minimal `/assistant` admin console on the rebased release-candidate stack.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
 - `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
 - `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
@@ -57,7 +57,7 @@ Tenant SQLite graph and document stores validate every path component, reject sy
 
 An internal tenant document service supports bounded PDF, DOCX and TXT parsing, tenant-scoped SQLite/FTS5 storage, and an optional PostgreSQL repository with tenant RLS. Its parser runs in a resource-limited child process and validates the returned JSON payload.
 
-**No document HTTP routes are registered, customer uploads are disabled, and no RAG answer generation is connected.** The parser worker clears inherited environment variables before parsing, applies a restrictive umask and file-descriptor limit, but is not a full OS/container sandbox: it runs under the same OS user and has no seccomp or network namespace policy. Do not upload customer documents or enable this service until a dedicated low-privilege no-network sandbox, malware quarantine, retention, audit, quotas and restore controls are reviewed and tested.
+Authenticated tenant document list/search/delete routes and source-grounded chat are implemented in Draft PR #89. Upload is admin-only and disabled by default. The parser worker clears inherited environment variables before parsing, applies a restrictive umask and file-descriptor limit, but is not a full OS/container sandbox: it runs under the same OS user and has no seccomp or network namespace policy. Do not enable customer uploads until a dedicated low-privilege no-network sandbox, malware quarantine, retention, audit, quotas and restore controls are reviewed and tested.
 
 ## LLM providers
 
@@ -98,7 +98,7 @@ The repository quality, security, adversarial, and license workflows also target
 
 The stacked pull-request triggers are configured separately from push triggers; quality-engine and adversarial-corpus workflows retain their original push branches and include the tenant/privacy branches under pull_request.
 
-The current tenant chat UI and its API remain a draft feature; the latest verified application code is covered by the CI run recorded in the PR description. Workflow-filter-only commits do not change application behavior.
+Draft PR #89 combines the tenant chat UI/API, per-tenant provider policy, best-effort outbound minimization and tenant credential admin console. It remains a draft release candidate; its exact-head CI status is recorded in the PR description. Workflow-filter-only commits do not change application behavior.
 
 ## Tenant knowledge chat API (draft feature)
 
