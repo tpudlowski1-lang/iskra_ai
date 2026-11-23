@@ -21,7 +21,7 @@ class DocumentService:
         return principal.tenant_id
 
     def add_document(self, principal, filename, data):
-        tenant_id = self._tenant_id(principal)
+        self._tenant_id(principal)
         parsed = self.parser(filename, data)
         return self.repository.add(principal, parsed)
 
