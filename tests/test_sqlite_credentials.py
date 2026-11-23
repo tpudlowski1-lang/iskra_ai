@@ -68,8 +68,10 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
     def test_revoke_writes_audit_event(self):
         issued = self.store.issue(self.principal)
         self.assertTrue(self.store.revoke(issued.credential_id, actor="operator-8"))
-        event = self.store.list_audit_events()[0]
-        self.assertEqual(event["event_type"], "credential_revoked")
+        event = next(
+            item for item in self.store.list_audit_events()
+            if item["event_type"] == "credential_revoked"
+        )
         self.assertEqual(event["credential_id"], issued.credential_id)
         self.assertEqual(event["actor"], "operator-8")
 
@@ -79,8 +81,10 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         self.assertIsNone(self.store.authenticate(issued.token))
         self.assertEqual(self.store.authenticate(rotated.token), self.principal)
         self.assertEqual(rotated.expires_at, 4_000_000_000)
-        event = self.store.list_audit_events()[0]
-        self.assertEqual(event["event_type"], "credential_rotated")
+        event = next(
+            item for item in self.store.list_audit_events()
+            if item["event_type"] == "credential_rotated"
+        )
         self.assertEqual(event["credential_id"], issued.credential_id)
         self.assertEqual(event["related_credential_id"], rotated.credential_id)
         self.assertEqual(event["actor"], "operator-9")
