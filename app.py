@@ -144,6 +144,11 @@ DASHBOARD_HTML = """
 </html>
 """
 
+@app.get("/assistant")
+def assistant_page():
+    return render_template("assistant.html")
+
+
 @app.route('/')
 def index():
     return render_template_string(DASHBOARD_HTML)
