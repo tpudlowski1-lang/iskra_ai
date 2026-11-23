@@ -152,6 +152,29 @@ class TenantCredentialApiTests(unittest.TestCase):
             Principal("alpha-user", "tenant-alpha", frozenset({"member"})),
         )
 
+    def test_tenant_admin_cannot_rotate_another_tenants_credential(self):
+        target = self.store.issue(
+            Principal("beta-user", "tenant-beta", frozenset({"member"}))
+        )
+        response = self.client.post(
+            f"/api/tenant/credentials/{target.credential_id}/rotate",
+            headers=self.auth(self.alpha_admin_token),
+            json={},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            self.store.authenticate(target.token),
+            Principal("beta-user", "tenant-beta", frozenset({"member"})),
+        )
+
+    def test_missing_persistent_store_returns_503(self):
+        del self.app.config["ISKRA_CREDENTIAL_STORE"]
+        response = self.client.get(
+            "/api/tenant/credentials",
+            headers=self.auth(self.alpha_admin_token),
+        )
+        self.assertEqual(response.status_code, 503)
+
     def test_credential_audit_records_tenant_admin_actor(self):
         response = self.client.post(
             "/api/tenant/credentials",
