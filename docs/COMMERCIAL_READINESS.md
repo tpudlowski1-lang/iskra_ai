@@ -132,6 +132,8 @@ A release can be considered **commercial-candidate** only when every item below 
 
 ## 10. Current known blockers — verified 2026-11-23
 
+Product/market direction is now recorded as an unvalidated hypothesis in [PRODUCT_MARKET_HYPOTHESIS.md](PRODUCT_MARKET_HYPOTHESIS.md). It is not customer validation or approval of a price/segment.
+
 The integrated Draft candidate is PR #67, current code HEAD 2bf12429c7c61501a4022a15531358b0f943a140. It includes the storage path hardening, parser worker resource/environment controls, provider default-deny allowlist, bounded autonomous-worker context, dependency/license inventory, PostgreSQL staging runbook and LLM data-flow disclosure.
 
 Verified evidence on that exact HEAD:
