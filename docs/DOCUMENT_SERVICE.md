@@ -4,7 +4,7 @@
 
 This branch adds bounded PDF/DOCX/TXT parsers, a private tenant-scoped SQLite repository and a Principal-bound service. **No document HTTP routes are registered.** The code is not available to customers and must not be treated as production-ready RAG.
 
-The service is intentionally kept behind the application boundary until parsing can run in a resource-limited worker and the remaining operational controls are implemented.
+The service is intentionally kept behind the application boundary. The default service parser now runs in a spawned, resource-limited process; the remaining operational controls and a stronger OS/container sandbox are still required.
 
 ## Current limits
 
@@ -30,7 +30,8 @@ The service is intentionally kept behind the application boundary until parsing 
 
 ## Important limitations
 
-- The parser runs synchronously in the caller process. It is not suitable for public upload endpoints until moved into a resource-limited worker with CPU, memory and wall-clock limits.
+- The default parser runs in a spawned process with CPU, address-space, file-size and core-dump limits and a parent-enforced wall-clock timeout. It returns JSON bytes (not a pickled Python object) and the parent validates the result schema.
+- This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
 - SQLite is single-instance only; PostgreSQL document tables and RLS migration do not exist yet.
@@ -39,8 +40,8 @@ The service is intentionally kept behind the application boundary until parsing 
 
 ## Required next gates
 
-1. Add a dedicated parser worker with process isolation and resource limits.
-2. Add adversarial PDF/ZIP/XML fixtures, parser timeout and decompression tests.
+1. Add a dedicated low-privilege OS/container worker with no network access and enforce CPU/RAM/time quotas.
+2. Extend adversarial PDF/ZIP/XML fixtures with process-kill, decompression and memory exhaustion cases.
 3. Add PostgreSQL document/chunk schema, composite tenant keys and RLS.
 4. Add malware scanning/quarantine strategy, audit events, quotas, retention and secure backup/restore.
 5. Add route-level authorization and end-to-end cross-tenant read/search/delete tests.
