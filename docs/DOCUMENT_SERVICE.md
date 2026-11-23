@@ -30,7 +30,7 @@ The service is intentionally kept behind the application boundary. The default s
 
 ## Important limitations
 
-- The default parser runs in a spawned process with CPU, address-space, file-size and core-dump limits and a parent-enforced wall-clock timeout. It returns JSON bytes (not a pickled Python object) and the parent validates the result schema.
+- The default parser runs in a spawned process with CPU, address-space, file-size and core-dump limits and a parent-enforced wall-clock timeout. It returns JSON bytes (not a pickled Python object); the parent validates the schema, sanitized filename, extension and SHA-256 against the original input bytes.
 - This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
