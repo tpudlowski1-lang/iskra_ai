@@ -35,11 +35,11 @@ The custom transaction-local setting is a defense against accidental unscoped qu
 
 The operator utility `python -m scripts.migrate_tenant_sqlite_to_postgres` is dry-run-first:
 
-- creates a consistent SQLite backup using the SQLite online backup API;
-- writes the backup and manifest with private filesystem permissions;
+- creates a consistent SQLite backup using the online backup API;
+- writes the backup and manifest with private filesystem permissions (directory 0700, files 0600);
 - records a SHA-256 checksum without including the PostgreSQL DSN or secrets;
 - validates every source tenant graph before connecting to PostgreSQL;
-- by default, reports the tenant and graph counts without changing PostgreSQL;
+- reports tenant and graph counts without changing PostgreSQL by default;
 - requires explicit `--apply` to write;
 - refuses to overwrite any target tenant unless `--replace-existing` is also explicitly supplied;
 - migrates every tenant in one PostgreSQL transaction and verifies semantic read-back before commit, so an error rolls back the entire migration.
@@ -52,25 +52,16 @@ python -m scripts.migrate_tenant_sqlite_to_postgres \
   --backup-dir /secure/iskra-backups
 ```
 
-Only after reviewing the backup, checksum, report, target role and restore plan should an operator add `--apply` and a secret-managed `--postgres-dsn`. Use `--replace-existing` only for a deliberately approved overwrite. This tool migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
-
-## Runtime selection
-
-The application has an explicit opt-in backend selector:
-- `ISKRA_TENANT_STORAGE_BACKEND=sqlite` (default) keeps the current local SQLite tenant store.
-- `ISKRA_TENANT_STORAGE_BACKEND=postgres` selects `PostgresGraphStore`.
-- `ISKRA_POSTGRES_DSN` is required when the PostgreSQL backend is selected.
-
-The configuration is validated at startup. The PostgreSQL adapter is imported lazily, and tenant scope still comes only from the verified Principal. A configured DSN does not apply migrations automatically.
+Only after reviewing the backup, checksum, report, target role and restore plan should an operator add `--apply` and a secret-managed `--postgres-dsn`. Use `--replace-existing` only for a deliberately approved overwrite. This utility migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
 
 ## Deployment and migration status
 
-The adapter, schema, opt-in selector and dry-run-first migration utility are implemented and CI-tested. This is not yet a production database cutover or a rehearsal against the user's real tenant data. Keep SQLite as the default until a staging migration and restore drill are complete. Do not enable the PostgreSQL backend for customer traffic until:
-- a real production backup and restore rehearsal is completed; the utility's transactional rollback is tested in CI;
+The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. The tenant SQLite-to-PostgreSQL migration utility is implemented and integration-tested, but has not been run against production data. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
+- a backup and repeatable migration/rollback procedure exists;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
 - the runtime role is verified as non-superuser and non-BYPASSRLS;
 - cross-tenant read/write/delete and missing-context tests pass against the production-like database;
-- application services are wired to derive tenant scope only from the authenticated Principal (the current tenant API uses the principal-bound factory).
+- application services are wired to derive tenant scope only from the authenticated Principal; the runtime factory now enforces this selection.
 
 CI starts an ephemeral PostgreSQL 16 service, applies the migration as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real database RLS integration tests using that runtime role.
