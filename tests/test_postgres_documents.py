@@ -45,7 +45,7 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                 """
                 GRANT USAGE ON SCHEMA public TO iskra_app_test;
                 GRANT SELECT, INSERT, UPDATE, DELETE
-                ON iskra_documents, iskra_document_chunks
+                ON iskra_tenant_documents, iskra_tenant_document_chunks
                 TO iskra_app_test
                 """,
                 prepare=False,
@@ -98,24 +98,23 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                     (self.tenant_alpha,),
                 )
                 cursor.execute(
-                    "SELECT tenant_id, filename FROM iskra_documents WHERE tenant_id = %s",
+                    "SELECT tenant_id, filename FROM iskra_tenant_documents WHERE tenant_id = %s",
                     (self.tenant_beta,),
                 )
                 self.assertEqual(cursor.fetchall(), [])
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                     cursor.execute(
                         """
-                        INSERT INTO iskra_documents
+                        INSERT INTO iskra_tenant_documents
                             (tenant_id, document_id, filename, extension, sha256, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s)
                         """,
                         (
                             self.tenant_beta,
-                            str(uuid.uuid4()),
+                            uuid.uuid4(),
                             "forged.txt",
                             ".txt",
                             "a" * 64,
-                            123.0,
                         ),
                     )
                 connection.rollback()
@@ -123,22 +122,21 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
     def test_missing_tenant_context_fails_closed(self):
         with self.psycopg.connect(APP_DSN) as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT tenant_id FROM iskra_documents")
+                cursor.execute("SELECT tenant_id FROM iskra_tenant_documents")
                 self.assertEqual(cursor.fetchall(), [])
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                     cursor.execute(
                         """
                         INSERT INTO iskra_documents
                             (tenant_id, document_id, filename, extension, sha256, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s)
                         """,
                         (
                             self.tenant_alpha,
-                            str(uuid.uuid4()),
+                            uuid.uuid4(),
                             "no-context.txt",
                             ".txt",
                             "b" * 64,
-                            123.0,
                         ),
                     )
                 connection.rollback()
@@ -149,14 +147,14 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                 cursor.execute(
                     """
                     SELECT relrowsecurity, relforcerowsecurity
-                    FROM pg_class WHERE relname = 'iskra_documents'
+                    FROM pg_class WHERE relname = 'iskra_tenant_documents'
                     """
                 )
                 self.assertEqual(cursor.fetchone(), (True, True))
                 cursor.execute(
                     """
                     SELECT relrowsecurity, relforcerowsecurity
-                    FROM pg_class WHERE relname = 'iskra_document_chunks'
+                    FROM pg_class WHERE relname = 'iskra_tenant_document_chunks'
                     """
                 )
                 self.assertEqual(cursor.fetchone(), (True, True))
@@ -173,14 +171,14 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.service.list_documents(SYSTEM_ADMIN)
         with self.assertRaises(PermissionError):
-            self.repository.list("system")
+            self.repository.list(SYSTEM_ADMIN)
         with self.assertRaises(PermissionError):
-            self.repository.list("")
+            self.repository.list(None)
 
     def test_search_query_is_parameterized_and_bounded(self):
         self.service.add_document(self.alpha, "safe.txt", b"Safe document content for query testing.")
         self.assertEqual(
-            self.service.search_documents(self.alpha, "x'); DROP TABLE iskra_documents; --"),
+            self.service.search_documents(self.alpha, "x'); DROP TABLE iskra_tenant_documents; --"),
             [],
         )
         with self.assertRaises(ValueError):
