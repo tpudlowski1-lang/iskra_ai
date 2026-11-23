@@ -30,4 +30,4 @@ jobs:
       - name: Compile changed modules
         run: python -m compileall -q iskra tests
       - name: Run focused regression tests
-        run: python -m unittest tests.test_security_reliability_regressions -v
+        run: python -m unittest discover -s tests -p 'test_security_reliability_regressions.py' -v
