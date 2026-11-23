@@ -7,10 +7,13 @@ import argparse
 from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
+import hmac
 import json
+import math
 import os
 from pathlib import Path
 import secrets
+import stat
 import sqlite3
 import sys
 import tempfile
@@ -63,10 +66,180 @@ def create_private_backup(source_path, backup_dir):
         raise
 
 
+def _validate_migration_graph(graph):
+    """Reject lossy or malformed source data; migration must never clamp or deduplicate."""
+    if not isinstance(graph, dict):
+        raise MigrationError("Źródłowy graf nie jest obiektem")
+    neurons = graph.get("neurons")
+    synapses = graph.get("synapses")
+    if not isinstance(neurons, dict) or not isinstance(synapses, list):
+        raise MigrationError("Źródłowy graf nie zawiera poprawnych neurons i synapses")
+
+    clean_neurons = {}
+    for node_id, node in neurons.items():
+        if not isinstance(node_id, str) or not node_id.strip() or len(node_id) > 160:
+            raise MigrationError("Źródłowy graf zawiera nieprawidłowy node_id")
+        if not isinstance(node, dict):
+            raise MigrationError(f"Nieprawidłowy węzeł źródłowy: {node_id}")
+        label = node.get("label")
+        if not isinstance(label, str) or len(label) > 500:
+            raise MigrationError(f"Nieprawidłowa etykieta węzła: {node_id}")
+        try:
+            weight = float(node.get("weight"))
+            created = float(node.get("created"))
+        except (TypeError, ValueError, OverflowError):
+            raise MigrationError(f"Nieprawidłowe dane liczbowe węzła: {node_id}") from None
+        if not (0.0 <= weight <= 1.0) or not math.isfinite(weight):
+            raise MigrationError(f"Waga poza zakresem węzła: {node_id}")
+        if not math.isfinite(created):
+            raise MigrationError(f"Nieprawidłowy czas węzła: {node_id}")
+        clean_neurons[node_id] = {"label": label, "weight": weight, "created": created}
+
+    clean_synapses = []
+    seen_edges = set()
+    for edge in synapses:
+        if not isinstance(edge, dict):
+            raise MigrationError("Nieprawidłowa synapsa źródłowa")
+        source, target = edge.get("from"), edge.get("to")
+        if (not isinstance(source, str) or not isinstance(target, str)
+                or source not in clean_neurons or target not in clean_neurons):
+            raise MigrationError("Synapsa źródłowa wskazuje nieistniejący węzeł")
+        key = (source, target)
+        if key in seen_edges:
+            raise MigrationError("Źródłowy graf zawiera zduplikowaną synapsę")
+        seen_edges.add(key)
+        try:
+            strength = float(edge.get("strength"))
+        except (TypeError, ValueError, OverflowError):
+            raise MigrationError("Nieprawidłowa siła synapsy") from None
+        if not (0.0 <= strength <= 1.0) or not math.isfinite(strength):
+            raise MigrationError("Siła synapsy poza dozwolonym zakresem")
+        clean_synapses.append({"from": source, "to": target, "strength": strength})
+
+    return {"neurons": clean_neurons, "synapses": clean_synapses}
+
+
+def verify_private_backup(backup_path, expected_sha256):
+    """Verify checksum, SQLite integrity, foreign keys and tenant graph schema."""
+    path = os.path.abspath(backup_path)
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise MigrationError("Wymagana jest poprawna suma SHA-256 kopii")
+    actual = sha256_file(path)
+    if not hmac.compare_digest(actual, expected_sha256.lower()):
+        raise MigrationError("Suma SHA-256 kopii nie zgadza się")
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as connection:
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise MigrationError("Kontrola integralności kopii SQLite nie powiodła się")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise MigrationError("Kopia SQLite zawiera naruszenia kluczy obcych")
+            tables = {
+                row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if not {"graph_neurons", "graph_synapses"}.issubset(tables):
+                raise MigrationError("Kopia nie zawiera schematu grafu tenantów")
+    except sqlite3.DatabaseError as exc:
+        raise MigrationError("Plik kopii nie jest poprawną bazą SQLite") from exc
+    return {"path": path, "sha256": actual, "integrity": "ok"}
+
+
+def restore_private_backup(backup_path, target_path, expected_sha256):
+    """Restore a checksum-verified snapshot from one opened inode to a NEW path."""
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise MigrationError("Wymagana jest poprawna suma SHA-256 kopii")
+    target = os.path.abspath(target_path)
+    source = os.path.abspath(backup_path)
+    if target == source:
+        raise MigrationError("Ścieżka docelowa nie może wskazywać pliku kopii")
+    directory = os.path.dirname(target)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+
+    # Open once without following symlinks. Hash, validate and publish the same
+    # private staged bytes; do not verify one pathname and later reopen it.
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        source_fd = os.open(source, flags)
+    except OSError as exc:
+        raise MigrationError("Kopia musi być istniejącym zwykłym plikiem") from exc
+
+    descriptor, temporary = tempfile.mkstemp(prefix=".iskra-restore-", dir=directory)
+    digest = hashlib.sha256()
+    try:
+        with os.fdopen(source_fd, "rb") as input_file, os.fdopen(descriptor, "wb") as output:
+            if not os.path.isfile(source) or not stat.S_ISREG(os.fstat(input_file.fileno()).st_mode):
+                raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
+            for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+                digest.update(chunk)
+                output.write(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+
+        actual = digest.hexdigest()
+        if not hmac.compare_digest(actual, expected_sha256.lower()):
+            raise MigrationError("Suma SHA-256 kopii nie zgadza się")
+
+        try:
+            with closing(sqlite3.connect(f"file:{temporary}?mode=ro", uri=True)) as connection:
+                integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+                if integrity != "ok":
+                    raise MigrationError("Kontrola integralności kopii SQLite nie powiodła się")
+                if connection.execute("PRAGMA foreign_key_check").fetchall():
+                    raise MigrationError("Kopia SQLite zawiera naruszenia kluczy obcych")
+                tables = {
+                    row[0] for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+                if not {"graph_neurons", "graph_synapses"}.issubset(tables):
+                    raise MigrationError("Kopia nie zawiera schematu grafu tenantów")
+        except sqlite3.DatabaseError as exc:
+            raise MigrationError("Plik kopii nie jest poprawną bazą SQLite") from exc
+
+        os.chmod(temporary, 0o600)
+        # Hard-link publication is atomic and never replaces an existing path.
+        os.link(temporary, target)
+        os.unlink(temporary)
+        directory_fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except FileExistsError:
+        raise MigrationError("Plik docelowy już istnieje; odtwarzanie przerwane bez nadpisania") from None
+    finally:
+        # Also clean up on the existing-target path; the published target is
+        # a separate hard link and remains intact after this unlink.
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+    return {
+        "restored_path": target,
+        "sha256": actual,
+        "bytes": os.path.getsize(target),
+        "status": "restored_verified",
+    }
+
+
 def read_tenant_snapshots(sqlite_path):
     """Read and validate all tenant snapshots from a consistent SQLite copy."""
     with closing(sqlite3.connect(sqlite_path)) as connection:
         connection.row_factory = sqlite3.Row
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise MigrationError("Kontrola integralności SQLite nie powiodła się")
+        foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise MigrationError("Źródłowa baza zawiera naruszenia kluczy obcych")
         tables = {
             row["name"]
             for row in connection.execute(
@@ -77,7 +250,12 @@ def read_tenant_snapshots(sqlite_path):
             raise MigrationError("Źródłowa baza nie zawiera schematu grafu tenantów")
 
         tenant_rows = connection.execute(
-            "SELECT DISTINCT tenant_id FROM graph_neurons ORDER BY tenant_id"
+            """
+            SELECT tenant_id FROM graph_neurons
+            UNION
+            SELECT tenant_id FROM graph_synapses
+            ORDER BY tenant_id
+            """
         ).fetchall()
         snapshots = {}
         for tenant_row in tenant_rows:
@@ -117,7 +295,7 @@ def read_tenant_snapshots(sqlite_path):
                     for row in synapses
                 ],
             }
-            snapshots[tenant_id] = SQLiteGraphStore._validate_graph(graph)
+            snapshots[tenant_id] = _validate_migration_graph(graph)
     return snapshots
 
 
