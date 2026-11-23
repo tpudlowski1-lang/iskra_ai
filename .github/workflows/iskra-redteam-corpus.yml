@@ -1,0 +1,26 @@
+name: Iskra adversarial corpus integrity
+on:
+  push:
+    branches: [quality/redteam-corpus-v1]
+  pull_request:
+    branches: [refactor/modular-core, quality/security-reliability-v1, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1, feature/tenant-account-lifecycle-v1, feature/tenant-admin-console-v1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  corpus-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile tests
+        run: python -m compileall -q tests/test_redteam_corpus.py
+      - name: Validate adversarial corpus
+        run: python -m unittest tests.test_redteam_corpus -v

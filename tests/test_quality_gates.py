@@ -4,7 +4,20 @@ import tempfile
 import unittest
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
+os.environ["ISKRA_TESTING"] = "true"
 import app as iskra
+
+from flask import request
+from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+
+
+def _attach_test_admin_principal(flask_app):
+    @flask_app.before_request
+    def attach_test_admin():
+        request.environ[PRINCIPAL_ENV_KEY] = SYSTEM_ADMIN
+
+
+_attach_test_admin_principal(iskra.app)
 
 
 class IskraPersistenceTests(unittest.TestCase):
@@ -116,6 +129,7 @@ class IskraPersistenceTests(unittest.TestCase):
 class IskraProviderTests(unittest.TestCase):
     def test_router_stops_after_first_success(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
@@ -129,6 +143,7 @@ class IskraProviderTests(unittest.TestCase):
 
     def test_unknown_provider_is_skipped(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek"}
         calls = []
         router.primary = "not-a-provider"
         router.fallbacks = ["deepseek"]
@@ -144,31 +159,32 @@ class IskraProviderTests(unittest.TestCase):
 
 class IskraApiContractTests(unittest.TestCase):
 
-    def test_network_endpoint_refreshes_state_written_by_another_worker(self):
-        previous_network = iskra.siec
-        try:
-            reader = iskra.SiecNeuronowa()
-            writer = iskra.SiecNeuronowa()
-            writer.aktualizuj_siec({
-                "neurons": {"n_from_other_worker": {
-                    "label": "Zapis z innego workera", "weight": 0.8
-                }},
-                "synapses": [{
-                    "from": "n_logika", "to": "n_from_other_worker",
-                    "strength": 0.7
-                }],
-            })
-            self.assertNotIn("n_from_other_worker", reader.dane["neurons"])
-            iskra.siec = reader
-            response = iskra.app.test_client().get("/api/network")
-            self.assertEqual(response.status_code, 200)
-            self.assertIn(
-                "n_from_other_worker",
-                response.get_json()["neurons"],
-                "API odczytu powinno widzieć zapis wykonany przez inny proces",
-            )
-        finally:
-            iskra.siec = previous_network
+    def test_api_reads_latest_graph_written_by_another_worker(self):
+        from flask import Flask
+        from iskra.api.routes import create_api_blueprint
+
+        reader = iskra.SiecNeuronowa()
+        writer = iskra.SiecNeuronowa()
+        writer.aktualizuj_siec({
+            "neurons": {"n_external_worker": {
+                "label": "Dane z innego workera", "weight": 0.8
+            }},
+            "synapses": [{
+                "from": "n_logika", "to": "n_external_worker",
+                "strength": 0.75
+            }],
+        })
+        self.assertNotIn("n_external_worker", reader.dane["neurons"])
+        test_app = Flask("graph-refresh-test")
+        test_app.register_blueprint(create_api_blueprint(reader))
+        _attach_test_admin_principal(test_app)
+        response = test_app.test_client().get("/api/network")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "n_external_worker",
+            response.get_json()["neurons"],
+            "API musi odświeżać snapshot po zapisie z innego procesu",
+        )
 
     def test_health_endpoint_contract(self):
         response = iskra.app.test_client().get("/health")

@@ -7,46 +7,50 @@ services:
       pip install -r requirements.txt
 
     startCommand: |
-      gunicorn app:app --workers 2 --threads 4 --timeout 120
+      gunicorn wsgi:app --workers 1 --threads 4 --timeout 120
 
     envVars:
-
       - key: PYTHON_VERSION
         value: 3.11.9
 
-      # =========================
-      # ROUTER
-      # =========================
+      # Configure a strong secret in Render; never commit its value.
+      - key: API_TOKEN
+        sync: false
 
       - key: LLM_PROVIDER
         value: openai
 
       - key: LLM_FALLBACK_PROVIDERS
-        value: gemini,deepseek
+        value: deepseek
 
-      # Pętla badawcza nie może startować osobno w każdym workerze Gunicorn.
+      # Provider allowlist is deny-by-default in the runtime router.
+      - key: LLM_ALLOWED_PROVIDERS
+        value: ""
+      # Per-tenant approval is separately deny-by-default; configure only after review.
+      - key: ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON
+        value: "{}"
+      - key: ISKRA_ENABLE_DOCUMENT_INGESTION
+        value: "false"
+
+      # Add secret values in the Render dashboard; never commit API keys.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+
+      # Render terminates TLS at one trusted load balancer; restore the external scheme.
+      - key: ISKRA_TRUST_PROXY_HEADERS
+        value: true
+
+      - key: ISKRA_RATE_LIMIT_ENABLED
+        value: true
+
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
-
-      # =========================
-      # OPENAI
-      # =========================
 
       - key: OPENAI_MODEL
         value: gpt-4o-mini
 
-      # API KEY ustaw ręcznie w panelu Render
-
-      # =========================
-      # GEMINI
-      # =========================
-
-      # Model i klucz ustaw w panelu Render. Pusty model wyłącza ten fallback.
-      - key: GEMINI_MODEL
-        value: ""
-
-      # API KEY ustaw ręcznie w panelu Render (GEMINI_API_KEY).
 
     healthCheckPath: /health
-
-    autoDeploy: true
+    autoDeploy: false

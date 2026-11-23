@@ -1,47 +1,105 @@
-# Iskra AI
+# Iskra AI — Unified Core
 
-Iskra AI is an experimental Polish-language assistant project. The commercial product direction is a private knowledge assistant for small businesses: answers grounded in company documents, draft replies and offers, and clear source references.
+Iskra AI is an experimental Polish-language knowledge-system project implemented as a modular Flask monolith. It preserves the twelve foundational pillars and the legacy graph model while adding tenant-scoped storage adapters, verified credential handling and provider routing.
 
-## Current branch
+## Project status
 
-- `main`: original experimental knowledge-graph dashboard.
-- `commercial-mvp`: product plan, technical audit, configurable LLM provider router, and safer background-loop default.
+**Development / integrated release candidate — not production-ready and not ready for sale.** The repository contains working modules and PostgreSQL integration tests, but no verified production database cutover, durable customer hosting, public account lifecycle, complete observability/incident response, or commercial/legal clearance.
 
-The `commercial-mvp` branch is work in progress and has not yet been verified in a live Render deployment.
+The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; changes are ported selectively after review. See:
+- [Unified restructuring program](docs/UNIFIED_RESTRUCTURING_PROGRAM.md)
+- [Production readiness checklist](docs/PRODUCTION_READINESS.md)
+- [Commercial readiness gate](docs/COMMERCIAL_READINESS.md)
+- [Data migration policy](docs/DATA_MIGRATION.md)
+- [Tenant knowledge chat API](docs/KNOWLEDGE_CHAT_API.md)
+- [LLM provider allowlist policy](docs/LLM_PROVIDER_ALLOWLIST.md)
+- [Tenant account lifecycle API](docs/TENANT_ACCOUNT_LIFECYCLE.md)
+- [LLM provider data handling](docs/LLM_PROVIDER_DATA_HANDLING.md)
+- [Autonomous worker data minimization](docs/AUTONOMOUS_WORKER_DATA_MINIMIZATION.md)
+- [Dependency/license inventory](docs/DEPENDENCY_LICENSE_AUDIT.md)
 
-## Run locally
+## Application entry points and authentication
 
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-export LLM_PROVIDER=deepseek
-export DEEPSEEK_API_KEY="..."
-python app.py
-```
+- `app.py` — Flask compatibility application and legacy global graph dashboard.
+- `wsgi.py` — WSGI entry point with fail-closed authentication middleware.
+- `/health` — public hosting health probe.
+- `/` and `/api/network` — protected legacy global graph dashboard/API.
 
-The current application exposes:
-- `/` — knowledge graph dashboard
-- `/api/network` — current graph data
-- `/health` — health check
+The shared system `API_TOKEN` protects the legacy application routes. The security modules also implement hashed tenant credential storage, expiry/revocation and operator issue/rotate/revoke commands. Verified tenant principals are derived from credentials on the server; tenant scope must never come from request input.
 
-## LLM configuration
+This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. The canonical integration branch `refactor/modular-core` now contains tenant-scoped chat/API, provider policy, outbound minimization and a minimal tenant-admin console. It is not production-approved or deployed. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
 
-Set keys only in the hosting provider's secret/environment settings. Never commit API keys.
+## Architecture
 
-- `LLM_PROVIDER`: primary provider: `openai`, `deepseek`, or `gemini`.
+- `iskra/config.py` — validated runtime configuration.
+- `iskra/knowledge/graph.py` — legacy global graph, twelve pillars and JSON persistence.
+- `iskra/llm/router.py` — OpenAI-compatible, DeepSeek and Gemini routing with JSON-object validation and fallback.
+- `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
+- `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
+- `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. The canonical integration branch contains tenant-scoped credential lifecycle endpoints, provider policy and a minimal `/assistant` admin console; production approval remains pending.
+- `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
+- `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
+- `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
+
+## Data and tenant storage
+
+There are two separate storage paths:
+
+1. **Legacy global knowledge graph:** remains in `$DATA_DIR/wiedza.json`; it is not yet migrated to PostgreSQL. Writes use atomic replacement and a POSIX file lock. This is not a distributed multi-instance store.
+2. **Tenant graph storage:** the API uses a principal-bound SQLite store by default. PostgreSQL is an implemented opt-in adapter with migrations and row-level security (RLS ENABLE + FORCE). CI runs integration tests against PostgreSQL 16 using a separate `NOSUPERUSER NOBYPASSRLS` runtime role. PostgreSQL is not automatically provisioned or selected in production.
+
+The tenant migration utility is dry-run-first and supports an explicit transactional apply. It resolves the destination only from an explicit CLI DSN or the dedicated migration/runtime DSN variables; it never guesses from generic DATABASE_URL. No production cutover, restore rehearsal or rollback drill has been completed.
+
+Tenant SQLite graph and document stores validate every path component, reject symlinked ancestors, create private directories/files (0700/0600), and use O_NOFOLLOW where available. These checks reduce path attacks but do not eliminate TOCTOU races against a process able to mutate ancestor directories.
+
+## Documents and RAG status
+
+An internal tenant document service supports bounded PDF, DOCX and TXT parsing, tenant-scoped SQLite/FTS5 storage, and an optional PostgreSQL repository with tenant RLS. Its parser runs in a resource-limited child process and validates the returned JSON payload.
+
+Authenticated tenant document list/search/delete routes and source-grounded chat are implemented in Draft PR #89. Upload is admin-only and disabled by default. The parser worker clears inherited environment variables before parsing, applies a restrictive umask and file-descriptor limit, but is not a full OS/container sandbox: it runs under the same OS user and has no seccomp or network namespace policy. Do not enable customer uploads until a dedicated low-privilege no-network sandbox, malware quarantine, retention, audit, quotas and restore controls are reviewed and tested.
+
+## LLM providers
+
+Configure credentials only in hosting secrets/environment settings; never commit API keys. External providers are deny-by-default: without `LLM_ALLOWED_PROVIDERS`, the router makes no outbound LLM calls. Primary and fallback providers are checked against the same deployment-level allowlist.
+
+- `LLM_ALLOWED_PROVIDERS`: explicit comma-separated allowlist (for example `deepseek,openai`); empty/unset disables all external providers.
+- `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
 - `LLM_FALLBACK_PROVIDERS`: comma-separated fallback order.
-- `OPENAI_API_KEY`, `OPENAI_MODEL` (default model: `gpt-4o-mini`).
-- `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default model: `deepseek-chat`).
+- `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-4o-mini`).
+- `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-chat`).
 - `GEMINI_API_KEY`, `GEMINI_MODEL` (both required to enable Gemini).
 
-The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOUS_LOOP=true` only for a controlled single-process experiment. Do not enable it with multiple Gunicorn workers: each worker would start its own loop.
+Live provider calls require customer-owned API credentials and separate cost, privacy and provider-terms review. The Render manifest leaves the allowlist empty and autoDeploy disabled until an operator explicitly approves provider processing and deployment. The optional autonomous worker uses only a fixed public taxonomy rather than the mutable global graph, but only tenant-chat prompts/excerpts receive best-effort redaction; other user-prompt paths are not automatically redacted. CI tests validate deterministic routing behavior; they do not prove live provider availability or legal compliance.
 
-## Product and engineering documents
+## Deployment and operations
 
-- [Commercial MVP plan](docs/PRODUCT_PLAN.md)
-- [Technical audit](docs/TECHNICAL_AUDIT.md)
+The supplied Render manifest is a deployment template, not proof of a live deployment. It uses one Gunicorn worker because the legacy global JSON graph is not a shared transactional multi-instance store. Render autoDeploy is disabled and external provider allowlist is empty by default; both require explicit operator action. It does not provision a persistent disk or managed PostgreSQL database. The default `DATA_DIR` may therefore be ephemeral on a hosted platform; data can be lost on restart/redeploy.
 
-## Important limitations
+Before a production deployment: attach and verify durable storage or configure a managed database, run migration/restore/rollback drills using the [PostgreSQL staging runbook](docs/POSTGRES_STAGING_RUNBOOK.md), configure secrets and TLS, add monitoring/alerting and incident response, and perform staging smoke tests. Keep `ENABLE_AUTONOMOUS_LOOP=false` on web deployments; a dedicated singleton worker with coordination and safe shutdown is still required.
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade persistence. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+## Development and tests
+
+```bash
+python -m pip install -r requirements.txt
+python -m compileall -q app.py wsgi.py security.py iskra tests
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+GitHub Actions runs the full test suite on Python 3.11 and 3.12, including PostgreSQL 16 integration tests, plus dependency vulnerability auditing.
+
+## Not production-ready as a paid multi-tenant SaaS
+
+Implemented tenant adapters and green CI do not equal a production SaaS. Remaining gates include public account lifecycle, staging PostgreSQL cutover, durable backups and restore, independent security review, parser sandboxing, malware scanning, retrieval evaluation and provenance, tenant quotas, CSRF protection for browser mutations, monitoring/alerting, incident response, license/IP review, privacy/contracts, cost model, onboarding, support and validated product scope. See [Commercial readiness gate](docs/COMMERCIAL_READINESS.md).
+
+## Stacked feature CI
+
+The repository quality, security, adversarial, and license workflows also target the integrated release-candidate and active stacked tenant/privacy feature branches. This ensures that dependent Draft PRs receive the same verification gates before any integration decision.
+
+The stacked pull-request triggers are configured separately from push triggers; quality-engine and adversarial-corpus workflows retain their original push branches and include the tenant/privacy branches under pull_request.
+
+The canonical `refactor/modular-core` branch now combines tenant chat UI/API, per-tenant provider policy, best-effort outbound minimization and tenant credential administration. The integrated code tree passed the full CI suite; production gates remain open. Workflow-filter-only commits do not change application behavior.
+
+## Tenant knowledge chat API (draft feature)
+
+The current feature branch adds an authenticated POST /api/tenant/chat endpoint. It searches only documents belonging to the authenticated Principal, sends at most five bounded excerpts to the configured LLM, and requires exact server-resolved citations. No source means no provider call. Tenant document list/search/delete routes are also available; upload is admin-only and disabled by default through ISKRA_ENABLE_DOCUMENT_INGESTION=false. A minimal responsive chat UI is available at /assistant; it accepts an API token for the current page session only and does not persist it or maintain server-side chat history. See docs/KNOWLEDGE_CHAT_API.md.

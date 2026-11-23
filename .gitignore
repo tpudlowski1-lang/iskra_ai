@@ -1,0 +1,40 @@
+# Runtime persistence and recovery artifacts
+/iskra.sqlite3*
+/iskra_tenants.sqlite3*
+/wiedza.json
+/wiedza.json.*
+*.corrupt-*
+*.lock
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+keystore.properties
+/credentials.sqlite3*
+
+# Local runtime data, vector stores, documents and backups
+/chroma_db/
+/iskra_data/
+/private_documents/
+/backups/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Python and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
