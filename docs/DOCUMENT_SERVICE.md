@@ -4,7 +4,7 @@
 
 This branch adds bounded PDF/DOCX/TXT parsers, a private tenant-scoped SQLite repository and a Principal-bound service. **No document HTTP routes are registered.** The code is not available to customers and must not be treated as production-ready RAG.
 
-The service is intentionally kept behind the application boundary. The default service parser now runs in a spawned, resource-limited process; the remaining operational controls and a stronger OS/container sandbox are still required.
+The service is intentionally kept behind the application boundary. No HTTP routes are registered and no customer uploads are enabled. The default service parser now runs in a spawned, resource-limited process; the remaining operational controls and a stronger OS/container sandbox are still required.
 
 ## Current limits
 
@@ -21,7 +21,8 @@ The service is intentionally kept behind the application boundary. The default s
 
 - Every service method requires a verified `Principal`; system principal is rejected.
 - Tenant scope is derived only from `Principal.tenant_id`, never from request data.
-- The repository uses composite tenant/document/chunk keys and a composite foreign key.
+- The SQLite repository uses composite tenant/document/chunk keys and a composite foreign key.
+- The PostgreSQL repository uses the same composite tenant keys/FK, generated `tsvector`, GIN index and RLS ENABLE + FORCE; every operation requires a verified Principal and transaction-local tenant scope.
 - FTS search joins on tenant ID, document ID and chunk ID, then filters by tenant ID.
 - Document/chunk/FTS writes and deletes are transactional.
 - Duplicate detection is scoped by tenant.
@@ -34,7 +35,7 @@ The service is intentionally kept behind the application boundary. The default s
 - This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
-- SQLite is single-instance only; PostgreSQL document tables and RLS migration do not exist yet.
+- SQLite is single-instance only. A PostgreSQL document repository and migration `0002_tenant_documents.sql` are now available and integration-tested with a separate NOSUPERUSER/NOBYPASSRLS role; PostgreSQL remains opt-in.
 - FTS5 is lexical retrieval only. Retrieved content must be treated as untrusted data; no model prompt or answer generation is connected.
 - The service is not wired into `app.py` or WSGI and has no public routes.
 
