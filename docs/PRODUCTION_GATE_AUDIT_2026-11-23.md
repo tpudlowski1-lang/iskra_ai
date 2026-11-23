@@ -19,10 +19,10 @@ This report is a snapshot of repository evidence, not a penetration test, deploy
 | Gate | Status | Evidence and remaining work |
 |---|---|---|
 | Automated CI and dependency audit | PARTIAL | Draft PRs #47–#61 have targeted/full CI successes on their respective heads, including combined migration/restore validation in PR #59 and the local full-backup utility in PR #61. There is not yet one integrated final release SHA containing all approved changes. |
-| WSGI authentication | PARTIAL | PR #50 and #51 add fail-closed production and direct-development WSGI tests. Live host secrets, persistent credential DB, TLS and operator provisioning have not been verified. |
+| WSGI authentication | PARTIAL | PR #50 current HEAD `af1cf576...` adds fail-closed production WSGI integration and passes 190 tests on Python 3.11/3.12. PR #65 stacks the direct-development entrypoint hardening on the current PR #50 HEAD and passes 192 tests on both versions; old PR #51 is stale and should not be merged independently. Live host secrets, persistent credential DB, TLS and operator provisioning have not been verified. |
 | Identity, roles and tenant boundaries | PARTIAL | Principal-bound APIs and PostgreSQL FORCE RLS are integration-tested in CI using a separate NOSUPERUSER/NOBYPASSRLS role. Independent security review is outstanding. The transaction-local custom tenant setting is defense-in-depth, not protection against SQL injection or arbitrary code execution under the DB role. |
-| PostgreSQL migrations | PARTIAL | PR #59 combines PR #52 strict SQLite integrity/foreign-key preflight and lossless migration validation with PR #54 checksum-verified backup/restore. The integrated branch passes full CI on Python 3.11 and 3.12 plus dependency audit. It still does not prove production-like cutover, semantic verification of a live tenant dataset, or a completed rollback drill. |
-| Backup and recovery | PARTIAL | PR #54 verifies/restores one tenant-graph SQLite file; PR #59 combines that restore with strict migration validation. PR #61 adds an explicit-allowlist archive/restore tool for JSON and SQLite and passes full CI (Python 3.11/3.12, 195 tests each, dependency audit). The tool requires operator-confirmed quiescence, does not cover PostgreSQL/object storage/hosting secrets, and SHA-256 is not archive authenticity. No durable-volume or production restore drill was performed. |
+| PostgreSQL migrations | PARTIAL | PR #59 combines PR #52 strict SQLite integrity/foreign-key preflight and lossless migration validation with PR #54 checksum-verified backup/restore, and includes the corrected PostgreSQL architecture/migration policy. Its architecture-integrated HEAD `576e58f4...` passes 190 tests on Python 3.11 and 3.12 plus dependency audit. It still does not prove production-like cutover, semantic verification of a live tenant dataset, or a completed rollback drill. |
+| Backup and recovery | PARTIAL | PR #54 verifies/restores one tenant-graph SQLite file; PR #59 combines that restore with strict migration validation. PR #61 adds an explicit-allowlist archive/restore tool for JSON and SQLite and passes full CI on current HEAD `c756a8e7...` (Python 3.11/3.12, 200 tests each, dependency audit). The tool requires operator-confirmed quiescence, does not cover PostgreSQL/object storage/hosting secrets, and SHA-256 is not archive authenticity. No durable-volume or production restore drill was performed. |
 | Document ingestion and RAG | BLOCKED for public use | The document service has no HTTP routes and no generated RAG answers. The parser runs in a resource-limited child process but under the same OS user; there is no full OS/container sandbox, malware quarantine, object storage, encryption-key lifecycle, retention scheduler or full audit pipeline. Public uploads/RAG must remain disabled. |
 | Hosting and persistence | BLOCKED | The baseline `render.yaml` uses two Gunicorn workers while the legacy global graph has process-local constraints; PR #53 changes it to one worker and passes CI. The manifest does not provision a persistent disk or managed PostgreSQL. No live Render configuration, volume, secrets, TLS, restart persistence or deployment was inspected. |
 | Credentials lifecycle | PARTIAL | SQLite registry stores token digests and supports issue/rotate/revoke/expiry with audit events. Public account provisioning/recovery, managed lifecycle and a durable production credential store are not complete. Render's legacy `API_TOKEN` represents the system administrator; tenant credentials need a separately provisioned persistent registry. |
@@ -39,23 +39,24 @@ All runs below were observed as completed/success on their specific PR heads:
 - PR #47 Quality Engine: [45107678207](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45107678207)
 - PR #48 Security & Reliability: [45108077117](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45108077117)
 - PR #49 adversarial corpus integrity: [45109641744](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45109641744)
-- PR #50 production WSGI integration: [45111883568](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45111883568)
-- PR #51 secure development entrypoint: [45112011575](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112011575)
+- PR #50 production WSGI integration, current HEAD `af1cf57616b558a0e08aaf7d0eb80911a2b68be3`: [45115394115](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45115394115)
+- PR #65 secure development entrypoint stacked on current PR #50, HEAD `cb1a8e73e620c4e9af0d5790e093ea037b048cef`: [45115787458](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45115787458)
+- PR #27 corrected PostgreSQL architecture and migration docs: [45115287908](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45115287908)
 - PR #52 strict migration validation: [45112445030](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112445030)
 - PR #53 Render single-worker contract: [45112296368](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112296368)
 - PR #54 verified SQLite restore: [45113522451](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113522451)
 - PR #55 independent document backend selection: [45113445185](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113445185)
 - PR #57 full backup/recovery inventory documentation: [45113854647](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113854647)
 - PR #56 repository hygiene, final reviewed HEAD `7e63019cc5ab7cc95f99b1346d6553b745580fd0`: [45113990484](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113990484)
-- PR #59 integrated migration + verified restore, HEAD `0d5528ec4bf456fe5573202a9d6e130bcd59887b`: [45114233983](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45114233983)
+- PR #59 integrated migration + verified restore and corrected architecture docs, HEAD `576e58f4ab32184e296a71cd62ca6d952a784510`: [45115356552](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45115356552)
 - PR #60 commercial readiness gate documentation: [45114251107](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45114251107)
-- PR #61 full JSON/SQLite backup archive and restore, HEAD `1a6832c75f85cb327171eec5c5cc2cb66ce3d724`: [45114890368](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45114890368)
+- PR #61 full JSON/SQLite backup archive and restore, current HEAD `c756a8e7788116a1d786e4951ed6a3648e171e4c`: [45115688245](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45115688245)
 
 A green CI run proves only the tests executed for that commit. It does not prove production hosting, real secret configuration, persistent storage, staging recovery, live LLM safety or deployment readiness.
 
 ## Required closure sequence
 
-1. Review and integrate PRs #47–#56 in a controlled order, resolving shared-file overlap between migration PRs #52 and #54. Keep all PRs Draft until review and explicit merge authorization.
+1. Review and integrate PRs #47–#61 and #65 in a controlled order. Use PR #59 as the combined migration/restore/documentation candidate, PR #65 as the current stacked WSGI/development-server candidate, and reconcile the older overlapping design PR #27 and stale PR #51. Keep all PRs Draft until review and explicit merge authorization.
 2. Run the complete suite and dependency audit on one final integrated SHA.
 3. Complete an independent tenant authorization/RLS review and negative tests against the production-like DB role.
 4. Configure a persistent volume or managed PostgreSQL and run staging migration, semantic read-back, backup, restore and rollback drills.
