@@ -1,0 +1,38 @@
+import unittest
+
+from werkzeug.test import Client
+from werkzeug.wrappers import Response
+
+import app as iskra_app
+
+
+class DevelopmentEntrypointSecurityTests(unittest.TestCase):
+    def test_direct_development_wsgi_is_fail_closed_without_mutating_flask_app(self):
+        original_wsgi = iskra_app.app.wsgi_app
+        secured_wsgi = iskra_app.create_development_wsgi_app(environ={})
+        current_wsgi = iskra_app.app.wsgi_app
+        self.assertIs(current_wsgi.__self__, original_wsgi.__self__)
+        self.assertIs(current_wsgi.__func__, original_wsgi.__func__)
+
+        client = Client(secured_wsgi, Response)
+        health = client.get("/health")
+        self.assertEqual(health.status_code, 200)
+
+        private = client.get("/api/network")
+        self.assertEqual(private.status_code, 503)
+        self.assertEqual(private.get_json()["error"], "service_not_configured")
+
+    def test_direct_development_wsgi_accepts_server_configured_token(self):
+        client = Client(
+            iskra_app.create_development_wsgi_app(environ={"API_TOKEN": "local-test-admin"}),
+            Response,
+        )
+        response = client.get(
+            "/api/network",
+            headers={"Authorization": "Bearer local-test-admin"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
