@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template, render_template_string
 
 # =========================
 # KONFIGURACJA
@@ -82,6 +82,7 @@ DASHBOARD_HTML = """
 <body>
     <div class="container">
         <h1>ISKRA AI — System Mapowania Wiedzy i Metapoznania</h1>
+        <p><a href="/assistant" style="color:#4de1c1">Otwórz asystenta wiedzy →</a></p>
         <div class="stats">
             <div class="card"><h3>Węzły (Kategorie)</h3><p id="count-n">-</p></div>
             <div class="card"><h3>Korelacje (Synapsy)</h3><p id="count-s">-</p></div>
