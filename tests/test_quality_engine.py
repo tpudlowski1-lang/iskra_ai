@@ -27,7 +27,7 @@ class QualityEngineTests(unittest.TestCase):
         self.assertFalse(summarize(evaluate_response("not-json", {"valid_json": True}))["success"])
 
     def test_empty_response_fails_minimum(self):
-        self.assertFalse(summarize(evaluate_response("", {"min_chars": 1}))["success")
+        self.assertFalse(summarize(evaluate_response("", {"min_chars": 1}))["success"])
 
 
 if __name__ == "__main__":
