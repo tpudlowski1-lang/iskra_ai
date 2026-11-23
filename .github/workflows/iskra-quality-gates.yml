@@ -52,6 +52,8 @@ jobs:
           pip install -r requirements.txt
       - name: Compile all application and test modules
         run: python -m compileall -q app.py wsgi.py security.py iskra tests
+      - name: Validate adversarial corpus independently
+        run: python -m unittest discover -s tests -p "test_redteam_corpus.py" -v
       - name: Run complete unit, API, security, storage and concurrency suite
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
