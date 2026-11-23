@@ -155,7 +155,7 @@ class RouterProvider:
                 time.sleep(min(1, remaining))
         return None
 
-    def generate(self, prompt, system_prompt=None):
+    def generate(self, prompt, system_prompt=None, allowed_providers=None):
         deadline = time.monotonic() + MAX_GENERATION_SECONDS
         context_token = _ACTIVE_DEADLINE.set(deadline)
         system_token = _ACTIVE_SYSTEM_PROMPT.set(
@@ -163,8 +163,13 @@ class RouterProvider:
             else _DEFAULT_SYSTEM_PROMPT
         )
         try:
-            if not self.allowed_providers:
-                print("LLM: zewnętrzne providery wyłączone — ustaw LLM_ALLOWED_PROVIDERS, aby jawnie je dopuścić.")
+            deployment_allowed = self.allowed_providers
+            if allowed_providers is not None:
+                deployment_allowed = deployment_allowed.intersection(
+                    item for item in allowed_providers if isinstance(item, str)
+                )
+            if not deployment_allowed:
+                print("LLM: brak providera dozwolonego jednocześnie przez politykę tenant i deployment.")
                 return None
             order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
             for name in order:
@@ -175,7 +180,7 @@ class RouterProvider:
                 if provider is None:
                     print(f"LLM: nieznany provider '{name}' — pomijam.")
                     continue
-                if name not in self.allowed_providers:
+                if name not in deployment_allowed:
                     print(f"LLM {name}: provider nie znajduje się na LLM_ALLOWED_PROVIDERS — pomijam.")
                     continue
                 try:
