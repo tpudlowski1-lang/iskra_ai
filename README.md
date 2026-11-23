@@ -46,6 +46,9 @@ This is not a distributed multi-instance store. Hosting filesystems may be ephem
 
 ## LLM providers
 
+The optional autonomous worker currently sends the complete legacy global knowledge graph in its prompt to the configured external provider. It is disabled by default and must remain disabled until data classification, provider terms, retention and privacy controls are reviewed. Do not place customer or confidential data in the global graph. See [LLM provider data handling](docs/LLM_PROVIDER_DATA_HANDLING.md).
+
+
 Configure credentials only in hosting secrets/environment settings; never commit API keys.
 
 - `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
