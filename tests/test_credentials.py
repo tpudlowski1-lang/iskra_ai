@@ -125,6 +125,35 @@ class TenantCredentialBoundaryTests(unittest.TestCase):
             "tenant_id": "tenant-a",
         })
 
+    def test_tenant_admin_cannot_read_system_global_graph(self):
+        tenant_admin_token = "tenant-admin-secret"
+        digest = hashlib.sha256(tenant_admin_token.encode("utf-8")).hexdigest()
+        credentials = json.dumps([{
+            "token_sha256": digest,
+            "subject": "tenant-admin-1",
+            "tenant_id": "tenant-a",
+            "roles": ["admin"],
+        }])
+        app = Flask(__name__)
+
+        from iskra.security.policy import require_system_admin
+
+        @app.get("/global-graph")
+        @require_system_admin
+        def global_graph():
+            return "global graph"
+
+        app.wsgi_app = ApiTokenMiddleware(
+            app.wsgi_app,
+            token="system-admin-secret",
+            credentials_json=credentials,
+        )
+        response = app.test_client().get(
+            "/global-graph",
+            headers={"Authorization": f"Bearer {tenant_admin_token}"},
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_malformed_server_credentials_fail_closed(self):
         app = Flask(__name__)
 
