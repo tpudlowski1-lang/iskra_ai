@@ -1,6 +1,6 @@
 # Iskra AI — identity and authorization baseline
 
-**Status:** multi-principal API-token foundation implemented; not yet a multi-tenant data release.
+**Status:** multi-principal API-token foundation implemented; not yet a multi-tenant data release. This branch is validated only after its own required CI checks complete.
 
 ## Trusted request identity
 
