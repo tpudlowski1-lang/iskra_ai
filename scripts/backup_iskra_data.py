@@ -33,7 +33,7 @@ def _safe_name(name: str) -> str:
     if not isinstance(name, str) or not name or "\\" in name:
         raise BackupError("Nieprawidłowa logiczna nazwa zasobu")
     path = PurePosixPath(name)
-    if path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+    if path.is_absolute() or not path.parts or any(part in ("", ".", "..") for part in path.parts):
         raise BackupError("Nazwa zasobu wychodzi poza katalog archiwum")
     if name == MANIFEST_NAME:
         raise BackupError("Nazwa zasobu jest zarezerwowana")
@@ -208,15 +208,17 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             if not isinstance(entries, list) or not entries:
                 raise BackupError("Manifest nie zawiera zasobów")
             expected = {MANIFEST_NAME}
+            declared_names = set()
             for entry in entries:
                 name = _safe_name(entry.get("name"))
-                if name in expected:
+                if name in declared_names:
                     raise BackupError("Powtórzony zasób w manifeście")
-                expected.add(name)
+                declared_names.add(name)
                 if entry.get("status") == "absent":
                     if entry.get("required") is not False:
                         raise BackupError("Brak wymaganego zasobu w manifeście")
                     continue
+                expected.add(name)
                 if entry.get("status") != "included" or entry.get("kind") not in ("sqlite", "json"):
                     raise BackupError("Nieprawidłowy wpis manifestu")
                 if entry.get("size", MAX_RESOURCE_BYTES + 1) > MAX_RESOURCE_BYTES:
@@ -245,8 +247,8 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
                     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                         raise BackupError(f"Niepoprawny JSON w archiwum: {name}") from exc
             actual = {info.filename for info in infos}
-            if actual != expected:
-                raise BackupError("Archiwum zawiera nieoczekiwane pliki")
+            if len(actual) != len(infos) or actual != expected:
+                raise BackupError("Archiwum zawiera nieoczekiwane lub powtórzone pliki")
         os.rename(staging, target)
         return manifest
     except (zipfile.BadZipFile, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
