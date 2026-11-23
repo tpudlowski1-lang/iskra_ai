@@ -7,7 +7,7 @@ The PR #82 tenant-account feature branch contains API operations for a tenant ad
 ## Prerequisites
 
 - Deploy through `wsgi:app`, not directly through Flask's `app:app`.
-- Configure a durable private `ISKRA_CREDENTIAL_DB_PATH` and protect/backup it.
+- Configure a durable private `ISKRA_CREDENTIAL_DB_PATH`; its parent directory must be owned by the service account and mode 0700. Protect and back it up.
 - The persistent credential registry must be available; otherwise these routes return 503.
 - The request Principal must come from verified server-side credentials. Tenant ID is never accepted from the request.
 
