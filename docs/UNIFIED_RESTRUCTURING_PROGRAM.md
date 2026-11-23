@@ -151,15 +151,16 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security and storage foundation from PR #28 is integrated into `refactor/modular-core`. Its PostgreSQL/tenant-storage implementation passed CI on commit `cc46cc52db0f5f0721b204f31e13e296685a5801`:
+The security, tenant storage and opt-in PostgreSQL foundation from PR #28 is integrated into `refactor/modular-core`. The backend-selection follow-up passed CI on commit `28f3caad53b7ed9a55666c9f3ffa88e058b27ed8`:
 
 - WSGI principal authentication with hashed credentials, expiry and revocation.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - Atomic initialization of the twelve foundational pillars.
 - PostgreSQL graph schema and adapter with RLS policies, tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
-- Python 3.11 and 3.12: 104 tests each; compileall and pip-audit passed.
+- Runtime configuration validates SQLite (default) or PostgreSQL (`ISKRA_TENANT_STORAGE_BACKEND=postgres` requires `ISKRA_POSTGRES_DSN`).
+- Python 3.11 and 3.12: 111 tests each; PostgreSQL 16 RLS integration, compileall and pip-audit passed.
 
-A follow-up integration step adds validated backend selection: SQLite remains default; PostgreSQL can be selected only with `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN`. The latest backend-selection and readiness-documentation changes are under a fresh CI run; do not treat them as verified until that run completes.
+PostgreSQL remains opt-in and requires a separately applied migration, dedicated runtime role, staging cutover and restore/rollback drills. Passing CI does not establish production readiness.
 
 This does not mean PostgreSQL is already the default or that Iskra is production-ready. No production migration/cutover, rollback, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
 
