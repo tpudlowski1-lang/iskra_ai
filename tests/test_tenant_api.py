@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Flask
 
 from iskra.api.routes import create_api_blueprint
-from iskra.storage.sqlite import SQLiteGraphStore
+from iskra.storage.tenant import TenantGraphStoreFactory
 from security import ApiTokenMiddleware
 
 
@@ -55,8 +55,7 @@ class TenantGraphApiTests(unittest.TestCase):
 
         graph = Graph()
 
-        def store_factory(tenant_id):
-            return SQLiteGraphStore(self.database, tenant_id=tenant_id)
+        store_factory = TenantGraphStoreFactory(self.database).for_principal
 
         app = Flask(__name__)
         app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
@@ -167,6 +166,21 @@ class TenantGraphApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 415)
 
+
+
+    def test_system_admin_cannot_access_customer_tenant_api(self):
+        response = self.client.get(
+            "/api/tenant/network",
+            headers=self.auth("system-admin-test-token"),
+        )
+        self.assertEqual(response.status_code, 403)
+
+        response = self.client.put(
+            "/api/tenant/network",
+            headers=self.auth("system-admin-test-token"),
+            json=make_foundation(),
+        )
+        self.assertEqual(response.status_code, 403)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
