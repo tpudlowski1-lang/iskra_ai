@@ -6,6 +6,7 @@ PRINCIPAL_ENV_KEY = "iskra.auth.principal"
 PRINCIPAL_CREDENTIAL_ID_ENV_KEY = "iskra.auth.credential_id"
 BROWSER_SESSION_TOKEN_ENV_KEY = "iskra.auth.browser_session_token"
 BROWSER_SESSION_CSRF_DIGEST_ENV_KEY = "iskra.auth.browser_session_csrf_digest"
+BROWSER_SESSION_CSRF_TOKEN_ENV_KEY = "iskra.auth.browser_session_csrf_token"
 BROWSER_SESSION_COOKIE_NAME = "__Host-iskra_session"
 ALLOWED_ROLES = frozenset({"admin", "member"})
 
