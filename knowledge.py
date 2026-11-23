@@ -1,4 +1,4 @@
-"""Tenant-isolated document ingestion and lexical retrieval for Iskra AI.
+"""Tenant-isolated document ingestion and hybrid retrieval for Iskra AI.
 
 Each company receives a high-entropy API key. Only its SHA-256 digest is stored.
 Every document/chunk query is constrained by the authenticated tenant ID.

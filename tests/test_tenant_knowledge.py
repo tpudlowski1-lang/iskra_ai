@@ -272,9 +272,6 @@ class TenantSchemaRecoveryTests(unittest.TestCase):
             self.assertIsNone(knowledge.authenticate_tenant_key(db_path, tenant["api_key"]))
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 
 class SemanticRetrievalTests(unittest.TestCase):
@@ -361,3 +358,7 @@ class EmbeddingSchemaMigrationTests(unittest.TestCase):
             with sqlite3.connect(db_path) as connection:
                 columns = {row[1] for row in connection.execute("PRAGMA table_info(document_chunks)")}
             self.assertIn("embedding_json", columns)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
