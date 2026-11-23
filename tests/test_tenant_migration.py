@@ -9,6 +9,7 @@ from iskra.storage.postgres import PostgresGraphStore
 from iskra.storage.sqlite import SQLiteGraphStore
 from scripts.migrate_tenant_sqlite_to_postgres import (
     MigrationError,
+    _validate_migration_graph,
     create_private_backup,
     migrate_snapshots,
     read_tenant_snapshots,
@@ -70,8 +71,10 @@ class TenantMigrationUtilityTests(unittest.TestCase):
                 "UPDATE graph_neurons SET weight = 1.5 WHERE tenant_id = ? AND node_id = ?",
                 ("tenant-invalid", "node-1"),
             )
-        with self.assertRaisesRegex(MigrationError, "Waga poza zakresem"):
+        with self.assertRaisesRegex(MigrationError, "Kontrola integralności SQLite"):
             read_tenant_snapshots(invalid_db)
+        with self.assertRaisesRegex(MigrationError, "Waga poza zakresem"):
+            _validate_migration_graph(make_graph("valid") | {"neurons": {"node-1": {"label": "x", "weight": 1.5, "created": 123.0}}})
 
     def test_foreign_key_corruption_is_rejected_before_import(self):
         invalid_db = os.path.join(self.tmp.name, "foreign-key-invalid.sqlite3")
@@ -109,7 +112,7 @@ class TenantMigrationUtilityTests(unittest.TestCase):
                 """,
                 ("tenant-invalid", "node-1", "missing-node", 0.5),
             )
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(MigrationError, "naruszenia kluczy obcych"):
             read_tenant_snapshots(invalid_db)
 
 
