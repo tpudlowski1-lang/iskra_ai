@@ -114,6 +114,8 @@ def _snapshot_resource(resource: dict, destination: Path) -> dict:
         except sqlite3.DatabaseError as exc:
             raise BackupError(f"Nie udało się wykonać snapshotu SQLite: {name}") from exc
         os.chmod(destination, 0o600)
+        with destination.open("rb") as snapshot_file:
+            os.fsync(snapshot_file.fileno())
         _validate_sqlite(destination)
     else:
         with _open_regular_nofollow(source) as handle:
@@ -182,6 +184,8 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
         if os.path.getsize(temporary_archive) > MAX_ARCHIVE_BYTES:
             raise BackupError("Archiwum przekracza maksymalny rozmiar")
         os.chmod(temporary_archive, 0o600)
+        with open(temporary_archive, "rb") as archive_file:
+            os.fsync(archive_file.fileno())
         os.link(temporary_archive, target)
         os.unlink(temporary_archive)
         temporary_archive = None
