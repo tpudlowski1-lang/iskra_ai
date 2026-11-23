@@ -83,6 +83,16 @@ class SQLiteGraphStoreTests(unittest.TestCase):
             SQLiteGraphStore(path, tenant_id="tenant-a")
         self.assertFalse(os.path.exists(str(Path(real_parent) / "graph.sqlite3")))
 
+    def test_symlink_ancestor_is_rejected_before_creating_descendants(self):
+        real_root = Path(self.tmp.name) / "real-root"
+        real_root.mkdir()
+        linked_root = Path(self.tmp.name) / "linked-root"
+        linked_root.symlink_to(real_root, target_is_directory=True)
+        database = linked_root / "new-private-dir" / "graph.sqlite3"
+        with self.assertRaises(OSError):
+            SQLiteGraphStore(str(database), tenant_id="tenant-a")
+        self.assertFalse((real_root / "new-private-dir").exists())
+
     def test_tenant_scope_cannot_be_reassigned(self):
         store = SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
         with self.assertRaises(AttributeError):
