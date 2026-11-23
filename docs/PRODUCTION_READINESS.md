@@ -31,6 +31,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
+- [ ] Per-tenant provider policy, consent/notice, ordinary-prompt PII/secret minimization, and contractual review remain incomplete; the deployment-level allowlist is not a substitute.
 - [ ] Data classification, user notice/consent, ordinary-prompt minimization/redaction, per-tenant provider policy, provider-specific retention/region controls and contractual/legal review. The router allowlist is deployment-level only.
 - [ ] Dedicated single-owner autonomous worker with lease/coordination.
 - [ ] Staging deployment and production smoke tests.
@@ -54,3 +55,8 @@ Do not enable PostgreSQL in production until staging migration, cross-tenant neg
 - Never store API keys, database DSNs or raw bearer tokens in Git.
 - Do not enable customer document uploads or RAG until authorization, storage isolation, retrieval filtering and restore tests pass.
 - Keep the main restructuring PR in draft until reviewed; `main` must remain unchanged until a separate release decision.
+
+
+## External LLM processing
+
+The router now denies all registered external providers unless they are explicitly listed in `LLM_ALLOWED_PROVIDERS`; the same policy applies to primary and fallback. The Render manifest leaves this allowlist empty and sets `autoDeploy: false`. The autonomous worker uses a fixed public taxonomy rather than serializing the mutable global graph. Ordinary user prompts are not automatically redacted, provider allowlists are not tenant-specific, and no consent UI or network egress firewall exists. Customer-data processing by external LLMs remains NOT APPROVED pending provider-specific contractual/privacy review. See `LLM_PROVIDER_ALLOWLIST.md` and `LLM_PROVIDER_DATA_HANDLING.md`.
