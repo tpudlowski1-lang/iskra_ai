@@ -60,6 +60,18 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SQLiteCredentialStore(":memory:")
 
+    def test_symbolic_link_database_path_is_rejected(self):
+        target = os.path.join(self.temp_dir.name, "target.sqlite3")
+        with open(target, "wb") as handle:
+            handle.write(b"not a database")
+        link = os.path.join(self.temp_dir.name, "linked.sqlite3")
+        try:
+            os.symlink(target, link)
+        except (AttributeError, NotImplementedError, OSError):
+            self.skipTest("Symlinks are unavailable on this platform")
+        with self.assertRaises(CredentialStoreUnavailable):
+            SQLiteCredentialStore(link)
+
 
 if __name__ == "__main__":
     unittest.main()
