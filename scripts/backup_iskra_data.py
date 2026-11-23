@@ -168,6 +168,14 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
             name = _safe_name(resource.get("name"))
             snapshot = staging / name
             entries.append(_snapshot_resource(resource, snapshot))
+        # Keep the archive creatable and restorable under the same extraction
+        # limit; otherwise highly compressible inputs could create an archive
+        # that this tool itself later refuses to restore.
+        total_resource_bytes = sum(
+            entry.get("size", 0) for entry in entries if entry["status"] == "included"
+        )
+        if total_resource_bytes > MAX_ARCHIVE_BYTES:
+            raise BackupError("Łączny rozmiar zasobów przekracza limit archiwum")
         manifest = {
             "format": "iskra-backup-v1",
             "created_at": datetime.now(timezone.utc).isoformat(),
