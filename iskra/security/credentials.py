@@ -142,7 +142,7 @@ class SQLiteCredentialStore:
         if current_time is None:
             current_time = time.time()
         digest = self._digest(token)
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT token_digest, subject, tenant_id, roles_json, expires_at, revoked_at
@@ -170,7 +170,7 @@ class SQLiteCredentialStore:
     def revoke(self, credential_id: str) -> bool:
         if not isinstance(credential_id, str) or not credential_id:
             return False
-        with self._connect() as connection:
+        with self._connection() as connection:
             with connection:
                 cursor = connection.execute(
                     """
