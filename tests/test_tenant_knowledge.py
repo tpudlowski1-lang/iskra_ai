@@ -106,9 +106,6 @@ class TenantKnowledgeTests(unittest.TestCase):
         self.assertEqual(calls, ["admin"])
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 class TenantAdminLifecycleTests(unittest.TestCase):
     def setUp(self):
@@ -197,3 +194,7 @@ class TenantSchemaRecoveryTests(unittest.TestCase):
                 )}
             self.assertIn("tenants", tables)
             self.assertIsNone(knowledge.authenticate_tenant_key(db_path, tenant["api_key"]))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
