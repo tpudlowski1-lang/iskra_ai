@@ -56,7 +56,8 @@ class PostgresDocumentRepository:
         if (
             safe_name != parsed_document.filename
             or extension != parsed_document.extension
-            or not re.fullmatch(r"[0-9a-f]{64}", parsed_document.sha256 or "")
+            or not isinstance(parsed_document.sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", parsed_document.sha256)
             or not parsed_document.chunks
             or len(parsed_document.chunks) > 2000
             or any(
