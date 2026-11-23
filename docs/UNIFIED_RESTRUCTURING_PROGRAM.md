@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current reviews:** draft PR #4 (modular core) and draft PR #28 (security and tenant storage); do not merge automatically  
+**Current review:** draft PR #4 (modular core); security and PostgreSQL tenant-storage foundations from PR #28 are integrated into `refactor/modular-core`  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -80,18 +80,23 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Principal, allowed roles, server-derived tenant context and deny-by-default route policies are implemented.
 - The shared `API_TOKEN` remains the compatibility system administrator credential; hashed static credentials and an opt-in SQLite credential registry support tenant principals, expiry and revocation.
 - WSGI resolves identity only from verified credentials. Tenant API routes pass the complete Principal into the tenant store factory; client tenant IDs are ignored.
-- Tests cover missing/invalid credentials, role boundaries, tenant spoofing, cross-tenant reads/writes, expiry, revocation and backend failure.
+- The global compatibility graph is system-admin-only; tenant routes reject the system principal and scope all graph operations to the verified tenant.
+- Tests cover missing/invalid credentials, role boundaries, tenant spoofing, cross-tenant reads/writes, expiry, revocation, backend failure and tenant initialization races.
 - Remaining: user provisioning/account lifecycle, controlled token issuance/rotation, audit events and operational secret management.
 - Exit gate for production identity is still open until those lifecycle and operational controls are completed.
 
 ### Stream C — Persistence and migration
 - Keep the existing JSON format as an import/export compatibility format.
-- Keep the current SQLite adapter for tests; audit the older SQLite graph-snapshot prototype separately.
+- The tenant API uses the tenant-scoped SQLite adapter by default; initialization of the twelve foundational pillars is atomic.
 - PostgreSQL graph schema v1, composite tenant keys, foreign keys and RLS ENABLE + FORCE migration are implemented.
 - `PostgresGraphStore` derives scope from Principal and sets a transaction-local tenant context; CI verifies it against PostgreSQL 16 with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
-- Live tenant API currently uses the tenant-scoped SQLite adapter; the legacy global graph remains JSON. PostgreSQL is not yet wired into the live app.
-- Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON-to-PostgreSQL cutover, rollback and restore drills.
+- Runtime configuration can select PostgreSQL with `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN`; SQLite remains the default. PostgreSQL is opt-in and requires a separately applied migration.
+- The legacy global graph remains JSON and system-admin-only.
+- Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON/SQLite-to-PostgreSQL cutover, rollback and restore drills.
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
+
+- A dry-run-first SQLite tenant DB migration utility creates a private online backup and SHA-256 manifest, validates source snapshots, refuses overwrites by default, and migrates all tenants in one transaction with semantic read-back before commit.
+- Remaining: run the migration against a production-like backup, rehearse restore, define cutover/rollback operations, and separately decide how the legacy global JSON graph is retained or migrated.
 
 ### Stream D — Documents and retrieval
 - Rebuild the tenant document prototype behind modular service/repository interfaces.
@@ -149,23 +154,25 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The following is implemented in the current review chain (PR #28) and verified by CI on commit `92ebb804404f5157c4567d7fd37ad2fde515ce4d`:
+The security and storage foundation from PR #28 is integrated into `refactor/modular-core`. Its PostgreSQL/tenant-storage implementation passed CI on commit `cc46cc52db0f5f0721b204f31e13e296685a5801`:
 
-- Request principal and role policy; server-side credential resolution.
-- Optional persistent SQLite credential registry with digest-only token storage, expiry and revocation.
-- Tenant API backed by principal-bound SQLite graph storage, with atomic initialization of the twelve foundational pillars.
-- PostgreSQL graph schema and adapter prototype with RLS policies, tested on PostgreSQL 16.
+- WSGI principal authentication with hashed credentials, expiry and revocation.
+- Tenant-scoped SQLite graph API and principal-bound store factory.
+- Atomic initialization of the twelve foundational pillars.
+- PostgreSQL graph schema and adapter with RLS policies, tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - Python 3.11 and 3.12: 104 tests each; compileall and pip-audit passed.
 
-This does not mean the PostgreSQL backend is live or the application is production-ready. The current live tenant API uses SQLite; the legacy global graph remains on JSON. PostgreSQL migration/cutover, backup/restore, account provisioning, audit events and staging operations remain outstanding.
+A follow-up integration step adds validated backend selection: SQLite remains default; PostgreSQL can be selected only with `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN`. The latest backend-selection and readiness-documentation changes are under a fresh CI run; do not treat them as verified until that run completes.
+
+This does not mean PostgreSQL is already the default or that Iskra is production-ready. No production migration/cutover, rollback, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
 
 ## 9. Current blockers — do not mark production-ready
 
-- Shared API-token authentication exists at the WSGI boundary, but named user lifecycle, roles, and request-scoped tenant authorization are not implemented.
-- The current SQLite adapter is not wired into the live Flask application.
-- PostgreSQL persistence and migrations are not implemented.
+- Public account/credential lifecycle, recovery, controlled rotation and audit events remain incomplete.
+- PostgreSQL backend selection is implemented as opt-in; production migration, staging cutover, rollback and restore drills remain outstanding.
+- Tenant API is SQLite by default; multi-replica operation requires PostgreSQL and an independently reviewed deployment.
 - The tenant document/RAG prototype is not integrated and has not passed a full security review.
-- Dedicated worker leases, observability, staging verification, and restore drills remain outstanding.
+- Dedicated worker leases, observability, staging verification and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
 
 ## 10. Definition of done
