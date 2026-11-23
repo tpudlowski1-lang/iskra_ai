@@ -16,14 +16,30 @@ jobs:
     name: Full test suite (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: iskra_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d iskra_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ISKRA_TEST_POSTGRES_ADMIN_DSN: postgresql://postgres:postgres@localhost:5432/iskra_test
+      ISKRA_TEST_POSTGRES_APP_DSN: postgresql://iskra_app_test:iskra_test_password@localhost:5432/iskra_test
+      ENABLE_AUTONOMOUS_LOOP: "false"
+      LLM_PROVIDER: deepseek
+      LLM_FALLBACK_PROVIDERS: openai,gemini
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
-    env:
-      ENABLE_AUTONOMOUS_LOOP: "false"
-      LLM_PROVIDER: deepseek
-      LLM_FALLBACK_PROVIDERS: openai,gemini
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
