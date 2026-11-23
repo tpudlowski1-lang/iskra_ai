@@ -29,7 +29,9 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
-- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
+- [x] Authenticated tenant-scoped document list/search/delete and source-grounded chat API with server-resolved citations; upload is admin-only and disabled by default.
+- [ ] Before enabling document upload: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
+- [ ] Build an end-user chat UI and verify mobile accessibility, session handling and error states.
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
