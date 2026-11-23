@@ -51,7 +51,7 @@ def load_api_credentials(raw):
 
 def principal_for_token(token, credentials):
     """Resolve a token to a principal using constant-time digest comparisons."""
-    if not isinstance(token, str) or not token:
+    if not isinstance(token, str) or not token or len(token) > 512:
         return None
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
     for expected_digest, principal in credentials.items():
