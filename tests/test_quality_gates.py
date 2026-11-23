@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
 import app as iskra
@@ -126,7 +127,8 @@ class IskraPersistenceTests(unittest.TestCase):
 
 class IskraProviderTests(unittest.TestCase):
     def test_router_stops_after_first_success(self):
-        router = iskra.RouterProvider()
+        with patch.dict(os.environ, {"LLM_ALLOW_EXTERNAL_PROCESSING": "true", "LLM_ALLOWED_EXTERNAL_PROVIDERS": "deepseek,openai,gemini"}):
+            router = iskra.RouterProvider()
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
@@ -139,7 +141,8 @@ class IskraProviderTests(unittest.TestCase):
         self.assertEqual(calls, ["deepseek", "openai"])
 
     def test_unknown_provider_is_skipped(self):
-        router = iskra.RouterProvider()
+        with patch.dict(os.environ, {"LLM_ALLOW_EXTERNAL_PROCESSING": "true", "LLM_ALLOWED_EXTERNAL_PROVIDERS": "deepseek"}):
+            router = iskra.RouterProvider()
         calls = []
         router.primary = "not-a-provider"
         router.fallbacks = ["deepseek"]
