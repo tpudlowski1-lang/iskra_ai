@@ -19,3 +19,7 @@ class TenantGraphStoreFactory:
         if principal.tenant_id == "system":
             raise PermissionError("System administrator nie jest tenantem klienta")
         return SQLiteGraphStore(self._database_path, tenant_id=principal.tenant_id)
+
+    def __call__(self, principal):
+        """Allow Flask routes to pass the verified Principal directly."""
+        return self.for_principal(principal)
