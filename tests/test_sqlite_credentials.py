@@ -157,5 +157,11 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
             SQLiteCredentialStore(link)
 
 
+    def test_reserved_system_tenant_cannot_receive_persistent_credential(self):
+        system_like = Principal("forged-admin", "system", frozenset({"admin"}))
+        with self.assertRaisesRegex(ValueError, "tenant system"):
+            self.store.issue(system_like)
+
+
 if __name__ == "__main__":
     unittest.main()
