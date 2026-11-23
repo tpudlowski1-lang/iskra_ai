@@ -4,6 +4,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import knowledge
 from security import ApiTokenMiddleware
@@ -327,3 +328,36 @@ class SemanticRetrievalTests(unittest.TestCase):
         hits = knowledge.search_documents(self.db, self.tenant["tenant_id"], "faktura")
         self.assertTrue(hits)
         self.assertEqual(hits[0]["filename"], "faktura.txt")
+
+class EmbeddingConfigurationTests(unittest.TestCase):
+    def test_semantic_search_is_disabled_without_explicit_opt_in(self):
+        from embeddings import EmbeddingProvider
+        with patch.dict(os.environ, {
+            "ENABLE_SEMANTIC_SEARCH": "false",
+            "OPENAI_API_KEY": "test-key",
+        }):
+            self.assertFalse(EmbeddingProvider().enabled)
+
+    def test_semantic_search_requires_an_api_key(self):
+        from embeddings import EmbeddingProvider
+        with patch.dict(os.environ, {
+            "ENABLE_SEMANTIC_SEARCH": "true",
+            "OPENAI_API_KEY": "",
+        }):
+            self.assertFalse(EmbeddingProvider().enabled)
+
+
+class EmbeddingSchemaMigrationTests(unittest.TestCase):
+    def test_existing_document_database_gets_embedding_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, "iskra_knowledge.sqlite3")
+            tenant = knowledge.create_tenant(db_path, "Migracja")
+            knowledge.add_document(db_path, tenant["tenant_id"], "stary.txt", b"Stary dokument.")
+            with sqlite3.connect(db_path) as connection:
+                connection.execute("ALTER TABLE document_chunks DROP COLUMN embedding_json")
+                connection.commit()
+            knowledge._INITIALIZED_PATHS.pop(os.path.abspath(db_path), None)
+            knowledge.initialize(db_path)
+            with sqlite3.connect(db_path) as connection:
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(document_chunks)")}
+            self.assertIn("embedding_json", columns)
