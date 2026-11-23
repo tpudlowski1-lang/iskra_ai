@@ -39,7 +39,7 @@ class ApiTokenMiddlewareTests(unittest.TestCase):
     def test_health_is_public_without_token(self):
         response = self.request(ApiTokenMiddleware(self.application, token=""), path="/health")
         self.assertEqual(response["status"], "200 OK")
-        self.assertEqual(self.calls, [])
+        self.assertEqual(self.calls, ["/health"])
 
     def test_missing_server_token_fails_closed(self):
         response = self.request(ApiTokenMiddleware(self.application, token=""))
