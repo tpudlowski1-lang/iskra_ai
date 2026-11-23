@@ -3,6 +3,8 @@ iskra.sqlite3
 iskra.sqlite3-*
 iskra.sqlite3-wal
 iskra.sqlite3-shm
+iskra_tenants.sqlite3
+iskra_tenants.sqlite3-*
 wiedza.json
 wiedza.json.*
 *.corrupt-*
