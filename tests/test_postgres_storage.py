@@ -17,8 +17,11 @@ class PostgresGraphStoreTests(unittest.TestCase):
         import psycopg
 
         cls.psycopg = psycopg
-        migration_path = Path(__file__).resolve().parents[1] / "migrations" / "0001_tenant_graph.sql"
-        migration_sql = migration_path.read_text(encoding="utf-8")
+        migration_dir = Path(__file__).resolve().parents[1] / "migrations"
+        migration_sql = [
+            (migration_dir / "0001_tenant_graph.sql").read_text(encoding="utf-8"),
+            (migration_dir / "0002_tenant_documents.sql").read_text(encoding="utf-8"),
+        ]
         with psycopg.connect(ADMIN_DSN) as connection:
             connection.execute(
                 """
@@ -35,12 +38,14 @@ class PostgresGraphStoreTests(unittest.TestCase):
             connection.execute(
                 "ALTER ROLE iskra_app_test WITH LOGIN PASSWORD 'iskra_test_password' NOSUPERUSER NOBYPASSRLS"
             )
-            connection.execute(migration_sql, prepare=False)
+            for migration in migration_sql:
+                connection.execute(migration, prepare=False)
             connection.execute(
                 """
                 GRANT USAGE ON SCHEMA public TO iskra_app_test;
                 GRANT SELECT, INSERT, UPDATE, DELETE
-                ON iskra_graph_neurons, iskra_graph_synapses
+                ON iskra_graph_neurons, iskra_graph_synapses,
+                   iskra_tenant_documents, iskra_tenant_document_chunks
                 TO iskra_app_test
                 """,
                 prepare=False,
