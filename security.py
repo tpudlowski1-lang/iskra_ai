@@ -5,12 +5,22 @@ import json
 import os
 
 from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY
+from iskra.security.token_registry import TokenRegistry
 
 
 class ApiTokenMiddleware:
-    def __init__(self, application, token=None):
+    def __init__(self, application, token=None, token_registry=None):
         self.application = application
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
+        raw_registry = os.environ.get("API_TOKEN_REGISTRY", "")
+        if token_registry is not None:
+            self.token_registry = token_registry
+        elif raw_registry:
+            # Invalid security configuration must stop startup, not silently
+            # downgrade the service to a weaker authentication mode.
+            self.token_registry = TokenRegistry.from_json(raw_registry)
+        else:
+            self.token_registry = TokenRegistry({})
         self.principal = SYSTEM_ADMIN
 
     @staticmethod
@@ -46,13 +56,21 @@ class ApiTokenMiddleware:
     def __call__(self, environ, start_response):
         if environ.get("PATH_INFO", "/") == "/health":
             return self.application(environ, start_response)
-        if not self.token:
+
+        if not self.token and not self.token_registry._entries:
             return self._response(
                 start_response, "503 Service Unavailable",
-                {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN."},
+                {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN or API_TOKEN_REGISTRY."},
             )
+
         supplied = self._provided_token(environ)
-        if not supplied or not hmac.compare_digest(supplied, self.token):
+        principal = self.token_registry.authenticate(supplied)
+        if principal is None and self.token and supplied and hmac.compare_digest(supplied, self.token):
+            # Backward compatibility: the legacy shared token remains a single
+            # system administrator credential until explicitly retired.
+            principal = self.principal
+
+        if principal is None:
             return self._response(
                 start_response, "401 Unauthorized",
                 {"error": "unauthorized", "message": "Valid API token required."},
@@ -72,7 +90,7 @@ class ApiTokenMiddleware:
                     headers.append((name, value))
             return start_response(status, headers, exc_info)
 
-        # Identity is attached only after successful credential verification.
-        # Request parameters and headers can never override this server-side value.
-        environ[PRINCIPAL_ENV_KEY] = self.principal
+        # Identity comes exclusively from the validated server-side registry.
+        # Client-provided tenant IDs and role headers are never consulted.
+        environ[PRINCIPAL_ENV_KEY] = principal
         return self.application(environ, secured_start_response)
