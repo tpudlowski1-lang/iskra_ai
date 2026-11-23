@@ -28,8 +28,8 @@ class PostgresGraphStoreTests(unittest.TestCase):
                         CREATE ROLE iskra_app_test LOGIN PASSWORD 'iskra_test_password'
                             NOSUPERUSER NOBYPASSRLS;
                     END IF;
-                END
-                $$
+                END;
+                $
                 """
             )
             connection.execute(
@@ -100,6 +100,7 @@ class PostgresGraphStoreTests(unittest.TestCase):
                         """,
                         ("tenant-beta", "attack-node", "attack", 0.2, 123.0),
                     )
+                connection.rollback()
 
     def test_missing_tenant_context_fails_closed_at_database_layer(self):
         with self.psycopg.connect(APP_DSN) as connection:
@@ -115,6 +116,7 @@ class PostgresGraphStoreTests(unittest.TestCase):
                         """,
                         ("tenant-alpha", "no-context", "blocked", 0.2, 123.0),
                     )
+                connection.rollback()
 
     def test_runtime_database_role_is_not_superuser_or_bypassrls(self):
         with self.psycopg.connect(APP_DSN) as connection:
