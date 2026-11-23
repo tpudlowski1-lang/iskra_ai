@@ -47,6 +47,17 @@ class RateLimitBehaviorTests(unittest.TestCase):
         self.assertEqual(client.get("/resource").status_code, 200)
         self.assertEqual(client.get("/resource").status_code, 429)
 
+    def test_explicit_disable_skips_global_limiter(self):
+        app = Flask(__name__)
+        self.assertIsNone(create_rate_limiter(
+            app, environ={"ISKRA_RATE_LIMIT_ENABLED": "false"}
+        ))
+
+    def test_invalid_enabled_flag_is_rejected(self):
+        app = Flask(__name__)
+        with self.assertRaises(ValueError):
+            create_rate_limiter(app, environ={"ISKRA_RATE_LIMIT_ENABLED": "sometimes"})
+
     def test_empty_storage_uri_is_rejected(self):
         app = Flask(__name__)
         with self.assertRaises(ValueError):
