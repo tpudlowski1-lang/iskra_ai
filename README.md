@@ -11,6 +11,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 - [Production readiness checklist](docs/PRODUCTION_READINESS.md)
 - [Commercial readiness gate](docs/COMMERCIAL_READINESS.md)
 - [Data migration policy](docs/DATA_MIGRATION.md)
+- [Tenant knowledge chat API](docs/KNOWLEDGE_CHAT_API.md)
 - [LLM provider allowlist policy](docs/LLM_PROVIDER_ALLOWLIST.md)
 - [LLM provider data handling](docs/LLM_PROVIDER_DATA_HANDLING.md)
 - [Autonomous worker data minimization](docs/AUTONOMOUS_WORKER_DATA_MINIMIZATION.md)
