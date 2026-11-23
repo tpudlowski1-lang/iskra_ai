@@ -201,25 +201,25 @@ class ApiTokenMiddleware:
                 )
 
         if browser_session is not None:
-            if method not in {"GET", "HEAD", "OPTIONS"}:
-                fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
-                origin = environ.get("HTTP_ORIGIN", "")
-                host = str(environ.get("HTTP_HOST", "")).lower()
-                if fetch_site == "cross-site":
+            fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
+            origin = environ.get("HTTP_ORIGIN", "")
+            host = str(environ.get("HTTP_HOST", "")).lower()
+            if fetch_site == "cross-site":
+                return self._response(
+                    start_response, "403 Forbidden",
+                    {"error": "csrf_rejected", "message": "Cross-site browser requests are not allowed."},
+                )
+            if origin:
+                try:
+                    origin_host = urlsplit(origin).netloc.lower()
+                except ValueError:
+                    origin_host = ""
+                if not host or origin_host != host:
                     return self._response(
                         start_response, "403 Forbidden",
-                        {"error": "csrf_rejected", "message": "Cross-site browser requests are not allowed."},
+                        {"error": "csrf_rejected", "message": "Request origin does not match this host."},
                     )
-                if origin:
-                    try:
-                        origin_host = urlsplit(origin).netloc.lower()
-                    except ValueError:
-                        origin_host = ""
-                    if not host or origin_host != host:
-                        return self._response(
-                            start_response, "403 Forbidden",
-                            {"error": "csrf_rejected", "message": "Request origin does not match this host."},
-                        )
+            if method not in {"GET", "HEAD", "OPTIONS"}:
                 csrf_token = environ.get("HTTP_X_CSRF_TOKEN", "")
                 csrf_digest = (
                     hashlib.sha256(csrf_token.encode("utf-8")).hexdigest()
