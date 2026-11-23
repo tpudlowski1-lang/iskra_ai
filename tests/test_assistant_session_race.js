@@ -68,20 +68,22 @@ async function staleFetchResponseCannotChangeSession() {
 
 async function staleJsonResponseCannotChangeSession() {
   const jsonResult = deferred();
-  let jsonStarted = false;
+  let markJsonStarted;
+  const jsonStarted = new Promise((resolve) => {
+    markJsonStarted = resolve;
+  });
   const context = harness(() =>
     Promise.resolve({
       ok: true,
       json: () => {
-        jsonStarted = true;
+        markJsonStarted();
         return jsonResult.promise;
       },
     })
   );
 
   const pending = context.loadSessionUnderTest();
-  await Promise.resolve();
-  assert.equal(jsonStarted, true, "test must pause after response.json() starts");
+  await jsonStarted;
 
   context.sessionGeneration = 2;
   jsonResult.resolve({ roles: ["admin"] });
