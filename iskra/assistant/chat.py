@@ -31,9 +31,10 @@ class KnowledgeChatService:
     MAX_SOURCES = 5
     MAX_EXCERPT_CHARS = 1200
 
-    def __init__(self, document_service, router):
+    def __init__(self, document_service, router, provider_policy=None):
         self.document_service = document_service
         self.router = router
+        self.provider_policy = provider_policy
 
     def answer(self, principal, question):
         if not isinstance(question, str):
@@ -92,7 +93,20 @@ class KnowledgeChatService:
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        raw = self.router.generate(prompt, system_prompt=self.SYSTEM_PROMPT)
+        if self.provider_policy is None:
+            raise InferenceUnavailable("Brak jawnej polityki providerów dla tenant")
+
+        allowed_providers = self.provider_policy.allowed_for(
+            principal, getattr(self.router, "allowed_providers", frozenset())
+        )
+        if not allowed_providers:
+            raise InferenceUnavailable("Brak jawnie zatwierdzonego providera dla tenant")
+
+        raw = self.router.generate(
+            prompt,
+            system_prompt=self.SYSTEM_PROMPT,
+            allowed_providers=allowed_providers,
+        )
         if raw is None:
             raise InferenceUnavailable("Brak jawnie dozwolonego providera LLM")
 
