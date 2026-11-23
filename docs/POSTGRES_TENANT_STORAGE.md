@@ -56,7 +56,7 @@ Only after reviewing the backup, checksum, report, target role and restore plan 
 
 ## Deployment and migration status
 
-The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. The tenant SQLite-to-PostgreSQL migration utility is implemented and integration-tested, but has not been run against production data. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
+The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
 - a backup and repeatable migration/rollback procedure exists;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
