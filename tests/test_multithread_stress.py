@@ -9,6 +9,8 @@ from concurrent.futures import ThreadPoolExecutor
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
 os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
+os.environ["LLM_ALLOW_EXTERNAL_PROCESSING"] = "true"
+os.environ["LLM_ALLOWED_EXTERNAL_PROVIDERS"] = "deepseek,openai,gemini"
 
 import app as iskra
 from flask import request
