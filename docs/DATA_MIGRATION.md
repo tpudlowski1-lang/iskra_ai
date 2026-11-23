@@ -1,7 +1,14 @@
 # Iskra AI — data migration policy
 
 ## Current state
-The existing graph is stored in `wiedza.json`. The extracted `SiecNeuronowa` keeps this format for compatibility. The new `KnowledgeGraphStore` protocol is an interface contract only; it does not silently change the production backend.
+
+The live legacy graph remains `wiedza.json`; the `KnowledgeGraphStore` protocol is an interface contract and does not silently switch the production Flask graph path.
+
+The tenant-scoped SQLite graph adapter is a tested prototype but is not wired into the legacy Flask graph path. A PostgreSQL graph adapter and internal PostgreSQL document repository exist, with SQL migrations v1/v2, tenant-scoped queries and FORCE RLS; CI tests them against an ephemeral PostgreSQL service using a restricted runtime role. PostgreSQL remains opt-in. No production database, live cutover, durable hosted volume or staging restore/rollback drill has been verified.
+
+This integrated draft combines strict SQLite migration validation and verified tenant-database backup restore. It is not part of the canonical base until reviewed and merged. The PostgreSQL identity lifecycle tables proposed in the architecture document are future work.
+
+See [PostgreSQL architecture and migration design](POSTGRESQL_ARCHITECTURE.md) for the target schema, current adapter/RLS status, tenant-isolation rules, transaction policy, import procedure, rollback, and release gates.
 
 ## Required migration sequence
 1. Stop writes to the application and confirm the autonomous loop is disabled.
