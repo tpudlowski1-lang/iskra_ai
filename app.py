@@ -10,6 +10,7 @@ from flask import Flask, jsonify, render_template_string
 from iskra.config import load_settings
 from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
+from iskra.storage.sqlite import SQLiteGraphStore
 
 settings = load_settings()
 PORT = settings.port
@@ -18,6 +19,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 app = install_security_headers(Flask(__name__))
+app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
 
 # =========================
 # MODULAR DOMAIN IMPORTS
@@ -135,7 +137,17 @@ DASHBOARD_HTML = """
 def index():
     return render_template_string(DASHBOARD_HTML)
 
-app.register_blueprint(create_api_blueprint(siec))
+TENANT_DB_PATH = os.path.abspath(
+    os.environ.get("ISKRA_TENANT_DB_PATH") or os.path.join(DATA_DIR, "iskra_tenants.sqlite3")
+)
+
+
+def tenant_store_factory(tenant_id):
+    """Bind every SQLite repository to the authenticated principal's tenant."""
+    return SQLiteGraphStore(TENANT_DB_PATH, tenant_id=tenant_id)
+
+
+app.register_blueprint(create_api_blueprint(siec, tenant_store_factory=tenant_store_factory))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, threaded=True)
