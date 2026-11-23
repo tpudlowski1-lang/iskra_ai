@@ -9,6 +9,7 @@ class Settings:
     data_dir: str
     tenant_storage_backend: str = "sqlite"
     postgres_dsn: str = ""
+    document_storage_backend: str = "sqlite"
 
 
 def load_settings(environ=None, project_root=None):
@@ -31,9 +32,16 @@ def load_settings(environ=None, project_root=None):
     if backend == "postgres" and not postgres_dsn:
         raise ValueError("ISKRA_POSTGRES_DSN jest wymagany dla backendu postgres")
 
+    document_backend = str(env.get("ISKRA_DOCUMENT_STORAGE_BACKEND", "sqlite")).strip().lower()
+    if document_backend not in {"sqlite", "postgres"}:
+        raise ValueError("ISKRA_DOCUMENT_STORAGE_BACKEND musi mieć wartość sqlite albo postgres")
+    if document_backend == "postgres" and not postgres_dsn:
+        raise ValueError("ISKRA_POSTGRES_DSN jest wymagany dla dokumentowego backendu postgres")
+
     return Settings(
         port=port,
         data_dir=data_dir,
         tenant_storage_backend=backend,
         postgres_dsn=postgres_dsn,
+        document_storage_backend=document_backend,
     )
