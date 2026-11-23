@@ -151,5 +151,19 @@ app.register_blueprint(
     create_api_blueprint(siec, tenant_store_factory=tenant_store_factory)
 )
 
+def create_development_wsgi_app(environ=None):
+    """Build the same fail-closed WSGI boundary for direct development startup."""
+    from wsgi import create_wsgi_app
+
+    return create_wsgi_app(app, environ=environ)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    from werkzeug.serving import run_simple
+
+    run_simple(
+        "0.0.0.0",
+        PORT,
+        create_development_wsgi_app(),
+        threaded=True,
+    )
