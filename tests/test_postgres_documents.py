@@ -106,7 +106,7 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                     cursor.execute(
                         """
                         INSERT INTO iskra_tenant_documents
-                            (tenant_id, document_id, filename, extension, sha256, created_at)
+                            (tenant_id, document_id, filename, extension, sha256)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
                         (
@@ -127,7 +127,7 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                     cursor.execute(
                         """
-                        INSERT INTO iskra_documents
+                        INSERT INTO iskra_tenant_documents
                             (tenant_id, document_id, filename, extension, sha256, created_at)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
