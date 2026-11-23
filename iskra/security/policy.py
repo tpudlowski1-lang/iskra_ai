@@ -3,7 +3,7 @@ from functools import wraps
 
 from flask import jsonify, request
 
-from iskra.security.principal import principal_from_environ
+from iskra.security.principal import SYSTEM_ADMIN, principal_from_environ
 
 
 def require_roles(*required_roles):
@@ -32,7 +32,7 @@ def require_system_admin(view):
         principal = principal_from_environ(request.environ)
         if principal is None:
             return jsonify({"error": "unauthorized"}), 401
-        if "admin" not in principal.roles or principal.tenant_id != "system":
+        if principal is not SYSTEM_ADMIN:
             return jsonify({"error": "forbidden"}), 403
         return view(*args, **kwargs)
     return wrapped
