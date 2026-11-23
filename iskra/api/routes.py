@@ -121,6 +121,16 @@ def create_api_blueprint(
         except (DocumentStorageError, OSError, sqlite3.Error):
             return jsonify({"error": "document_storage_unavailable"}), 503
 
+    @api.get("/api/tenant/session")
+    @require_roles("member", "admin")
+    def tenant_session():
+        principal = principal_from_environ(request.environ)
+        return jsonify({
+            "subject": principal.subject,
+            "tenant_id": principal.tenant_id,
+            "roles": sorted(principal.roles),
+        })
+
     @api.get("/api/tenant/credentials")
     @require_roles("admin")
     def list_tenant_credentials():
