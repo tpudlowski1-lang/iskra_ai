@@ -10,6 +10,8 @@ All restructuring streams are coordinated in one source of truth:
 - [Modular core design](docs/superpowers/specs/2026-11-23-modular-core-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-11-23-modular-core.md)
 - [Production readiness checklist](docs/PRODUCTION_READINESS.md)
+- [LLM provider allowlist policy](docs/LLM_PROVIDER_ALLOWLIST.md)
+- [Autonomous worker data minimization](docs/AUTONOMOUS_WORKER_DATA_MINIMIZATION.md)
 - [Data migration policy](docs/DATA_MIGRATION.md)
 
 The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; their code is ported selectively after review, not merged wholesale.
@@ -34,7 +36,7 @@ This is only a shared administrator token, not a full identity system. Named use
 - `iskra/api/routes.py` — injectable Flask API blueprint.
 - `iskra/security/headers.py` — baseline response security headers.
 - `security.py` — shared API-token WSGI middleware.
-- `iskra/workers/autonomous.py` — opt-in autonomous graph-learning loop.
+- `iskra/workers/autonomous.py` — opt-in autonomous graph-learning loop; outbound context is restricted to the fixed public taxonomy, not the mutable global graph.
 - `iskra/storage/protocols.py` — storage interface.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite adapter prototype; it is **not connected to the live Flask graph path** and is not production tenant isolation.
 
@@ -46,8 +48,9 @@ This is not a distributed multi-instance store. Hosting filesystems may be ephem
 
 ## LLM providers
 
-Configure credentials only in hosting secrets/environment settings; never commit API keys.
+Configure credentials only in hosting secrets/environment settings; never commit API keys. External providers are deny-by-default: without `LLM_ALLOWED_PROVIDERS`, the router makes no outbound LLM calls.
 
+- `LLM_ALLOWED_PROVIDERS`: explicit comma-separated allowlist (for example `deepseek,openai`); empty/unset disables all external providers.
 - `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
 - `LLM_FALLBACK_PROVIDERS`: comma-separated fallback order.
 - `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-4o-mini`).
