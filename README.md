@@ -33,7 +33,8 @@ If `API_TOKEN` is missing, the middleware fails closed with HTTP 503 on all non-
 ## Storage and migration
 
 The graph store uses SQLite as its durable source of truth:
-- database: `$DATA_DIR/iskra.sqlite3`;
+- graph database: `$DATA_DIR/iskra.sqlite3`;
+- tenant document database: `$DATA_DIR/iskra_knowledge.sqlite3`;
 - compatibility/export snapshot: `$DATA_DIR/wiedza.json`;
 - SQLite uses WAL journaling, a 30-second busy timeout and transactional writes;
 - on first start, an existing valid `wiedza.json` is imported automatically;
@@ -41,7 +42,7 @@ The graph store uses SQLite as its durable source of truth:
 
 Set `DATA_DIR` to a persistent writable directory on the hosting platform. A container's ordinary filesystem may be ephemeral: without a persistent disk, data can be lost on redeploy/restart. Do not point multiple independent hosts at a local SQLite file; horizontal multi-instance production should move to PostgreSQL.
 
-Before upgrading, take a copy of both `iskra.sqlite3` and `wiedza.json`. Keep the autonomous learning loop disabled during migration and deployment.
+Before upgrading, take a copy of `iskra.sqlite3`, `iskra_knowledge.sqlite3`, and `wiedza.json`. The graph and company-document databases are separate so recovery of the internal graph does not overwrite tenant records. Keep the autonomous learning loop disabled during migration and deployment.
 
 ## LLM configuration
 
@@ -62,4 +63,27 @@ The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOU
 
 ## Important limitations
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+This branch now contains a tenant-isolated document pilot API with per-company API keys, PDF/DOCX/TXT ingestion and tenant-filtered SQLite FTS5 search. It is not yet a complete multi-tenant SaaS: named user accounts, roles, semantic vector retrieval, generated grounded answers, billing, private object storage, formal retention controls and production operations are still missing. Do not upload highly sensitive customer documents or sell the service until those remaining controls are implemented and independently reviewed.
+
+
+## Tenant document knowledge (pilot API)
+
+The authenticated administrator creates a company workspace:
+
+```http
+POST /admin/tenants
+Authorization: Bearer <API_TOKEN>
+Content-Type: application/json
+
+{"name":"Firma testowa"}
+```
+
+The response includes a one-time `api_key`. Store it securely; only its SHA-256 digest is persisted. Tenant API keys can access only:
+- `GET /api/documents`
+- `POST /api/documents` with multipart field `file`
+- `DELETE /api/documents/<document_id>`
+- `POST /api/search` with JSON `{"query":"...","limit":5}`
+
+Send the tenant key in `X-Iskra-Tenant-Key`. Tenant identity is derived from the validated key, never from a client-supplied tenant ID. Document records, chunks, retrieval, and deletion are scoped to that tenant in SQLite. Supported uploads: PDF, DOCX and TXT; maximum upload 8 MB, extracted text 1.5 million characters, 200 PDF pages. Search returns source excerpts, not an invented model answer.
+
+This is a controlled pilot foundation, not a complete SaaS identity system: it does not yet include named user accounts, roles, billing, object storage, or a generated conversational answer. Administrators can rotate tenant keys or delete tenant data through the admin API. Protect tenant keys as passwords and use HTTPS.
