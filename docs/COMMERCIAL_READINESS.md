@@ -134,7 +134,16 @@ A release can be considered **commercial-candidate** only when every item below 
 
 The current rebased release candidate is Draft PR #89, branch `integration/assistant-release-rebased-v1`, based directly on `integration/full-release-candidate-v1`. It combines the tenant chat UI/API, source-grounded retrieval, dual-gate tenant provider allowlists, best-effort outbound minimization, tenant credential lifecycle/admin console, WSGI credential-store wiring and SQLite path hardening.
 
-The branch compare is 52 commits ahead / 0 behind the current integration base, with 37 changed files. The exact-head CI must be checked on the latest commit recorded in PR #89; prior green runs on earlier PRs/SHAs are not evidence for a newer head.
+The branch compare is 53 commits ahead / 0 behind the current integration base, with 37 changed files.
+
+On code HEAD `713490dd59b72eaf5eb5f53b9ef82661407e09d5`, all five GitHub workflows passed:
+- Unified quality gates [45226746886](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746886): SUCCESS — 337 tests on Python 3.11 and 337 tests on Python 3.12, plus dependency vulnerability audit.
+- Security/reliability [45226746853](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746853): SUCCESS.
+- Quality Engine [45226746902](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746902): SUCCESS.
+- Adversarial corpus [45226747025](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226747025): SUCCESS.
+- Dependency/license inventory [45226746765](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746765): SUCCESS.
+
+A subsequent documentation-only update records this evidence; CI must be reconfirmed on the resulting PR #89 head before integration.
 
 The repository still has **no verified production deployment and is NOT READY FOR SALE**. No live customer data, real provider calls, paid infrastructure or production secrets were used. The current feature remains a controlled-pilot foundation.
 
