@@ -88,3 +88,7 @@ GitHub Actions runs the full test suite on Python 3.11 and 3.12, including Postg
 ## Not production-ready as a paid multi-tenant SaaS
 
 Implemented tenant adapters and green CI do not equal a production SaaS. Remaining gates include public account lifecycle, staging PostgreSQL cutover, durable backups and restore, independent security review, parser sandboxing, malware scanning, retrieval evaluation and provenance, tenant quotas, CSRF protection for browser mutations, monitoring/alerting, incident response, license/IP review, privacy/contracts, cost model, onboarding, support and validated product scope. See [Commercial readiness gate](docs/COMMERCIAL_READINESS.md).
+
+## Tenant knowledge chat API (draft feature)
+
+The current feature branch adds an authenticated POST /api/tenant/chat endpoint. It searches only documents belonging to the authenticated Principal, sends at most five bounded excerpts to the configured LLM, and requires exact server-resolved citations. No source means no provider call. Tenant document list/search/delete routes are also available; upload is admin-only and disabled by default through ISKRA_ENABLE_DOCUMENT_INGESTION=false. There is not yet an end-user chat UI or conversation history. See docs/KNOWLEDGE_CHAT_API.md.
