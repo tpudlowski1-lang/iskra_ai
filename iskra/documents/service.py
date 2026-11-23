@@ -1,13 +1,14 @@
 """Document application service; tenant scope always comes from Principal."""
 from iskra.security.principal import Principal
-from iskra.documents.parsers import parse_document
+from iskra.documents.worker import parse_document_isolated
 
 
 class DocumentService:
     """Coordinate parsing and storage without exposing request-level tenant IDs."""
 
-    def __init__(self, repository):
+    def __init__(self, repository, parser=None):
         self.repository = repository
+        self.parser = parser or parse_document_isolated
 
     @staticmethod
     def _tenant_id(principal):
@@ -21,7 +22,7 @@ class DocumentService:
 
     def add_document(self, principal, filename, data):
         tenant_id = self._tenant_id(principal)
-        parsed = parse_document(filename, data)
+        parsed = self.parser(filename, data)
         return self.repository.add(tenant_id, parsed)
 
     def list_documents(self, principal):
