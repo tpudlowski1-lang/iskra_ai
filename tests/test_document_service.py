@@ -105,5 +105,12 @@ class TenantDocumentServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_document_isolated("bad.pdf", b"not a pdf")
 
+
+    def test_isolated_parser_accepts_large_text_with_chunk_overlap(self):
+        parsed = parse_document_isolated("long.txt", ("a" * 1_400_000).encode("utf-8"))
+        self.assertGreater(len(parsed.chunks), 1000)
+        self.assertGreater(sum(len(chunk) for chunk in parsed.chunks), 1_400_000)
+        self.assertLessEqual(len(parsed.chunks), 2000)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
