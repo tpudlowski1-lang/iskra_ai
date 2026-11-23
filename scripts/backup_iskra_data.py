@@ -66,9 +66,14 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sqlite_readonly_uri(path: Path) -> str:
+    """Return an escaped read-only SQLite URI for paths with reserved characters."""
+    return path.resolve().as_uri() + "?mode=ro"
+
+
 def _validate_sqlite(path: Path) -> None:
     try:
-        with sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True) as db:
+        with sqlite3.connect(_sqlite_readonly_uri(path), uri=True) as db:
             result = db.execute("PRAGMA integrity_check").fetchone()
             if not result or result[0] != "ok":
                 raise BackupError("SQLite integrity_check nie przeszedł")
@@ -86,19 +91,19 @@ def _snapshot_resource(resource: dict, destination: Path) -> dict:
     if kind not in ("sqlite", "json") or not source:
         raise BackupError("Zasób musi mieć kind sqlite/json i path")
     required = bool(resource.get("required", True))
+    if os.path.islink(source):
+        raise BackupError(f"Symlink nie jest dozwolony: {name}")
     if not os.path.exists(source):
         if required:
             raise BackupError(f"Brak wymaganego zasobu: {name}")
         return {"name": name, "kind": kind, "required": False, "status": "absent"}
-    if os.path.islink(source):
-        raise BackupError(f"Symlink nie jest dozwolony: {name}")
     if not os.path.isfile(source):
         raise BackupError(f"Zasób nie jest zwykłym plikiem: {name}")
 
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if kind == "sqlite":
         try:
-            source_db = sqlite3.connect(f"file:{Path(source).as_posix()}?mode=ro", uri=True)
+            source_db = sqlite3.connect(_sqlite_readonly_uri(Path(source)), uri=True)
             target_db = sqlite3.connect(destination)
             try:
                 source_db.backup(target_db)
