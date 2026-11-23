@@ -6,6 +6,7 @@ import sqlite3
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from scripts.backup_iskra_data import BackupError, create_archive, restore_archive
@@ -89,6 +90,18 @@ class FullBackupArchiveTests(unittest.TestCase):
         restore_archive(str(archive), str(target))
         with sqlite3.connect(target / "data/graph.sqlite3") as db:
             self.assertEqual(db.execute("SELECT value FROM records").fetchone()[0], "reserved-path")
+
+    def test_create_rejects_total_size_above_restore_limit(self):
+        second = self.root / "second.json"
+        second.write_text(json.dumps({"extra": "data"}), encoding="utf-8")
+        resources = [
+            {"name": "data/first.json", "path": str(self.knowledge), "kind": "json"},
+            {"name": "data/second.json", "path": str(second), "kind": "json"},
+        ]
+        with patch("scripts.backup_iskra_data.MAX_ARCHIVE_BYTES", 100):
+            with self.assertRaises(BackupError):
+                create_archive(resources, str(self.archive), writes_paused=True)
+        self.assertFalse(self.archive.exists())
 
     def test_requires_explicit_quiescence_acknowledgement(self):
         with self.assertRaises(BackupError):
