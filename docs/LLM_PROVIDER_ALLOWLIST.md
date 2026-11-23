@@ -1,6 +1,6 @@
 # External LLM provider allowlist
 
-**Status:** proposed implementation on an isolated draft branch.  
+**Status:** implemented in the integrated draft candidate; not deployed.  
 **Default:** deny outbound provider calls.
 
 ## Policy
@@ -48,7 +48,7 @@ Do not enable a provider solely because its API key exists. The operator must fi
 - It does not verify the provider account's Paid/Unpaid status, DPA, region or retention settings.
 - It does not prevent other application code from making direct HTTP requests outside this router.
 - It does not replace network egress restrictions or a separate local-only inference architecture.
-- The autonomous worker still serializes the complete legacy global graph into its prompt when enabled; leave the worker disabled until its context construction and privacy controls are reviewed.
+- The autonomous worker now uses a fixed public taxonomy rather than serializing the mutable global graph; see `AUTONOMOUS_WORKER_DATA_MINIMIZATION.md`. Keep it disabled until singleton coordination, provider terms and operational gates are reviewed.
 
 ## Verification
 
