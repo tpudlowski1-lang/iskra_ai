@@ -127,7 +127,7 @@ def main(argv=None):
                 roles=roles,
                 actor=args.actor,
             )
-            _print_issued(issued, expiry)
+            _print_issued(issued, issued.expires_at)
             return 0
 
         if args.command == "audit":
