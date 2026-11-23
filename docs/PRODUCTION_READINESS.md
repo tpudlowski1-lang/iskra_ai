@@ -31,7 +31,8 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
 - [x] Authenticated tenant-scoped document list/search/delete and source-grounded chat API with server-resolved citations; upload is admin-only and disabled by default.
 - [ ] Before enabling document upload: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
-- [ ] Build an end-user chat UI and verify mobile accessibility, session handling and error states.
+- [x] Minimal responsive /assistant chat UI with token held in page memory only; route/assets/security headers tested in Draft PR #79.
+- [ ] Production-grade account lifecycle/session management, chat history, mobile accessibility acceptance and end-to-end customer usability review.
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
