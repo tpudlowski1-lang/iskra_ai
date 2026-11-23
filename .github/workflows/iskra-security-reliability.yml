@@ -3,7 +3,9 @@ name: Iskra security reliability pack
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [refactor/modular-core]
+    branches: [refactor/modular-core, integration/full-release-candidate-v1]
+  push:
+    branches: [integration/full-release-candidate-v1]
   workflow_dispatch:
 
 permissions:
