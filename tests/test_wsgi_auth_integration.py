@@ -8,6 +8,7 @@ from flask import Flask, request
 
 from iskra.security.principal import PRINCIPAL_ENV_KEY, Principal
 from iskra.security.sqlite_credentials import SQLiteCredentialStore
+from security import ApiTokenMiddleware
 from wsgi import create_wsgi_app
 
 
@@ -125,6 +126,39 @@ class WsgiAuthenticationIntegrationTests(unittest.TestCase):
                 "tenant_id": "tenant-static",
                 "roles": ["member"],
             })
+
+
+    def test_credential_store_outage_fails_closed_without_static_fallback(self):
+        application = Flask(__name__)
+
+        @application.get("/private")
+        def private():
+            return {"status": "should-not-be-reached"}
+
+        class UnavailableStore:
+            def authenticate(self, _token):
+                raise RuntimeError("database unavailable")
+
+        token = "static-member-secret"
+        static_principal = {
+            "token_sha256": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+            "subject": "static-member",
+            "tenant_id": "tenant-static",
+            "roles": ["member"],
+        }
+        secured = ApiTokenMiddleware(
+            application.wsgi_app,
+            credentials_json=json.dumps([static_principal]),
+            credential_store=UnavailableStore(),
+        )
+        from werkzeug.test import Client
+        from werkzeug.wrappers import Response
+        response = Client(secured, Response).get(
+            "/private",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["error"], "authentication_unavailable")
 
 
 if __name__ == "__main__":
