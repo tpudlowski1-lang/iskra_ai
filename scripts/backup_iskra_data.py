@@ -47,7 +47,10 @@ def _open_regular_nofollow(path: str):
     flags = os.O_RDONLY
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    descriptor = os.open(path, flags)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise BackupError("Zasób nie może być bezpiecznie otwarty") from exc
     info = os.fstat(descriptor)
     if not stat.S_ISREG(info.st_mode):
         os.close(descriptor)
