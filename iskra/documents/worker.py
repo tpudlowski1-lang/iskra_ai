@@ -8,7 +8,7 @@ sandbox; keep public routes disabled until deployment isolation is reviewed.
 import json
 import multiprocessing
 import os
-import time
+import re
 
 try:
     import resource
@@ -16,6 +16,10 @@ except ImportError:  # pragma: no cover - the production target is Linux
     resource = None
 
 from iskra.documents.parsers import (
+    ALLOWED_EXTENSIONS,
+    CHUNK_SIZE,
+    MAX_CHUNKS,
+    MAX_EXTRACTED_CHARS,
     MAX_UPLOAD_BYTES,
     ParsedDocument,
     parse_document,
@@ -116,13 +120,29 @@ def parse_document_isolated(
             if kind == "invalid_document":
                 raise ValueError(message or "Nieprawidłowy dokument")
             raise RuntimeError(message or "Błąd izolowanego parsera")
-        if (set(payload) != {"ok", "filename", "extension", "sha256", "chunks"}
-                or not isinstance(payload["filename"], str)
-                or not isinstance(payload["extension"], str)
-                or not isinstance(payload["sha256"], str)
-                or not isinstance(payload["chunks"], list)
-                or not payload["chunks"]
-                or any(not isinstance(chunk, str) for chunk in payload["chunks"])):
+        filename_value = payload.get("filename") if isinstance(payload, dict) else None
+        extension_value = payload.get("extension") if isinstance(payload, dict) else None
+        digest_value = payload.get("sha256") if isinstance(payload, dict) else None
+        chunks_value = payload.get("chunks") if isinstance(payload, dict) else None
+        if (
+            set(payload) != {"ok", "filename", "extension", "sha256", "chunks"}
+            or not isinstance(filename_value, str)
+            or not filename_value
+            or os.path.basename(filename_value) != filename_value
+            or "/" in filename_value
+            or "\\" in filename_value
+            or not isinstance(extension_value, str)
+            or extension_value not in ALLOWED_EXTENSIONS
+            or not filename_value.lower().endswith(extension_value)
+            or not isinstance(digest_value, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest_value)
+            or not isinstance(chunks_value, list)
+            or not chunks_value
+            or len(chunks_value) > MAX_CHUNKS
+            or any(not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
+                   for chunk in chunks_value)
+            or sum(len(chunk) for chunk in chunks_value) > MAX_EXTRACTED_CHARS
+        ):
             raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
         return ParsedDocument(
             filename=payload["filename"],
