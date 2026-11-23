@@ -20,7 +20,7 @@ All routes require a tenant administrator role:
 - `POST /api/tenant/credentials/{credential_id}/rotate` — atomically issue a replacement and revoke the old credential. Roles may be retained or reduced, never increased.
 - `DELETE /api/tenant/credentials/{credential_id}` — revoke a credential only if it belongs to the current tenant.
 
-Issuance/rotation returns a high-entropy token once. Store it immediately in a secret manager; it cannot be retrieved later. Audit events record actor, subject, tenant and operation, but never the token or digest.
+Issuance defaults to a 90-day expiry and tenant admins cannot request more than 365 days. Rotation preserves an existing expiry, caps legacy long-lived credentials at 365 days, and gives non-expiring legacy credentials a new 90-day lifetime. Issuance/rotation returns a high-entropy token once. Store it immediately in a secret manager; it cannot be retrieved later. Audit events record actor, subject, tenant and operation, but never the token or digest.
 
 ## Security properties
 
