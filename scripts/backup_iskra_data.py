@@ -9,6 +9,8 @@ discovered recursively.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -182,6 +184,21 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
             os.unlink(temporary_archive)
 
 
+def _publish_directory_noreplace(staging: Path, target: Path) -> None:
+    """Atomically publish a directory without replacing an existing path."""
+    renameat2 = getattr(ctypes.CDLL(None, use_errno=True), "renameat2", None)
+    if renameat2 is None:
+        raise BackupError("System nie udostępnia atomowej publikacji katalogu bez nadpisania")
+    renameat2.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(-100, os.fsencode(staging), -100, os.fsencode(target), 1)
+    if result != 0:
+        error = ctypes.get_errno()
+        if error == errno.EEXIST:
+            raise BackupError("Katalog docelowy już istnieje — restore nie nadpisuje danych")
+        raise OSError(error, os.strerror(error), str(target))
+
+
 def restore_archive(archive_path: str, target_dir: str) -> dict:
     """Verify and restore all archive members into a new directory atomically."""
     target = Path(target_dir).absolute()
@@ -249,7 +266,7 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             actual = {info.filename for info in infos}
             if len(actual) != len(infos) or actual != expected:
                 raise BackupError("Archiwum zawiera nieoczekiwane lub powtórzone pliki")
-        os.rename(staging, target)
+        _publish_directory_noreplace(staging, target)
         return manifest
     except (zipfile.BadZipFile, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         if isinstance(exc, BackupError):
