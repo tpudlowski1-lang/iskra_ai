@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  let apiToken = "";
+  let csrfToken = "";
   let sessionGeneration = 0;
   const connectForm = document.getElementById("connect-form");
   const tokenInput = document.getElementById("api-token");
@@ -56,11 +56,10 @@
 
   async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
-    headers.set("Authorization", "Bearer " + apiToken);
-    if (options.body) {
-      headers.set("Content-Type", "application/json");
-    }
-    return fetch(path, { ...options, headers, credentials: "same-origin" });
+    const method = String(options.method || "GET").toUpperCase();
+    if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    return fetch(path, { ...options, headers, credentials: "same-origin", cache: "no-store" });
   }
 
   function addMessage(role, text, citations = []) {
@@ -97,10 +96,21 @@
 
   async function loadSession() {
     const generation = sessionGeneration;
+    const bootstrapResponse = await fetch("/api/browser/session", { credentials: "same-origin", cache: "no-store" });
+    if (generation !== sessionGeneration) return;
+    if (!bootstrapResponse.ok) {
+      throw new Error(bootstrapResponse.status === 401
+        ? "Sesja wygasła lub nie jest aktywna. Wprowadź ponownie token dostępu."
+        : "Nie udało się odnowić sesji przeglądarki.");
+    }
+    const bootstrap = await bootstrapResponse.json();
+    if (generation !== sessionGeneration) return;
+    csrfToken = String(bootstrap.csrf_token || "");
+    if (!csrfToken) throw new Error("Serwer nie zwrócił tokenu CSRF.");
     const response = await apiRequest("/api/tenant/session");
     if (generation !== sessionGeneration) return;
     if (!response.ok) {
-      throw new Error(response.status === 401 ? "Token nieprawidłowy lub wygasł." : "Nie udało się sprawdzić uprawnień.");
+      throw new Error(response.status === 401 ? "Sesja wygasła lub token został unieważniony." : "Nie udało się sprawdzić uprawnień.");
     }
     const session = await response.json();
     if (generation !== sessionGeneration) return;
@@ -164,7 +174,7 @@
   }
 
   async function rotateCredential(credentialId) {
-    if (!apiToken || !window.confirm("Rotować ten token? Poprzedni zostanie natychmiast unieważniony.")) return;
+    if (!csrfToken || !window.confirm("Rotować ten token? Poprzedni zostanie natychmiast unieważniony.")) return;
     if (!beginCredentialMutation()) return;
     const generation = sessionGeneration;
     try {
@@ -189,7 +199,7 @@
   }
 
   async function revokeCredential(credentialId) {
-    if (!apiToken || !window.confirm("Unieważnić ten token? Tej operacji nie można cofnąć.")) return;
+    if (!csrfToken || !window.confirm("Unieważnić ten token? Tej operacji nie można cofnąć.")) return;
     if (!beginCredentialMutation()) return;
     const generation = sessionGeneration;
     try {
@@ -254,8 +264,23 @@
     messages.replaceChildren();
     sendButton.disabled = true;
     credentialSubject.value = "";
-    apiToken = candidate;
     try {
+      const loginResponse = await fetch("/api/browser/session", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + candidate, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const loginData = await loginResponse.json().catch(() => ({}));
+      if (!loginResponse.ok) {
+        throw new Error(loginResponse.status === 403
+          ? "Do logowania przez przeglądarkę wymagany jest aktywny token z trwałego rejestru."
+          : "Nie udało się utworzyć bezpiecznej sesji (" + loginResponse.status + ").");
+      }
+      csrfToken = String(loginData.csrf_token || "");
+      if (!csrfToken) throw new Error("Serwer nie zwrócił tokenu CSRF.");
+      tokenInput.value = "";
       await loadSession();
       if (generation !== sessionGeneration) return;
       await loadDocuments();
@@ -264,11 +289,18 @@
       workspace.hidden = false;
       logoutButton.hidden = false;
       sendButton.disabled = false;
-      setStatus("Połączono. Token jest przechowywany tylko w pamięci karty.");
+      setStatus("Połączono. Token API nie jest przechowywany; sesję chroni ciasteczko HttpOnly.");
       questionInput.focus();
     } catch (error) {
       if (generation !== sessionGeneration) return;
-      apiToken = "";
+      if (csrfToken) {
+        try {
+          await fetch("/api/browser/session/logout", { method: "POST", headers: { "X-CSRF-Token": csrfToken }, credentials: "same-origin" });
+        } catch (_logoutError) {
+          // Server-side expiry remains the fallback if logout cannot be reached.
+        }
+      }
+      csrfToken = "";
       setStatus(error.message || "Nie udało się połączyć.", true);
     } finally {
       connectButton.disabled = credentialMutationPending;
@@ -276,10 +308,17 @@
     }
   });
 
-  logoutButton.addEventListener("click", () => {
+  logoutButton.addEventListener("click", async () => {
     if (credentialMutationPending) return;
+    try {
+      const response = await apiRequest("/api/browser/session/logout", { method: "POST" });
+      if (!response.ok) throw new Error("Serwer nie potwierdził zakończenia sesji.");
+    } catch (error) {
+      setStatus(error.message || "Nie udało się zakończyć sesji na serwerze.", true);
+      return;
+    }
     sessionGeneration += 1;
-    apiToken = "";
+    csrfToken = "";
     workspace.hidden = true;
     logoutButton.hidden = true;
     accountPanel.hidden = true;
@@ -289,14 +328,14 @@
     copyTokenButton.textContent = "Kopiuj token";
     sendButton.disabled = true;
     messages.replaceChildren();
-    addMessage("assistant", "Sesja została zakończona. Strona odrzuciła referencję do tokena.");
+    addMessage("assistant", "Sesja została unieważniona na serwerze. Ciasteczko HttpOnly zostało usunięte.");
     setStatus("Rozłączono.");
     tokenInput.focus();
   });
 
   credentialForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!apiToken || !sessionRoles.includes("admin") || credentialMutationPending) return;
+    if (!csrfToken || !sessionRoles.includes("admin") || credentialMutationPending) return;
     const subject = credentialSubject.value.trim();
     if (!subject || !beginCredentialMutation()) return;
     const generation = sessionGeneration;
@@ -340,7 +379,7 @@
   chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = questionInput.value.trim();
-    if (!apiToken || !question) return;
+    if (!csrfToken || !question) return;
     const generation = sessionGeneration;
     sendButton.disabled = true;
     addMessage("user", question);
@@ -368,4 +407,33 @@
       }
     }
   });
+  async function restoreBrowserSession() {
+    sessionGeneration += 1;
+    const generation = sessionGeneration;
+    try {
+      await loadSession();
+      if (generation !== sessionGeneration) return;
+      await loadDocuments();
+      if (generation !== sessionGeneration) return;
+      workspace.hidden = false;
+      logoutButton.hidden = false;
+      sendButton.disabled = false;
+      setStatus("Przywrócono bezpieczną sesję przeglądarki.");
+    } catch (_error) {
+      if (generation !== sessionGeneration) return;
+      csrfToken = "";
+      workspace.hidden = true;
+      logoutButton.hidden = true;
+      accountPanel.hidden = true;
+      sessionRoles = [];
+      credentialList.replaceChildren();
+      showIssuedToken("");
+      documentList.replaceChildren();
+      documentCount.textContent = "0";
+      sendButton.disabled = true;
+      setStatus("Brak aktywnej sesji. Wprowadź token dostępu.", false);
+    }
+  }
+
+  restoreBrowserSession();
 })();
