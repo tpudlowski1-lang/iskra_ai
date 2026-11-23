@@ -96,11 +96,13 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
 ### Stream D — Documents and retrieval
+- Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its useful ideas are retained, but the monolithic branch is not merged.
 - Rebuild the tenant document prototype behind modular service/repository interfaces.
 - Enforce upload size, file type, decompression/page/text limits, safe parsing, malware scanning strategy, and private storage.
 - Store document ownership and chunk ownership with composite tenant constraints.
 - Apply tenant filters to every retrieval query; test adversarial cross-tenant searches.
 - Add retrieval quality fixtures and source attribution before model answer generation.
+- Uploads remain disabled by default. Parser resource limits, private storage, malware/quarantine strategy and adversarial prompt-injection tests are mandatory.
 - Exit gate: all tenant-isolation and retrieval-grounding tests pass. No customer document upload before this gate.
 
 ### Stream E — LLM router and assistant behavior
