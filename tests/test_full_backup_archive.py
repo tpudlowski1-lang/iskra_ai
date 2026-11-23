@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import tempfile
 import unittest
 import zipfile
@@ -45,6 +46,35 @@ class FullBackupArchiveTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT value FROM records").fetchone()[0], "persisted")
         self.assertFalse((target / "optional/documents.sqlite3").exists())
         self.assertEqual((target / "data/graph.sqlite3").stat().st_mode & 0o777, 0o600)
+
+    def test_restore_rejects_symlink_archive(self):
+        create_archive(self.resources(), str(self.archive), writes_paused=True)
+        link = self.root / "backup-link.zip"
+        link.symlink_to(self.archive)
+        with self.assertRaises(BackupError):
+            restore_archive(str(link), str(self.root / "restore-link"))
+
+    def test_restore_rejects_non_object_manifest(self):
+        malformed = self.root / "malformed.zip"
+        with zipfile.ZipFile(malformed, "w") as archive:
+            archive.writestr("iskra-backup-manifest.json", "[]")
+        with self.assertRaises(BackupError):
+            restore_archive(str(malformed), str(self.root / "restore-malformed"))
+
+    def test_restore_rejects_symlink_member(self):
+        create_archive(self.resources(), str(self.archive), writes_paused=True)
+        rewritten = self.root / "symlink-member.zip"
+        with zipfile.ZipFile(self.archive) as source, zipfile.ZipFile(rewritten, "w") as target:
+            for item in source.infolist():
+                data = source.read(item.filename)
+                info = zipfile.ZipInfo(item.filename)
+                if item.filename == "data/wiedza.json":
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                else:
+                    info.external_attr = item.external_attr
+                target.writestr(info, data)
+        with self.assertRaises(BackupError):
+            restore_archive(str(rewritten), str(self.root / "restore-symlink-member"))
 
     def test_requires_explicit_quiescence_acknowledgement(self):
         with self.assertRaises(BackupError):
