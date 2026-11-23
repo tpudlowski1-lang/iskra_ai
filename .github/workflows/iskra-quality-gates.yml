@@ -3,9 +3,9 @@ name: Iskra quality gates
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [commercial-mvp]
+    branches: [iskra-integration-hardening]
   push:
-    branches: [iskra-full-quality-gates, iskra-unified-core, iskra-sqlite-migration, iskra-api-security]
+    branches: [iskra-integration-hardening, iskra-unified-integrated, iskra-full-quality-gates, iskra-unified-core, iskra-sqlite-migration, iskra-api-security]
   workflow_dispatch:
 
 permissions:
