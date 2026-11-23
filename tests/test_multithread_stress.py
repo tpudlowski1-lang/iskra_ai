@@ -7,14 +7,12 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
+os.environ["ISKRA_TESTING"] = "true"
 os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
 
 import app as iskra
 
-# Keep shared application limiter out of unrelated API/concurrency tests;
-# dedicated tests/test_rate_limit.py exercise the limiter explicitly.
-iskra.app.config["RATELIMIT_ENABLED"] = False
 from flask import request
 from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
 
