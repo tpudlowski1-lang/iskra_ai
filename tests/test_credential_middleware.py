@@ -12,6 +12,11 @@ class CredentialStoreFailure:
         raise RuntimeError("database unavailable")
 
 
+class InvalidPrincipalStore:
+    def authenticate(self, token):
+        return {"subject": "forged", "tenant_id": "tenant-victim", "roles": ["admin"]}
+
+
 class CredentialMiddlewareTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -86,6 +91,14 @@ class CredentialMiddlewareTests(unittest.TestCase):
         )
         response = self.request(middleware, "some-token")
         self.assertEqual(response["status"], "503 Service Unavailable")
+        self.assertEqual(self.calls, [])
+
+    def test_registry_cannot_install_untyped_principal(self):
+        middleware = ApiTokenMiddleware(
+            self.application, token="", credential_store=InvalidPrincipalStore()
+        )
+        response = self.request(middleware, "untrusted-token")
+        self.assertEqual(response["status"], "401 Unauthorized")
         self.assertEqual(self.calls, [])
 
     def test_legacy_admin_token_remains_compatible(self):
