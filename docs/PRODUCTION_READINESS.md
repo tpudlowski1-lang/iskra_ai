@@ -19,11 +19,11 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 - [x] LLM router external providers are deny-by-default; each primary/fallback must be listed in `LLM_ALLOWED_PROVIDERS`.
-- [ ] The provider-policy feature branch implements a second per-tenant allowlist (`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`) intersected with deployment approval; carried into Draft PR #89. It still requires canonical integration and an operator workflow for documented processing instructions before production use.
+- [ ] The provider-policy feature branch implements a second per-tenant allowlist (`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`) intersected with deployment approval; implemented on `integration/full-release-candidate-v1`. It still requires canonical integration and an operator workflow for documented processing instructions before production use.
 - [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
-- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. Draft PR #89 contains tenant-admin issue/list/rotate/revoke operations with tenant scoping and a minimal `/assistant` admin console. It remains draft and is not integrated into the canonical release; public signup, recovery and full onboarding are still absent.
+- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. The integrated release-candidate branch contains tenant-admin issue/list/rotate/revoke operations with tenant scoping and a minimal `/assistant` admin console. It is not yet integrated into the canonical release; public signup, recovery and full onboarding are still absent.
 - [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
 - [ ] Complete production-grade DLP/data classification and prove that outbound minimization covers the application's supported data classes; the current regex minimizer is best-effort only.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
@@ -33,7 +33,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
 - [x] Authenticated tenant-scoped document list/search/delete and source-grounded chat API with server-resolved citations; upload is admin-only and disabled by default.
 - [ ] Before enabling document upload: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
-- [x] Minimal responsive `/assistant` chat UI with token held in page memory only; route/assets/security headers are included in Draft PR #89.
+- [x] Minimal responsive `/assistant` chat UI with token held in page memory only; route/assets/security headers are included in `integration/full-release-candidate-v1`.
 - [ ] Production-grade account lifecycle/session management, chat history, mobile accessibility acceptance and end-to-end customer usability review.
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
