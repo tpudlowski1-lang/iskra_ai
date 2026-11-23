@@ -6,6 +6,7 @@ must be performed explicitly after backup and staging verification.
 import math
 import os
 import sqlite3
+import stat
 import time
 from contextlib import contextmanager
 
@@ -24,11 +25,28 @@ class SQLiteGraphStore:
             raise ValueError("SQLiteGraphStore wymaga trwałej ścieżki pliku")
         self.database_path = os.path.abspath(database_path)
         self._tenant_id = tenant_id.strip()
-        parent = os.path.dirname(self.database_path)
-        os.makedirs(parent, exist_ok=True)
+        self._prepare_private_path()
         self._initialize()
-        # Graph contents may be confidential; keep the local database private.
-        os.chmod(self.database_path, 0o600)
+
+    def _prepare_private_path(self):
+        """Create a private directory and reject symlink/non-regular DB paths."""
+        parent = os.path.dirname(self.database_path)
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        if os.path.islink(parent) or not os.path.isdir(parent):
+            raise OSError("Katalog bazy grafu musi być zwykłym katalogiem")
+        os.chmod(parent, 0o700)
+
+        flags = os.O_CREAT | os.O_RDWR
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(self.database_path, flags, 0o600)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise OSError("Plik bazy grafu musi być zwykłym plikiem")
+            os.fchmod(descriptor, 0o600)
+        finally:
+            os.close(descriptor)
 
     @property
     def tenant_id(self):
