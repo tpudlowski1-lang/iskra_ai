@@ -77,6 +77,13 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         self.login()
         csrf = self.refresh_csrf()
 
+        cross_origin_read = self.client.get(
+            "/api/browser/session",
+            headers={"Origin": "https://evil.test"},
+            base_url=self.base_url,
+        )
+        self.assertEqual(cross_origin_read.status_code, 403)
+
         missing = self.client.post(
             "/api/tenant/credentials",
             json={"subject": "member-one", "roles": ["member"]},
