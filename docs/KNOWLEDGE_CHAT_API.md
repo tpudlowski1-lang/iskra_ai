@@ -13,7 +13,7 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 ## Grounding contract
 
 - If no sources are found, the service returns a no_sources response without calling an LLM.
-- The model receives at most five excerpts, each truncated to 1,200 characters. It receives no tenant identifier or conversation history.
+- The model receives at most five excerpts, each truncated to 1,200 characters. It receives no tenant identifier or conversation history. Retrieval currently uses tenant-filtered SQLite FTS5 lexical search, not semantic/vector embeddings.
 - The system prompt tells the model to treat excerpts as untrusted data and ignore embedded instructions.
 - An answer must cite at least one exact document ID returned by tenant-scoped search. Unknown or cross-tenant citation IDs are rejected.
 - If the model cannot support an answer, it must return an empty answer and empty citation list; the service returns no_answer.
@@ -25,7 +25,7 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 - Upload is disabled by default in code and in Render. Do not enable it for customer data until parser sandboxing, malware scanning, retention, audit, backup and incident-response controls are completed.
 - The parser worker has resource/environment hardening but is not a full OS/container sandbox.
 - Prompt-injection instructions in retrieved excerpts are mitigated by a separate system prompt and untrusted-data framing, but no deterministic test can prove universal resistance to model-based prompt injection.
-- There is no chat UI, conversation history, per-tenant model policy, consent UI or ordinary-prompt PII/secret redaction yet.
+- There is no chat UI, conversation history, semantic/vector retrieval, per-tenant model policy, consent UI or ordinary-prompt PII/secret redaction yet.
 - No live provider calls, customer documents or production deployment were used in CI.
 
 This API is a technical foundation for an MVP, not evidence of production or commercial readiness.
