@@ -2,7 +2,7 @@
 
 ## Scope
 
-Draft PR #89 carries API operations for a tenant administrator to manage credentials within the authenticated tenant and a minimal `/assistant` admin console. It does not add public signup, password authentication, account recovery, email verification or billing.
+The integrated release-candidate branch carries API operations for a tenant administrator to manage credentials within the authenticated tenant and a minimal `/assistant` admin console. It does not add public signup, password authentication, account recovery, email verification or billing.
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ Issuance defaults to a 90-day expiry and tenant admins cannot request more than 
 ## Limitations and production gates
 
 - Static API-token lifecycle only; no password login, MFA, self-service recovery, invitation emails, signup or billing.
-- Draft PR #89 contains a minimal browser admin console in `/assistant`; it is not part of the canonical release and is not production-ready.
+- The integrated release-candidate branch contains a minimal browser admin console in `/assistant`; it is not part of the canonical release and is not production-ready.
 - SQLite credential store is single-instance; use a reviewed PostgreSQL backend before horizontal scaling.
 - No customer-visible audit log retention/export, alerting, operator separation of duties or secure token delivery workflow.
 - A tenant administrator is trusted to issue/revoke that tenant's own credentials; the system does not independently verify the identity represented by the supplied subject label.
