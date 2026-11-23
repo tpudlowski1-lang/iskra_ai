@@ -99,6 +99,40 @@ class ApiTokenMiddleware:
             "/static/assistant.js",
         }
 
+    @staticmethod
+    def _origin_matches_request(origin, environ):
+        """Require an exact scheme/host/port match with the effective request origin."""
+        if not isinstance(origin, str) or not origin:
+            return False
+        try:
+            parsed = urlsplit(origin)
+            if (parsed.scheme.lower() not in {"http", "https"}
+                    or not parsed.netloc or parsed.username is not None
+                    or parsed.password is not None or parsed.path not in {"", "/"}
+                    or parsed.query or parsed.fragment):
+                return False
+            request_scheme = str(environ.get("wsgi.url_scheme", "")).lower()
+            request_host = str(environ.get("HTTP_HOST", "")).lower()
+            origin_host = parsed.netloc.lower()
+            if request_scheme not in {"http", "https"} or not request_host:
+                return False
+
+            def normalized_authority(authority, scheme):
+                # Normalize only the scheme's default port; preserve non-default ports.
+                if authority.endswith(":443") and scheme == "https":
+                    return authority[:-4]
+                if authority.endswith(":80") and scheme == "http":
+                    return authority[:-3]
+                return authority
+
+            return (
+                parsed.scheme.lower() == request_scheme
+                and normalized_authority(origin_host, parsed.scheme.lower())
+                == normalized_authority(request_host, request_scheme)
+            )
+        except (TypeError, ValueError):
+            return False
+
     def __call__(self, environ, start_response):
         def secured_start_response(status, headers, exc_info=None):
             headers = list(headers)
@@ -189,12 +223,7 @@ class ApiTokenMiddleware:
         if supplied_scheme == "basic" and method not in {"GET", "HEAD", "OPTIONS"}:
             fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
             origin = environ.get("HTTP_ORIGIN", "")
-            host = str(environ.get("HTTP_HOST", "")).lower()
-            try:
-                origin_host = urlsplit(origin).netloc.lower() if origin else ""
-            except ValueError:
-                origin_host = ""
-            if fetch_site == "cross-site" or not host or origin_host != host:
+            if fetch_site == "cross-site" or not self._origin_matches_request(origin, environ):
                 return self._response(
                     start_response, "403 Forbidden",
                     {"error": "csrf_rejected", "message": "Basic-authenticated browser mutations require a same-origin request."},
@@ -203,18 +232,12 @@ class ApiTokenMiddleware:
         if browser_session is not None:
             fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
             origin = environ.get("HTTP_ORIGIN", "")
-            host = str(environ.get("HTTP_HOST", "")).lower()
             if fetch_site == "cross-site":
                 return self._response(
                     start_response, "403 Forbidden",
                     {"error": "csrf_rejected", "message": "Cross-site browser requests are not allowed."},
                 )
-            if origin:
-                try:
-                    origin_host = urlsplit(origin).netloc.lower()
-                except ValueError:
-                    origin_host = ""
-                if not host or origin_host != host:
+            if origin and not self._origin_matches_request(origin, environ):
                     return self._response(
                         start_response, "403 Forbidden",
                         {"error": "csrf_rejected", "message": "Request origin does not match this host."},
