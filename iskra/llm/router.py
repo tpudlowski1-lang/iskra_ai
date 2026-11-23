@@ -19,6 +19,19 @@ class RouterProvider:
             "deepseek": self._deepseek,
             "gemini": self._gemini,
         }
+        # External inference is default-deny. Both the global switch and an
+        # explicit provider allowlist are required; fallbacks use this same gate.
+        self.external_processing_enabled = (
+            os.environ.get("LLM_ALLOW_EXTERNAL_PROCESSING", "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        known = {"openai", "deepseek", "gemini"}
+        configured = os.environ.get("LLM_ALLOWED_EXTERNAL_PROVIDERS", "")
+        self.allowed_external_providers = {
+            name.strip().lower()
+            for name in configured.split(",")
+            if name.strip().lower() in known
+        }
 
     def clean_json(self, text):
         """Extract the first complete JSON object; reject arrays and malformed text."""
@@ -117,11 +130,18 @@ class RouterProvider:
         return None
 
     def generate(self, prompt):
+        if not self.external_processing_enabled:
+            print("LLM: zewnętrzne przetwarzanie zablokowane — wymagane jawne LLM_ALLOW_EXTERNAL_PROCESSING=true.")
+            return None
+
         order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
         for name in order:
             provider = self.providers.get(name)
             if provider is None:
                 print(f"LLM: nieznany provider '{name}' — pomijam.")
+                continue
+            if name not in self.allowed_external_providers:
+                print(f"LLM {name}: provider nie znajduje się na LLM_ALLOWED_EXTERNAL_PROVIDERS — pomijam.")
                 continue
             result = provider(prompt)
             cleaned = self.clean_json(result)
@@ -131,5 +151,5 @@ class RouterProvider:
                 continue
             print(f"LLM: odpowiedź uzyskana przez {name}.")
             return cleaned
-        print("LLM: wszystkie skonfigurowane providery zawiodły.")
+        print("LLM: brak dostępnego, jawnie dozwolonego providera zewnętrznego.")
         return None
