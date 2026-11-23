@@ -120,7 +120,7 @@ def restore_private_backup(backup_path, target_path, expected_sha256):
     digest = hashlib.sha256()
     try:
         with os.fdopen(source_fd, "rb") as input_file, os.fdopen(descriptor, "wb") as output:
-            if not os.path.isfile(source) or !stat.S_ISREG(os.fstat(input_file.fileno()).st_mode):
+            if not os.path.isfile(source) or not stat.S_ISREG(os.fstat(input_file.fileno()).st_mode):
                 raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
             for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
                 digest.update(chunk)
