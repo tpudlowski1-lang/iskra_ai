@@ -110,7 +110,7 @@ def _validate_migration_graph(graph):
             strength = float(edge.get("strength"))
         except (TypeError, ValueError, OverflowError):
             raise MigrationError("Nieprawidłowa siła synapsy") from None
-        if not (0.0 <= strength <= 1.0) or !math.isfinite(strength):
+        if not (0.0 <= strength <= 1.0) or not math.isfinite(strength):
             raise MigrationError("Siła synapsy poza dozwolonym zakresem")
         clean_synapses.append({"from": source, "to": target, "strength": strength})
 
