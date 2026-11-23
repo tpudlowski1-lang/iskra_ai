@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4 (modular core) and PR #43 (PostgreSQL document storage); security, graph storage, tenant migration, credential lifecycle and bounded document foundation from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core`  
+**Current review:** draft PR #4 (modular core); security, graph storage, tenant migration, credential lifecycle, bounded document ingestion and PostgreSQL document storage from PRs #28, #31, #33, #36, #39 and #43 are integrated into `refactor/modular-core`  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -102,7 +102,7 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its monolithic branch is not merged.
 - PR #39 is integrated: bounded PDF/DOCX/TXT parsers, principal-bound tenant SQLite repository, lexical FTS5 search and a spawned parser process with CPU/RAM/file-size limits and parent-enforced timeout.
 - Parent validates worker output schema, sanitized filename, extension and SHA-256 against the original bytes.
-- PR #43 adds PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index, a principal-scoped repository adapter and opt-in backend factory. SQLite remains the default.
+- PR #43 is integrated: PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index, a principal-scoped repository adapter and opt-in backend factory. SQLite remains the default.
 - No document HTTP routes are registered and no RAG answer generation is connected.
 - Remaining: dedicated low-privilege OS/container sandbox with no network, malware scanning/quarantine, quotas, retention, audit, object storage, production backup/restore rehearsal, retrieval evaluation and source attribution.
 - Uploads remain disabled by default. Do not expose customer documents until parser sandbox, tenant isolation and retrieval-grounding gates pass.
@@ -155,14 +155,14 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant graph storage, opt-in PostgreSQL backend, tenant migration utility, audited local credential lifecycle and bounded document service from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core`.
+The security, tenant graph storage, opt-in PostgreSQL backend, tenant migration utility, audited local credential lifecycle, bounded document service and PostgreSQL document storage from PRs #28, #31, #33, #36, #39 and #43 are integrated into `refactor/modular-core` at `89cf7d4714c8bcf2e8132208c772f554637f144b`.
 
 - WSGI principal authentication with digest-only credentials, expiry/revocation and local issue/rotate/revoke/audit CLI.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - PostgreSQL graph schema/adapter with RLS ENABLE + FORCE and opt-in backend selection.
 - Dry-run-first tenant SQLite → PostgreSQL migration utility with private backup, checksum, transactional rollback and semantic verification.
 - Internal document service with bounded parsers, tenant SQLite/FTS5 and resource-limited parser process.
-- PR #43 adds PostgreSQL document/chunk schema with RLS and opt-in repository factory; its CI result is pending on the exact head.
+- Python 3.11/3.12: 176 tests each on PR #43; PostgreSQL 16 document/graph RLS, compileall and pip-audit passed.
 
 No document HTTP routes or RAG answer generation are connected. SQLite remains the default; PostgreSQL is opt-in. No production data cutover or restore rehearsal has been performed.
 
