@@ -46,9 +46,10 @@ This is not a distributed multi-instance store. Hosting filesystems may be ephem
 
 ## LLM providers
 
-Configure credentials only in hosting secrets/environment settings; never commit API keys.
+Configure credentials only in hosting secrets/environment settings; never commit API keys. External providers are deny-by-default: without `LLM_ALLOWED_PROVIDERS`, the router makes no outbound LLM calls.
 
-- `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini`.
+- `LLM_ALLOWED_PROVIDERS`: explicit comma-separated allowlist (for example `deepseek,openai`); empty/unset disables all external providers.
+- `LLM_PROVIDER`: `openai`, `deepseek`, or `gemini` (must also be allowlisted).
 - `LLM_FALLBACK_PROVIDERS`: comma-separated fallback order.
 - `OPENAI_API_KEY`, `OPENAI_MODEL` (default `gpt-4o-mini`).
 - `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-chat`).
