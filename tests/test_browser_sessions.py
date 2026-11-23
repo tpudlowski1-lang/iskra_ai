@@ -1,3 +1,4 @@
+import base64
 import os
 import tempfile
 import time
@@ -169,6 +170,45 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json["error"], "persistent_credential_required")
+
+    def test_basic_auth_mutations_require_same_origin(self):
+        application = Flask("basic-auth-csrf-test")
+
+        @application.post("/mutate")
+        def mutate():
+            return {"status": "ok"}
+
+        secured = ApiTokenMiddleware(application.wsgi_app, token="basic-secret")
+        from werkzeug.test import Client
+        from werkzeug.wrappers import Response
+
+        client = Client(secured, Response)
+        basic = base64.b64encode(b"user:basic-secret").decode("ascii")
+        cross_origin = client.post(
+            "/mutate",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "https://evil.test",
+                "Host": "iskra.test",
+            },
+        )
+        self.assertEqual(cross_origin.status_code, 403)
+
+        no_origin = client.post(
+            "/mutate",
+            headers={"Authorization": f"Basic {basic}", "Host": "iskra.test"},
+        )
+        self.assertEqual(no_origin.status_code, 403)
+
+        same_origin = client.post(
+            "/mutate",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "https://iskra.test",
+                "Host": "iskra.test",
+            },
+        )
+        self.assertEqual(same_origin.status_code, 200)
 
     def test_browser_session_expires(self):
         now = time.time()
