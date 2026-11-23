@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [iskra-unified-core, refactor/modular-core, security/request-principal, security/credential-registry, security/credential-middleware, security/credential-store-hardening]
   push:
-    branches: [refactor/modular-core]
+    branches: [refactor/modular-core, security/credential-store-hardening]
   workflow_dispatch:
 
 permissions:
