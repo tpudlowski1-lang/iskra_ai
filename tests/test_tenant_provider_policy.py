@@ -60,6 +60,10 @@ class TenantProviderPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             TenantProviderPolicy({"tenant-alpha": ["unknown-provider"]})
 
+    def test_tenant_ids_with_surrounding_whitespace_are_rejected(self):
+        with self.assertRaises(ValueError):
+            TenantProviderPolicy({" tenant-alpha ": ["deepseek"]})
+
     def test_invalid_policy_shape_rejected(self):
         with self.assertRaises(ValueError):
             TenantProviderPolicy(["tenant-alpha", ["deepseek"]])
