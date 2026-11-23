@@ -49,27 +49,52 @@ class RouterResilienceTests(unittest.TestCase):
     def test_provider_exception_does_not_break_fallback(self):
         router = RouterProvider()
         calls = []
-        def broken(_):
-            calls.append("primary")
+        def broken(_, deadline=None):
+            calls.append(("primary", deadline))
             raise TimeoutError("simulated provider timeout")
         router.primary = "primary"
         router.fallbacks = ["fallback"]
         router.providers = {
             "primary": broken,
-            "fallback": lambda _: calls.append("fallback") or '{"answer": "ok"}',
+            "fallback": lambda _, deadline=None: calls.append(("fallback", deadline)) or '{"answer": "ok"}',
         }
         self.assertEqual(router.generate("hello"), '{"answer": "ok"}')
-        self.assertEqual(calls, ["primary", "fallback"])
+        self.assertEqual([item[0] for item in calls], ["primary", "fallback"])
+        self.assertEqual(calls[0][1], calls[1][1])
 
     def test_all_provider_exceptions_return_none(self):
         router = RouterProvider()
         router.primary = "first"
         router.fallbacks = ["second"]
         router.providers = {
-            "first": lambda _: (_ for _ in ()).throw(ConnectionError()),
-            "second": lambda _: (_ for _ in ()).throw(RuntimeError()),
+            "first": lambda _, deadline=None: (_ for _ in ()).throw(ConnectionError()),
+            "second": lambda _, deadline=None: (_ for _ in ()).throw(RuntimeError()),
         }
         self.assertIsNone(router.generate("hello"))
+
+
+    def test_expired_shared_deadline_stops_before_calling_provider(self):
+        router = RouterProvider()
+        calls = []
+        router.primary = "primary"
+        router.fallbacks = []
+        router.providers = {
+            "primary": lambda prompt, deadline=None: calls.append(deadline) or '{"ok": true}',
+        }
+        from unittest.mock import patch
+        with patch("iskra.llm.router.time.monotonic", side_effect=[0.0, 101.0]):
+            self.assertIsNone(router.generate("hello"))
+        self.assertEqual(calls, [])
+
+    def test_request_timeouts_are_bounded_by_remaining_deadline(self):
+        router = RouterProvider()
+        from unittest.mock import patch
+        with patch("iskra.llm.router.time.monotonic", return_value=10.0):
+            timeout = router._request_timeout(15.0)
+        self.assertIsNotNone(timeout)
+        self.assertGreater(timeout[0], 0)
+        self.assertGreater(timeout[1], 0)
+        self.assertLessEqual(sum(timeout), 5.0)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
