@@ -156,18 +156,16 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant storage, opt-in PostgreSQL backend and tenant migration utility from PRs #28 and #31 are integrated into `refactor/modular-core` at `5c1b40954b7e5879deaaa52980fb79b08030b5df`:
+The security, tenant storage, opt-in PostgreSQL backend, tenant migration utility and audited local credential lifecycle from PRs #28, #31, #33 and #36 are integrated into `refactor/modular-core`:
 
-- WSGI principal authentication with hashed credentials, expiry and revocation.
+- WSGI principal authentication with digest-only credentials, expiry/revocation and local issue/rotate/revoke/audit CLI.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
-- Atomic initialization of the twelve foundational pillars.
-- PostgreSQL graph schema and adapter with RLS policies, tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
-- Runtime configuration validates SQLite (default) or PostgreSQL (`ISKRA_TENANT_STORAGE_BACKEND=postgres` requires `ISKRA_POSTGRES_DSN`).
-- Python 3.11 and 3.12: 118 tests each on PR #31; PostgreSQL 16 RLS/migration integration, compileall and pip-audit passed.
+- PostgreSQL graph schema/adapter with RLS ENABLE + FORCE and opt-in backend selection.
+- Dry-run-first tenant SQLite → PostgreSQL migration utility with private backup, checksum, transactional rollback and semantic verification.
+- Python 3.11/3.12: 133 tests each on PR #36; PostgreSQL 16, compileall and pip-audit passed.
+- PR #39 adds internal document parsing, tenant-scoped lexical repository and resource-limited parser worker; its CI is pending on the exact head.
 
-PostgreSQL remains opt-in and requires a separately applied migration, dedicated runtime role, staging cutover and restore/rollback drills. Passing CI does not establish production readiness.
-
-This does not mean PostgreSQL is already the default or that Iskra is production-ready. The migration utility has not been run against production data; no production cutover, rollback rehearsal, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
+No document HTTP routes or RAG answer generation are connected. SQLite remains the default graph/document development backend; PostgreSQL is opt-in. No production data cutover or restore rehearsal has been performed.
 
 ## 9. Current blockers — do not mark production-ready
 
