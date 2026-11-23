@@ -52,7 +52,7 @@ python -m scripts.migrate_tenant_sqlite_to_postgres \
   --backup-dir /secure/iskra-backups
 ```
 
-Only after reviewing the backup, checksum, report, target role and restore plan should an operator add `--apply` and a secret-managed `--postgres-dsn`. Use `--replace-existing` only for a deliberately approved overwrite. This utility migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
+Only after reviewing the backup, checksum, report, target role and restore plan should an operator set `ISKRA_POSTGRES_DSN` through the secret manager and add `--apply`. Avoid passing secrets as command-line arguments because process listings may expose them. Use `--replace-existing` only for a deliberately approved overwrite. This utility migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
 
 ## Deployment and migration status
 
