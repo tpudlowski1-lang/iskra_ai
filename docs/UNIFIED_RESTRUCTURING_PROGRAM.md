@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current reviews:** draft PR #4 (modular core) and draft PR #28 (security and tenant storage); do not merge automatically  
+**Current reviews:** PR #4 (modular core) and PR #29 (tenant data migration tooling); do not merge automatically  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -150,21 +150,18 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The following is implemented in the current review chain (PR #28) and verified by CI on commit `92ebb804404f5157c4567d7fd37ad2fde515ce4d`:
+- PR #28 has been merged into the canonical integration branch `refactor/modular-core` at `ce228e04abf2c523c36d2ac31beb41370ecece0a`.
+- The merge includes trusted request principals, role policy, digest-only credential storage with expiry/revocation, the principal-bound SQLite tenant API, PostgreSQL graph schema/adapter and RLS tests.
+- PR #29 adds dry-run-first SQLite tenant database backup and PostgreSQL migration tooling. Its CI result is pending and must be recorded against its exact HEAD.
+- The live tenant API currently uses SQLite; PostgreSQL is not yet activated in the live application. The separate legacy global JSON graph is retained.
 
-- Request principal and role policy; server-side credential resolution.
-- Optional persistent SQLite credential registry with digest-only token storage, expiry and revocation.
-- Tenant API backed by principal-bound SQLite graph storage, with atomic initialization of the twelve foundational pillars.
-- PostgreSQL graph schema and adapter prototype with RLS policies, tested on PostgreSQL 16; dry-run-first SQLite tenant migration utility is implemented and covered by integration tests.
-- Python 3.11 and 3.12: 104 tests each; compileall and pip-audit passed.
-
-This does not mean the PostgreSQL backend is live or the application is production-ready. The current live tenant API uses SQLite; the legacy global graph remains on JSON. PostgreSQL migration/cutover, backup/restore, account provisioning, audit events and staging operations remain outstanding.
+Do not infer production readiness from a merged code PR. Production database cutover, real backup/restore rehearsal, account provisioning and operational audit remain open.
 
 ## 9. Current blockers — do not mark production-ready
 
-- Shared API-token authentication exists at the WSGI boundary, but named user lifecycle, roles, and request-scoped tenant authorization are not implemented.
-- The current SQLite adapter is not wired into the live Flask application.
-- PostgreSQL persistence and migrations are not implemented.
+- WSGI authentication, Principal and route roles are implemented; optional credential storage exists, but named-user provisioning, recovery, controlled rotation and audit lifecycle are not complete.
+- The live tenant API currently uses principal-bound SQLite storage; PostgreSQL has not yet replaced it.
+- PostgreSQL graph persistence and RLS migrations are implemented and integration-tested; production cutover, migration rehearsal and rollback/restore drills remain outstanding.
 - The tenant document/RAG prototype is not integrated and has not passed a full security review.
 - Dedicated worker leases, observability, staging verification, and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
