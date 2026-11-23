@@ -11,6 +11,13 @@ os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
 
 import app as iskra
+from flask import request
+from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+
+
+@iskra.app.before_request
+def _attach_test_admin_principal():
+    request.environ[PRINCIPAL_ENV_KEY] = SYSTEM_ADMIN
 
 
 

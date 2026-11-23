@@ -3,6 +3,13 @@ import unittest
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
 import app as iskra
+from flask import request
+from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+
+
+@iskra.app.before_request
+def _attach_test_admin_principal():
+    request.environ[PRINCIPAL_ENV_KEY] = SYSTEM_ADMIN
 
 
 class SecurityBaselineTests(unittest.TestCase):

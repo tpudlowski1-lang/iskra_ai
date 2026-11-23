@@ -4,11 +4,29 @@ import hmac
 import json
 import os
 
+from iskra.security.credentials import (
+    CredentialConfigError,
+    load_api_credentials,
+    principal_for_token,
+)
+from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY
+
 
 class ApiTokenMiddleware:
-    def __init__(self, application, token=None):
+    def __init__(self, application, token=None, credentials_json=None):
         self.application = application
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
+        raw_credentials = (
+            credentials_json
+            if credentials_json is not None
+            else os.environ.get("ISKRA_API_CREDENTIALS_JSON", "")
+        )
+        try:
+            self.credentials = load_api_credentials(raw_credentials)
+            self.configuration_error = False
+        except CredentialConfigError:
+            self.credentials = {}
+            self.configuration_error = True
 
     @staticmethod
     def _provided_token(environ):
@@ -43,16 +61,33 @@ class ApiTokenMiddleware:
     def __call__(self, environ, start_response):
         if environ.get("PATH_INFO", "/") == "/health":
             return self.application(environ, start_response)
-        if not self.token:
+
+        if self.configuration_error:
             return self._response(
-                start_response, "503 Service Unavailable",
-                {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN."},
+                start_response,
+                "503 Service Unavailable",
+                {"error": "service_not_configured", "message": "Invalid server-side credential configuration."},
             )
-        supplied = self._provided_token(environ)
-        if not supplied or not hmac.compare_digest(supplied, self.token):
+
+        if not self.token and not self.credentials:
             return self._response(
-                start_response, "401 Unauthorized",
-                {"error": "unauthorized", "message": "Valid API token required."},
+                start_response,
+                "503 Service Unavailable",
+                {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN or ISKRA_API_CREDENTIALS_JSON."},
+            )
+
+        supplied = self._provided_token(environ)
+        principal = None
+        if supplied and self.token and hmac.compare_digest(supplied, self.token):
+            principal = SYSTEM_ADMIN
+        elif supplied:
+            principal = principal_for_token(supplied, self.credentials)
+
+        if principal is None:
+            return self._response(
+                start_response,
+                "401 Unauthorized",
+                {"error": "unauthorized", "message": "Valid API credential required."},
                 [("WWW-Authenticate", 'Basic realm="Iskra AI", charset="UTF-8"')],
             )
 
@@ -69,4 +104,7 @@ class ApiTokenMiddleware:
                     headers.append((name, value))
             return start_response(status, headers, exc_info)
 
+        # Principal is derived only from a verified server-side credential.
+        # Request body, query parameters and caller-supplied tenant headers are ignored.
+        environ[PRINCIPAL_ENV_KEY] = principal
         return self.application(environ, secured_start_response)
