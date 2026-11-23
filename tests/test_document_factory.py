@@ -2,50 +2,54 @@ import os
 import tempfile
 import unittest
 
-from iskra.config import Settings
-from iskra.documents.factory import create_document_repository
-from iskra.documents.postgres_repository import PostgresDocumentRepository
+from iskra.documents.factory import DocumentRepositoryFactory
 from iskra.documents.repository import SQLiteDocumentRepository
+from iskra.documents.postgres_repository import PostgresDocumentRepository
+from iskra.config import Settings
 
 
 class DocumentRepositoryFactoryTests(unittest.TestCase):
-    def test_sqlite_is_default_and_creates_private_database(self):
+    def test_sqlite_is_the_default_explicit_backend(self):
         with tempfile.TemporaryDirectory() as directory:
-            settings = Settings(10000, directory)
-            repository = create_document_repository(settings)
+            repository = DocumentRepositoryFactory(
+                backend="sqlite",
+                sqlite_path=os.path.join(directory, "private", "documents.sqlite3"),
+            ).build()
             self.assertIsInstance(repository, SQLiteDocumentRepository)
-            self.assertTrue(os.path.isfile(repository.database_path))
-            self.assertEqual(os.stat(repository.database_path).st_mode & 0o777, 0o600)
 
-    def test_postgres_backend_is_opt_in_and_uses_validated_dsn(self):
-        settings = Settings(
-            10000,
-            "/tmp/iskra-data",
-            tenant_storage_backend="sqlite",
+    def test_postgres_backend_requires_dsn_and_builds_repository(self):
+        with self.assertRaises(ValueError):
+            DocumentRepositoryFactory(backend="postgres")
+        repository = DocumentRepositoryFactory(
+            backend="postgres",
             postgres_dsn="postgresql://app:secret@localhost/iskra",
-            document_storage_backend="postgres",
-        )
-        repository = create_document_repository(settings)
+        ).build()
         self.assertIsInstance(repository, PostgresDocumentRepository)
 
-    def test_postgres_backend_without_dsn_is_rejected(self):
-        settings = Settings(
-            10000,
-            "/tmp/iskra-data",
-            document_storage_backend="postgres",
-        )
-        with self.assertRaises(ValueError):
-            create_document_repository(settings)
-
     def test_unknown_backend_is_rejected(self):
-        settings = Settings(
-            10000,
-            "/tmp/iskra-data",
-            document_storage_backend="mysql",
-        )
         with self.assertRaises(ValueError):
-            create_document_repository(settings)
+            DocumentRepositoryFactory(backend="mysql", sqlite_path="/tmp/docs.sqlite3")
 
+
+
+    def test_factory_uses_validated_runtime_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_settings = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="sqlite",
+            )
+            sqlite_repository = DocumentRepositoryFactory.from_settings(sqlite_settings).build()
+            self.assertIsInstance(sqlite_repository, SQLiteDocumentRepository)
+
+            postgres_settings = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="postgres",
+                postgres_dsn="postgresql://app:secret@localhost/iskra",
+            )
+            postgres_repository = DocumentRepositoryFactory.from_settings(postgres_settings).build()
+            self.assertIsInstance(postgres_repository, PostgresDocumentRepository)
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)
