@@ -26,6 +26,8 @@ MANIFEST_NAME = "iskra-backup-manifest.json"
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 MAX_RESOURCE_BYTES = 1024 * 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
+# JSON parsing materializes the document in memory; keep it well below SQLite/archive limits.
+MAX_JSON_BYTES = 64 * 1024 * 1024
 
 
 class BackupError(RuntimeError):
@@ -119,9 +121,11 @@ def _snapshot_resource(resource: dict, destination: Path) -> dict:
         _validate_sqlite(destination)
     else:
         with _open_regular_nofollow(source) as handle:
-            data = handle.read(MAX_RESOURCE_BYTES + 1)
-        if len(data) > MAX_RESOURCE_BYTES:
-            raise BackupError(f"Zasób przekracza limit: {name}")
+            if os.fstat(handle.fileno()).st_size > MAX_JSON_BYTES:
+                raise BackupError(f"Plik JSON przekracza limit pamięciowy: {name}")
+            data = handle.read(MAX_JSON_BYTES + 1)
+        if len(data) > MAX_JSON_BYTES:
+            raise BackupError(f"Plik JSON przekracza limit pamięciowy: {name}")
         try:
             json.loads(data.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -274,8 +278,11 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
                 expected.add(name)
                 if entry.get("status") != "included" or entry.get("kind") not in ("sqlite", "json"):
                     raise BackupError("Nieprawidłowy wpis manifestu")
-                if entry.get("size", MAX_RESOURCE_BYTES + 1) > MAX_RESOURCE_BYTES:
-                    raise BackupError("Zasób przekracza limit")
+                size = entry.get("size", MAX_RESOURCE_BYTES + 1)
+                if not isinstance(size, int) or isinstance(size, bool) or size < 0 or size > MAX_RESOURCE_BYTES:
+                    raise BackupError("Nieprawidłowy rozmiar zasobu")
+                if entry.get("kind") == "json" and size > MAX_JSON_BYTES:
+                    raise BackupError("Plik JSON przekracza limit pamięciowy")
                 try:
                     info = archive.getinfo(name)
                 except KeyError as exc:
@@ -292,7 +299,8 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
                 with archive.open(info, "r") as source_handle, os.fdopen(descriptor, "wb") as output:
                     for chunk in iter(lambda: source_handle.read(1024 * 1024), b""):
                         total += len(chunk)
-                        if total > MAX_RESOURCE_BYTES:
+                        limit = MAX_JSON_BYTES if entry["kind"] == "json" else MAX_RESOURCE_BYTES
+                        if total > limit:
                             raise BackupError(f"Zasób przekracza limit: {name}")
                         digest.update(chunk)
                         output.write(chunk)
