@@ -63,10 +63,69 @@ def create_private_backup(source_path, backup_dir):
         raise
 
 
+def _validate_migration_graph(graph):
+    """Reject lossy or malformed source data; migration must never clamp or deduplicate."""
+    if not isinstance(graph, dict):
+        raise MigrationError("Źródłowy graf nie jest obiektem")
+    neurons = graph.get("neurons")
+    synapses = graph.get("synapses")
+    if not isinstance(neurons, dict) or not isinstance(synapses, list):
+        raise MigrationError("Źródłowy graf nie zawiera poprawnych neurons i synapses")
+
+    clean_neurons = {}
+    for node_id, node in neurons.items():
+        if not isinstance(node_id, str) or not node_id.strip() or len(node_id) > 160:
+            raise MigrationError("Źródłowy graf zawiera nieprawidłowy node_id")
+        if not isinstance(node, dict):
+            raise MigrationError(f"Nieprawidłowy węzeł źródłowy: {node_id}")
+        label = node.get("label")
+        if not isinstance(label, str) or len(label) > 500:
+            raise MigrationError(f"Nieprawidłowa etykieta węzła: {node_id}")
+        try:
+            weight = float(node.get("weight"))
+            created = float(node.get("created"))
+        except (TypeError, ValueError, OverflowError):
+            raise MigrationError(f"Nieprawidłowe dane liczbowe węzła: {node_id}") from None
+        if not (0.0 <= weight <= 1.0) or not __import__("math").isfinite(weight):
+            raise MigrationError(f"Waga poza zakresem węzła: {node_id}")
+        if not __import__("math").isfinite(created):
+            raise MigrationError(f"Nieprawidłowy czas węzła: {node_id}")
+        clean_neurons[node_id] = {"label": label, "weight": weight, "created": created}
+
+    clean_synapses = []
+    seen_edges = set()
+    for edge in synapses:
+        if not isinstance(edge, dict):
+            raise MigrationError("Nieprawidłowa synapsa źródłowa")
+        source, target = edge.get("from"), edge.get("to")
+        if (not isinstance(source, str) or not isinstance(target, str)
+                or source not in clean_neurons or target not in clean_neurons):
+            raise MigrationError("Synapsa źródłowa wskazuje nieistniejący węzeł")
+        key = (source, target)
+        if key in seen_edges:
+            raise MigrationError("Źródłowy graf zawiera zduplikowaną synapsę")
+        seen_edges.add(key)
+        try:
+            strength = float(edge.get("strength"))
+        except (TypeError, ValueError, OverflowError):
+            raise MigrationError("Nieprawidłowa siła synapsy") from None
+        if not (0.0 <= strength <= 1.0) or not __import__("math").isfinite(strength):
+            raise MigrationError("Siła synapsy poza dozwolonym zakresem")
+        clean_synapses.append({"from": source, "to": target, "strength": strength})
+
+    return {"neurons": clean_neurons, "synapses": clean_synapses}
+
+
 def read_tenant_snapshots(sqlite_path):
     """Read and validate all tenant snapshots from a consistent SQLite copy."""
     with closing(sqlite3.connect(sqlite_path)) as connection:
         connection.row_factory = sqlite3.Row
+        integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+        if integrity != "ok":
+            raise MigrationError("Kontrola integralności SQLite nie powiodła się")
+        foreign_key_errors = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_errors:
+            raise MigrationError("Źródłowa baza zawiera naruszenia kluczy obcych")
         tables = {
             row["name"]
             for row in connection.execute(
@@ -77,7 +136,12 @@ def read_tenant_snapshots(sqlite_path):
             raise MigrationError("Źródłowa baza nie zawiera schematu grafu tenantów")
 
         tenant_rows = connection.execute(
-            "SELECT DISTINCT tenant_id FROM graph_neurons ORDER BY tenant_id"
+            """
+            SELECT tenant_id FROM graph_neurons
+            UNION
+            SELECT tenant_id FROM graph_synapses
+            ORDER BY tenant_id
+            """
         ).fetchall()
         snapshots = {}
         for tenant_row in tenant_rows:
@@ -117,7 +181,7 @@ def read_tenant_snapshots(sqlite_path):
                     for row in synapses
                 ],
             }
-            snapshots[tenant_id] = SQLiteGraphStore._validate_graph(graph)
+            snapshots[tenant_id] = _validate_migration_graph(graph)
     return snapshots
 
 
