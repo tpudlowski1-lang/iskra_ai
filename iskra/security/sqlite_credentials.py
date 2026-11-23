@@ -11,6 +11,7 @@ import math
 import os
 import secrets
 import sqlite3
+import stat
 import time
 
 from iskra.security.principal import ALLOWED_ROLES, Principal
@@ -45,6 +46,10 @@ class SQLiteCredentialStore:
         os.makedirs(parent, mode=0o700, exist_ok=True)
         self._initialize()
 
+    @staticmethod
+    def _effective_uid():
+        return os.geteuid() if hasattr(os, "geteuid") else os.stat(".").st_uid
+
     @contextmanager
     def _connection(self):
         connection = None
@@ -61,21 +66,64 @@ class SQLiteCredentialStore:
                 connection.close()
 
     def _initialize(self):
+        """Initialize the registry only inside an owner-private directory.
+
+        SQLite opens the database by path, so the containing directory must be
+        inaccessible to other users. O_NOFOLLOW and descriptor checks reject
+        symlinks, special files and files owned by another user before SQLite
+        is allowed to open the path.
+        """
+        parent = os.path.dirname(self.database_path)
+        filename = os.path.basename(self.database_path)
+        directory_fd = None
+        database_fd = None
         try:
-            if os.path.islink(self.database_path):
-                raise OSError("Credential database path must not be a symbolic link")
+            nofollow = getattr(os, "O_NOFOLLOW", None)
+            directory_flag = getattr(os, "O_DIRECTORY", None)
+            if nofollow is None or directory_flag is None:
+                raise OSError("Platform must support O_NOFOLLOW and O_DIRECTORY")
+
+            directory_fd = os.open(
+                parent,
+                os.O_RDONLY | directory_flag | nofollow,
+            )
+            directory_stat = os.fstat(directory_fd)
+            if (not stat.S_ISDIR(directory_stat.st_mode)
+                    or directory_stat.st_uid != self._effective_uid()
+                    or directory_stat.st_mode & 0o077):
+                raise OSError("Credential directory must be owned by the service user and mode 0700")
+
             try:
-                descriptor = os.open(
-                    self.database_path,
-                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                database_fd = os.open(
+                    filename,
+                    os.O_CREAT | os.O_EXCL | os.O_RDWR | nofollow,
                     0o600,
+                    dir_fd=directory_fd,
                 )
             except FileExistsError:
-                if os.path.islink(self.database_path):
-                    raise OSError("Credential database path must not be a symbolic link")
-                os.chmod(self.database_path, 0o600)
-            else:
-                os.close(descriptor)
+                database_fd = os.open(
+                    filename,
+                    os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | nofollow,
+                    dir_fd=directory_fd,
+                )
+
+            database_stat = os.fstat(database_fd)
+            if (not stat.S_ISREG(database_stat.st_mode)
+                    or database_stat.st_uid != self._effective_uid()
+                    or database_stat.st_nlink != 1):
+                raise OSError("Credential database must be a private regular file owned by the service user")
+            os.fchmod(database_fd, 0o600)
+        except OSError as exc:
+            raise CredentialStoreUnavailable(
+                "Credential database path or permissions could not be secured"
+            ) from exc
+        finally:
+            if database_fd is not None:
+                os.close(database_fd)
+            if directory_fd is not None:
+                os.close(directory_fd)
+
+        try:
             with self._connection() as connection:
                 with connection:
                     connection.execute(
@@ -116,8 +164,8 @@ class SQLiteCredentialStore:
                         "CREATE INDEX IF NOT EXISTS idx_credential_audit_time "
                         "ON credential_audit_events(occurred_at DESC)"
                     )
-        except OSError as exc:
-            raise CredentialStoreUnavailable("Credential database permissions could not be secured") from exc
+        except sqlite3.Error as exc:
+            raise CredentialStoreUnavailable("Credential database unavailable") from exc
 
     @staticmethod
     def _timestamp(value, field):
