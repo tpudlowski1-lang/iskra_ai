@@ -45,13 +45,15 @@ There are two separate storage paths:
 1. **Legacy global knowledge graph:** remains in `$DATA_DIR/wiedza.json`; it is not yet migrated to PostgreSQL. Writes use atomic replacement and a POSIX file lock. This is not a distributed multi-instance store.
 2. **Tenant graph storage:** the API uses a principal-bound SQLite store by default. PostgreSQL is an implemented opt-in adapter with migrations and row-level security (RLS ENABLE + FORCE). CI runs integration tests against PostgreSQL 16 using a separate `NOSUPERUSER NOBYPASSRLS` runtime role. PostgreSQL is not automatically provisioned or selected in production.
 
-The tenant migration utility is dry-run-first and supports an explicit transactional apply. No production cutover, restore rehearsal or rollback drill has been completed.
+The tenant migration utility is dry-run-first and supports an explicit transactional apply. It resolves the destination only from an explicit CLI DSN or the dedicated migration/runtime DSN variables; it never guesses from generic DATABASE_URL. No production cutover, restore rehearsal or rollback drill has been completed.
+
+Tenant SQLite graph and document stores validate every path component, reject symlinked ancestors, create private directories/files (0700/0600), and use O_NOFOLLOW where available. These checks reduce path attacks but do not eliminate TOCTOU races against a process able to mutate ancestor directories.
 
 ## Documents and RAG status
 
 An internal tenant document service supports bounded PDF, DOCX and TXT parsing, tenant-scoped SQLite/FTS5 storage, and an optional PostgreSQL repository with tenant RLS. Its parser runs in a resource-limited child process and validates the returned JSON payload.
 
-**No document HTTP routes are registered, customer uploads are disabled, and no RAG answer generation is connected.** The parser worker is not a full OS/container sandbox: it runs under the same OS user and has no seccomp or network namespace policy. Do not upload customer documents or enable this service until a dedicated low-privilege no-network sandbox, malware quarantine, retention, audit, quotas and restore controls are reviewed and tested.
+**No document HTTP routes are registered, customer uploads are disabled, and no RAG answer generation is connected.** The parser worker clears inherited environment variables before parsing, applies a restrictive umask and file-descriptor limit, but is not a full OS/container sandbox: it runs under the same OS user and has no seccomp or network namespace policy. Do not upload customer documents or enable this service until a dedicated low-privilege no-network sandbox, malware quarantine, retention, audit, quotas and restore controls are reviewed and tested.
 
 ## LLM providers
 
