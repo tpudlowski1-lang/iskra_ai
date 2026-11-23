@@ -3,9 +3,9 @@ name: Iskra unified quality gates
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [iskra-unified-core, refactor/modular-core, security/credential-store-v2, security/wsgi-auth-integration-v1, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1]
+    branches: [iskra-unified-core, refactor/modular-core, security/credential-store-v2, security/wsgi-auth-integration-v1, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1, feature/tenant-account-lifecycle-v1, feature/tenant-admin-console-v1]
   push:
-    branches: [refactor/modular-core, storage/postgresql-tenant]
+    branches: [refactor/modular-core, storage/postgresql-tenant, integration/full-release-candidate-v1]
   workflow_dispatch:
 
 permissions:
@@ -54,6 +54,8 @@ jobs:
           pip install -r requirements.txt
       - name: Validate browser assistant JavaScript syntax
         run: node --check static/assistant.js
+      - name: Exercise browser assistant session race guards
+        run: node tests/test_assistant_session_race.js
       - name: Compile all application and test modules
         run: python -m compileall -q app.py wsgi.py security.py iskra tests
       - name: Validate adversarial corpus independently
