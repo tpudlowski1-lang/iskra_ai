@@ -20,6 +20,7 @@ from iskra.security.principal import ALLOWED_ROLES, Principal
 class IssuedCredential:
     credential_id: str
     token: str
+    expires_at: float | None = None
 
 
 class CredentialStoreUnavailable(RuntimeError):
@@ -183,7 +184,7 @@ class SQLiteCredentialStore:
                     connection, "credential_issued", credential_id,
                     principal, actor, now,
                 )
-        return IssuedCredential(credential_id, token)
+        return IssuedCredential(credential_id, token, expiry)
 
     def authenticate(self, token, now=None):
         if not isinstance(token, str) or not token or len(token) > 512:
@@ -304,7 +305,7 @@ class SQLiteCredentialStore:
                     connection, "credential_rotated", credential_id,
                     principal, actor, now, related_credential_id=new_id,
                 )
-        return IssuedCredential(new_id, new_token)
+        return IssuedCredential(new_id, new_token, expiry)
 
     def list_audit_events(self, limit=100):
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
