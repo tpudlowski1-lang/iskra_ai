@@ -173,6 +173,7 @@ class IskraApiContractTests(unittest.TestCase):
         self.assertNotIn("n_external_worker", reader.dane["neurons"])
         test_app = Flask("graph-refresh-test")
         test_app.register_blueprint(create_api_blueprint(reader))
+        _attach_test_admin_principal(test_app)
         response = test_app.test_client().get("/api/network")
         self.assertEqual(response.status_code, 200)
         self.assertIn(
