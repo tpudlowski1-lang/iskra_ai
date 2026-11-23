@@ -1,4 +1,5 @@
 """LLM provider routing with configurable primary and fallback order."""
+import contextvars
 import json
 import os
 import time
@@ -7,6 +8,7 @@ import requests
 REQUEST_TIMEOUT = (3, 12)  # bounded connect/read timeout in seconds
 REQUEST_RETRIES = 2
 MAX_GENERATION_SECONDS = 100  # leave headroom under the 120s Render/Gunicorn timeout
+_ACTIVE_DEADLINE = contextvars.ContextVar("iskra_llm_deadline", default=None)
 
 class RouterProvider:
     """Jednolity router modeli z kolejnością primary + fallback z ENV."""
@@ -49,7 +51,8 @@ class RouterProvider:
             return None
         return (connect_timeout, read_timeout)
 
-    def _chat_completion(self, provider, prompt, deadline):
+    def _chat_completion(self, provider, prompt, deadline=None):
+        deadline = deadline or _ACTIVE_DEADLINE.get() or (time.monotonic() + MAX_GENERATION_SECONDS)
         configs = {
             "openai": {
                 "key": os.environ.get("OPENAI_API_KEY", ""),
@@ -98,13 +101,14 @@ class RouterProvider:
                 time.sleep(min(1, remaining))
         return None
 
-    def _openai(self, prompt, deadline):
-        return self._chat_completion("openai", prompt, deadline)
+    def _openai(self, prompt):
+        return self._chat_completion("openai", prompt)
 
-    def _deepseek(self, prompt, deadline):
-        return self._chat_completion("deepseek", prompt, deadline)
+    def _deepseek(self, prompt):
+        return self._chat_completion("deepseek", prompt)
 
-    def _gemini(self, prompt, deadline):
+    def _gemini(self, prompt):
+        deadline = _ACTIVE_DEADLINE.get() or (time.monotonic() + MAX_GENERATION_SECONDS)
         api_key = os.environ.get("GEMINI_API_KEY", "")
         model = os.environ.get("GEMINI_MODEL", "").strip()
         if not api_key or not model:
@@ -145,27 +149,31 @@ class RouterProvider:
 
     def generate(self, prompt):
         deadline = time.monotonic() + MAX_GENERATION_SECONDS
-        order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
-        for name in order:
-            if self._request_timeout(deadline) is None:
-                print("LLM: wyczerpano wspólny limit czasu — przerywam łańcuch providerów.")
-                break
-            provider = self.providers.get(name)
-            if provider is None:
-                print(f"LLM: nieznany provider '{name}' — pomijam.")
-                continue
-            try:
-                result = provider(prompt, deadline)
-            except Exception as exc:
-                # A provider failure must not prevent the configured fallback chain.
-                print(f"LLM {name}: provider zgłosił {type(exc).__name__} — uruchamiam fallback.")
-                continue
-            cleaned = self.clean_json(result)
-            if cleaned is None:
-                if result:
-                    print(f"LLM {name}: odpowiedź nie zawiera poprawnego obiektu JSON — pomijam.")
-                continue
-            print(f"LLM: odpowiedź uzyskana przez {name}.")
-            return cleaned
-        print("LLM: wszystkie skonfigurowane providery zawiodły.")
-        return None
+        context_token = _ACTIVE_DEADLINE.set(deadline)
+        try:
+            order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
+            for name in order:
+                if self._request_timeout(deadline) is None:
+                    print("LLM: wyczerpano wspólny limit czasu — przerywam łańcuch providerów.")
+                    break
+                provider = self.providers.get(name)
+                if provider is None:
+                    print(f"LLM: nieznany provider '{name}' — pomijam.")
+                    continue
+                try:
+                    # Keep the long-standing provider(prompt) extension contract.
+                    result = provider(prompt)
+                except Exception as exc:
+                    print(f"LLM {name}: provider zgłosił {type(exc).__name__} — uruchamiam fallback.")
+                    continue
+                cleaned = self.clean_json(result)
+                if cleaned is None:
+                    if result:
+                        print(f"LLM {name}: odpowiedź nie zawiera poprawnego obiektu JSON — pomijam.")
+                    continue
+                print(f"LLM: odpowiedź uzyskana przez {name}.")
+                return cleaned
+            print("LLM: wszystkie skonfigurowane providery zawiodły.")
+            return None
+        finally:
+            _ACTIVE_DEADLINE.reset(context_token)
