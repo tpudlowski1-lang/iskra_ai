@@ -16,7 +16,8 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.alpha_admin = Principal("alpha-admin", "tenant-alpha", frozenset({"admin"}))
         self.alpha_member = Principal("alpha-member", "tenant-alpha", frozenset({"member"}))
         self.beta_admin = Principal("beta-admin", "tenant-beta", frozenset({"admin"}))
-        self.alpha_admin_token = self.store.issue(self.alpha_admin).token
+        self.alpha_admin_credential = self.store.issue(self.alpha_admin)
+        self.alpha_admin_token = self.alpha_admin_credential.token
         self.alpha_member_token = self.store.issue(self.alpha_member).token
         self.beta_admin_token = self.store.issue(self.beta_admin).token
 
@@ -150,6 +151,29 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.assertEqual(
             self.store.authenticate(target.token),
             Principal("alpha-user", "tenant-alpha", frozenset({"member"})),
+        )
+
+    def test_last_tenant_admin_cannot_be_revoked(self):
+        response = self.client.delete(
+            f"/api/tenant/credentials/{self.alpha_admin_credential.credential_id}",
+            headers=self.auth(self.alpha_admin_token),
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            self.store.authenticate(self.alpha_admin_token),
+            self.alpha_admin,
+        )
+
+    def test_last_tenant_admin_cannot_be_demoted_by_rotation(self):
+        response = self.client.post(
+            f"/api/tenant/credentials/{self.alpha_admin_credential.credential_id}/rotate",
+            headers=self.auth(self.alpha_admin_token),
+            json={"roles": ["member"]},
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            self.store.authenticate(self.alpha_admin_token),
+            self.alpha_admin,
         )
 
     def test_tenant_admin_cannot_rotate_another_tenants_credential(self):
