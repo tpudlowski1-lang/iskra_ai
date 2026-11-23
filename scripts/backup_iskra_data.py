@@ -25,6 +25,7 @@ import zipfile
 MANIFEST_NAME = "iskra-backup-manifest.json"
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 MAX_RESOURCE_BYTES = 1024 * 1024 * 1024
+MAX_MANIFEST_BYTES = 1024 * 1024
 
 
 class BackupError(RuntimeError):
@@ -216,15 +217,20 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
     staging = Path(tempfile.mkdtemp(prefix=".iskra-restore-", dir=parent))
     os.chmod(staging, 0o700)
     try:
-        with zipfile.ZipFile(archive_path, "r") as archive:
+        with _open_regular_nofollow(archive_path) as archive_handle, zipfile.ZipFile(archive_handle, "r") as archive:
             infos = archive.infolist()
             if sum(info.file_size for info in infos) > MAX_ARCHIVE_BYTES:
                 raise BackupError("Archiwum przekracza limit rozpakowania")
-            if len([i for i in infos if i.filename == MANIFEST_NAME]) != 1:
+            manifests = [i for i in infos if i.filename == MANIFEST_NAME]
+            if len(manifests) != 1:
                 raise BackupError("Brak lub duplikat manifestu")
             if any(info.is_dir() or stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK for info in infos):
                 raise BackupError("Katalogi i symlinki w archiwum są zabronione")
-            manifest = json.loads(archive.read(MANIFEST_NAME).decode("utf-8"))
+            if manifests[0].file_size > MAX_MANIFEST_BYTES:
+                raise BackupError("Manifest przekracza maksymalny rozmiar")
+            manifest = json.loads(archive.read(manifests[0]).decode("utf-8"))
+            if not isinstance(manifest, dict):
+                raise BackupError("Manifest musi być obiektem JSON")
             if manifest.get("format") != "iskra-backup-v1":
                 raise BackupError("Nieobsługiwany format manifestu")
             entries = manifest.get("resources")
@@ -233,6 +239,8 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             expected = {MANIFEST_NAME}
             declared_names = set()
             for entry in entries:
+                if not isinstance(entry, dict):
+                    raise BackupError("Wpis manifestu musi być obiektem")
                 name = _safe_name(entry.get("name"))
                 if name in declared_names:
                     raise BackupError("Powtórzony zasób w manifeście")
