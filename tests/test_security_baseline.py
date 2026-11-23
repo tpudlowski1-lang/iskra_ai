@@ -23,7 +23,10 @@ class SecurityBaselineTests(unittest.TestCase):
         self.assertIn("object-src 'none'", response.headers.get("Content-Security-Policy", ""))
 
     def test_api_response_also_receives_security_headers(self):
-        response = iskra.app.test_client().get("/api/network")
+        from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+        response = iskra.app.test_client().get(
+            "/api/network", environ_overrides={PRINCIPAL_ENV_KEY: SYSTEM_ADMIN}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
 
