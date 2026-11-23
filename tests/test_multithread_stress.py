@@ -144,6 +144,7 @@ class IskraConcurrencyTests(unittest.TestCase):
 
     def test_provider_fallback_order_without_network(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
