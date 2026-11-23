@@ -134,7 +134,7 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
 
     def test_invalid_actor_is_rejected(self):
         with self.assertRaises(ValueError):
-            self.store.issue(self.principal, actor="bad\\noperator")
+            self.store.issue(self.principal, actor="bad\x01operator")
 
     def test_invalid_database_path_is_rejected(self):
         with self.assertRaises(ValueError):
