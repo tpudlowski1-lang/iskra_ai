@@ -6,6 +6,18 @@ from iskra.security.credentials import SQLiteCredentialStore
 from iskra.security.principal import Principal
 
 
+class TrackingSQLiteCredentialStore(SQLiteCredentialStore):
+    def __init__(self, database_path):
+        self.opened_connections = []
+        super().__init__(database_path)
+        self.opened_connections.clear()
+
+    def _connect(self):
+        connection = super()._connect()
+        self.opened_connections.append(connection)
+        return connection
+
+
 class SQLiteCredentialStoreTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -19,6 +31,19 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_issue_authenticate_and_revoke_close_every_sqlite_connection(self):
+        store = TrackingSQLiteCredentialStore(
+            os.path.join(self.temp_dir.name, "tracked-credentials.sqlite3")
+        )
+        issued = store.issue(self.principal)
+        self.assertEqual(store.authenticate(issued.token), self.principal)
+        self.assertTrue(store.revoke(issued.credential_id))
+        self.assertGreaterEqual(len(store.opened_connections), 3)
+
+        for connection in store.opened_connections:
+            with self.assertRaises(Exception):
+                connection.execute("SELECT 1")
 
     def test_issue_and_authenticate_returns_server_bound_principal(self):
         issued = self.store.issue(self.principal)
