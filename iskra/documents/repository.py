@@ -7,6 +7,15 @@ import stat
 import time
 import uuid
 
+from iskra.security.principal import Principal
+from iskra.documents.parsers import (
+    ALLOWED_EXTENSIONS,
+    CHUNK_SIZE,
+    MAX_CHUNKS,
+    MAX_EXTRACTED_CHARS,
+    ParsedDocument,
+)
+
 
 class DocumentStorageError(OSError):
     """Document repository is unavailable or failed closed."""
@@ -114,9 +123,9 @@ class SQLiteDocumentRepository:
         except (OSError, sqlite3.Error) as exc:
             raise DocumentStorageError("Nie można zainicjalizować prywatnej bazy dokumentów") from exc
 
-    def add(self, tenant_id, parsed_document):
-        if not isinstance(tenant_id, str) or not tenant_id or len(tenant_id) > 255:
-            raise ValueError("Nieprawidłowy tenant scope")
+    def add(self, principal, parsed_document):
+        tenant_id = self._tenant_id(principal)
+        self._validate_parsed_document(parsed_document)
         document_id = str(uuid.uuid4())
         try:
             with self._connection() as connection:
@@ -180,7 +189,8 @@ class SQLiteDocumentRepository:
         except sqlite3.Error as exc:
             raise DocumentStorageError("Nie można zapisać dokumentu") from exc
 
-    def list(self, tenant_id):
+    def list(self, principal):
+        tenant_id = self._tenant_id(principal)
         try:
             with self._connection() as connection:
                 rows = connection.execute(
@@ -196,7 +206,8 @@ class SQLiteDocumentRepository:
         except sqlite3.Error as exc:
             raise DocumentStorageError("Nie można odczytać listy dokumentów") from exc
 
-    def search(self, tenant_id, query, limit=5):
+    def search(self, principal, query, limit=5):
+        tenant_id = self._tenant_id(principal)
         query = str(query or "").strip()
         if not query or len(query) > 1000:
             raise ValueError("Zapytanie musi mieć od 1 do 1000 znaków")
@@ -240,7 +251,8 @@ class SQLiteDocumentRepository:
                 raise
             raise DocumentStorageError("Nie można przeszukać dokumentów") from exc
 
-    def delete(self, tenant_id, document_id):
+    def delete(self, principal, document_id):
+        tenant_id = self._tenant_id(principal)
         try:
             with self._connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
