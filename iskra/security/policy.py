@@ -23,3 +23,16 @@ def require_roles(*required_roles):
             return view(*args, **kwargs)
         return wrapped
     return decorate
+
+
+def require_system_admin(view):
+    """Restrict operations on global system data to the system administrator."""
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        principal = principal_from_environ(request.environ)
+        if principal is None:
+            return jsonify({"error": "unauthorized"}), 401
+        if "admin" not in principal.roles or principal.tenant_id != "system":
+            return jsonify({"error": "forbidden"}), 403
+        return view(*args, **kwargs)
+    return wrapped
