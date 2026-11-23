@@ -27,7 +27,7 @@ When the SQLite store is configured:
 - sets database file permissions to owner-only (0600);
 - closes database connections deterministically.
 
-Issuance, revocation and rotation are recorded in a separate audit table in the same SQLite transaction as the credential change. Rotation atomically revokes the old token and issues a replacement; it preserves subject/tenant and may only retain or reduce roles. Audit records contain no raw token or token digest.
+Issuance, revocation and rotation are recorded in a separate audit table in the same SQLite transaction as the credential change. Rotation atomically revokes the old token and issues a replacement; it preserves subject/tenant and may only retain or reduce roles. Audit records contain no raw token or token digest. This is a local SQLite operator audit trail, not an immutable centralized audit service; file access, encrypted backups, retention and external monitoring still require operational controls.
 
 The local operator CLI is `python -m scripts.manage_credentials` with `issue`, `rotate`, `revoke` and `audit` subcommands. Mutating commands require `--confirm`; issuing an `admin` role also requires `--allow-admin`. The CLI reads the same `ISKRA_CREDENTIAL_DB_PATH` as WSGI, displays a new token once, and does not expose an HTTP credential-management endpoint. Operators must store the token in a secret manager immediately.
 
