@@ -5,7 +5,6 @@ unpickling data produced by a process that handles attacker-controlled files.
 The worker is process-isolated and resource-limited, but is not an OS/container
 sandbox; keep public routes disabled until deployment isolation is reviewed.
 """
-import hashlib
 import json
 import multiprocessing
 import os
@@ -25,7 +24,6 @@ from iskra.documents.parsers import (
     MAX_UPLOAD_BYTES,
     ParsedDocument,
     parse_document,
-    _safe_filename,
 )
 
 
@@ -70,46 +68,6 @@ def _worker_entry(connection, filename, data, cpu_seconds, memory_limit_bytes):
         connection.close()
 
 
-def _validate_worker_payload(payload, expected_filename, expected_extension, expected_digest):
-    """Validate all child output before accepting it into the parent process."""
-    if not isinstance(payload, dict):
-        raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
-    if payload.get("ok") is not True:
-        kind = payload.get("kind")
-        message = payload.get("message")
-        if kind == "invalid_document":
-            raise ValueError(message or "Nieprawidłowy dokument")
-        raise RuntimeError(message or "Błąd izolowanego parsera")
-
-    if set(payload) != {"ok", "filename", "extension", "sha256", "chunks"}:
-        raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
-    filename_value = payload.get("filename")
-    extension_value = payload.get("extension")
-    digest_value = payload.get("sha256")
-    chunks_value = payload.get("chunks")
-    if (
-        filename_value != expected_filename
-        or extension_value != expected_extension
-        or digest_value != expected_digest
-        or not isinstance(chunks_value, list)
-        or not chunks_value
-        or len(chunks_value) > MAX_CHUNKS
-        or any(
-            not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
-            for chunk in chunks_value
-        )
-        or sum(len(chunk) for chunk in chunks_value)
-            > MAX_EXTRACTED_CHARS + MAX_CHUNKS * CHUNK_OVERLAP
-    ):
-        raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
-    return ParsedDocument(
-        filename=filename_value,
-        extension=extension_value,
-        sha256=digest_value,
-        chunks=tuple(chunks_value),
-    )
-
-
 def parse_document_isolated(
     filename,
     data,
@@ -131,9 +89,6 @@ def parse_document_isolated(
     if (isinstance(memory_limit_bytes, bool) or not isinstance(memory_limit_bytes, int)
             or not 128 * 1024 * 1024 <= memory_limit_bytes <= 2 * 1024 * 1024 * 1024):
         raise ValueError("memory_limit_bytes musi należeć do zakresu 128 MiB..2 GiB")
-
-    expected_filename, expected_extension = _safe_filename(filename)
-    expected_digest = hashlib.sha256(data).hexdigest()
 
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=False)
@@ -160,11 +115,42 @@ def parse_document_isolated(
         except (EOFError, OSError) as exc:
             raise RuntimeError("Proces parsera zakończył się bez poprawnego wyniku") from exc
         payload = json.loads(raw.decode("utf-8"))
-        return _validate_worker_payload(
-            payload,
-            expected_filename,
-            expected_extension,
-            expected_digest,
+        if not isinstance(payload, dict) or payload.get("ok") is not True:
+            message = payload.get("message") if isinstance(payload, dict) else None
+            kind = payload.get("kind") if isinstance(payload, dict) else None
+            if kind == "invalid_document":
+                raise ValueError(message or "Nieprawidłowy dokument")
+            raise RuntimeError(message or "Błąd izolowanego parsera")
+        filename_value = payload.get("filename") if isinstance(payload, dict) else None
+        extension_value = payload.get("extension") if isinstance(payload, dict) else None
+        digest_value = payload.get("sha256") if isinstance(payload, dict) else None
+        chunks_value = payload.get("chunks") if isinstance(payload, dict) else None
+        if (
+            set(payload) != {"ok", "filename", "extension", "sha256", "chunks"}
+            or not isinstance(filename_value, str)
+            or not filename_value
+            or len(filename_value) > 255
+            or os.path.basename(filename_value) != filename_value
+            or "/" in filename_value
+            or "\\" in filename_value
+            or not isinstance(extension_value, str)
+            or extension_value not in ALLOWED_EXTENSIONS
+            or not filename_value.lower().endswith(extension_value)
+            or not isinstance(digest_value, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest_value)
+            or not isinstance(chunks_value, list)
+            or not chunks_value
+            or len(chunks_value) > MAX_CHUNKS
+            or any(not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
+                   for chunk in chunks_value)
+            or sum(len(chunk) for chunk in chunks_value) > MAX_EXTRACTED_CHARS + MAX_CHUNKS * CHUNK_OVERLAP
+        ):
+            raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
+        return ParsedDocument(
+            filename=payload["filename"],
+            extension=payload["extension"],
+            sha256=payload["sha256"],
+            chunks=tuple(payload["chunks"]),
         )
     except (ValueError, TimeoutError, RuntimeError):
         raise
