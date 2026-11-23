@@ -172,7 +172,7 @@ This does not mean PostgreSQL is already the default or that Iskra is production
 - Public account/credential lifecycle, recovery, controlled rotation and audit events remain incomplete.
 - PostgreSQL backend selection is implemented as opt-in; production-like migration rehearsal, staging cutover, rollback and restore drills remain outstanding.
 - Tenant API is SQLite by default; multi-replica operation requires PostgreSQL and an independently reviewed deployment.
-- The tenant document/RAG prototype is not integrated and has not passed a full security review.
+- The historical tenant document/RAG monolith has been statically audited; a new modular document service is under draft PR #32 and remains unexposed, pending isolated parser worker, adversarial tests, PostgreSQL document schema/RLS and operational controls.
 - Dedicated worker leases, observability, staging verification and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
 
