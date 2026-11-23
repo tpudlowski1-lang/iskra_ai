@@ -148,7 +148,6 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
     target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if target.exists() or target.is_symlink():
         raise BackupError("Plik archiwum już istnieje")
-    os.chmod(target.parent, 0o700)
     staging = Path(tempfile.mkdtemp(prefix=".iskra-backup-", dir=target.parent))
     os.chmod(staging, 0o700)
     temporary_archive = None
@@ -177,6 +176,14 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
         os.link(temporary_archive, target)
         os.unlink(temporary_archive)
         temporary_archive = None
+        try:
+            directory_fd = os.open(target.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
         return manifest
     finally:
         shutil.rmtree(staging, ignore_errors=True)
@@ -206,7 +213,6 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
         raise BackupError("Katalog docelowy już istnieje — restore nie nadpisuje danych")
     parent = target.parent
     parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(parent, 0o700)
     staging = Path(tempfile.mkdtemp(prefix=".iskra-restore-", dir=parent))
     os.chmod(staging, 0o700)
     try:
