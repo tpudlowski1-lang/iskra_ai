@@ -40,7 +40,7 @@ def _apply_worker_limits(cpu_seconds, memory_limit_bytes):
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
     _soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-    resource.setrlimit(resource.RLIMIT_NOFILE, (min(32, hard_limit), hard_limit))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (32 if hard_limit == resource.RLIM_INFINITY else min(32, hard_limit), hard_limit))
     os.umask(0o077)
 
 
