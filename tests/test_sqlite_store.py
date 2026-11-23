@@ -56,10 +56,32 @@ class SQLiteGraphStoreTests(unittest.TestCase):
             store.save(invalid)
         self.assertEqual(store.load(), original)
 
-    def test_database_file_permissions_are_private(self):
+    def test_database_file_and_parent_directory_are_private(self):
         SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
-        mode = stat.S_IMODE(os.stat(self.db_path).st_mode)
-        self.assertEqual(mode & 0o077, 0)
+        file_mode = stat.S_IMODE(os.stat(self.db_path).st_mode)
+        directory_mode = stat.S_IMODE(os.stat(self.tmp.name).st_mode)
+        self.assertEqual(file_mode, 0o600)
+        self.assertEqual(directory_mode, 0o700)
+
+    def test_symlink_database_path_is_rejected_without_touching_target(self):
+        target = str(Path(self.tmp.name) / "target.sqlite3")
+        SQLiteGraphStore(target, tenant_id="tenant-a")
+        before = os.stat(target).st_mode
+        link = str(Path(self.tmp.name) / "linked.sqlite3")
+        os.symlink(target, link)
+        with self.assertRaises(OSError):
+            SQLiteGraphStore(link, tenant_id="tenant-b")
+        self.assertEqual(os.stat(target).st_mode, before)
+
+    def test_symlink_parent_directory_is_rejected(self):
+        real_parent = str(Path(self.tmp.name) / "real")
+        os.mkdir(real_parent)
+        linked_parent = str(Path(self.tmp.name) / "linked")
+        os.symlink(real_parent, linked_parent)
+        path = str(Path(linked_parent) / "graph.sqlite3")
+        with self.assertRaises(OSError):
+            SQLiteGraphStore(path, tenant_id="tenant-a")
+        self.assertFalse(os.path.exists(str(Path(real_parent) / "graph.sqlite3")))
 
     def test_tenant_scope_cannot_be_reassigned(self):
         store = SQLiteGraphStore(self.db_path, tenant_id="tenant-a")
