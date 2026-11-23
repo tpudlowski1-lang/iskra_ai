@@ -185,12 +185,14 @@ def create_api_blueprint(
             return jsonify({"error": "credential_store_unavailable"}), 503
         if not session_token:
             return jsonify({"error": "browser_session_required"}), 401
-        csrf_token = secrets.token_urlsafe(32)
-        try:
-            if not store.rotate_browser_session_csrf(session_token, csrf_token):
-                return jsonify({"error": "browser_session_expired"}), 401
-        except CredentialStoreUnavailable:
-            return jsonify({"error": "credential_store_unavailable"}), 503
+        csrf_token = request.environ.get(BROWSER_SESSION_CSRF_TOKEN_ENV_KEY)
+        if not csrf_token:
+            csrf_token = secrets.token_urlsafe(32)
+            try:
+                if not store.rotate_browser_session_csrf(session_token, csrf_token):
+                    return jsonify({"error": "browser_session_expired"}), 401
+            except CredentialStoreUnavailable:
+                return jsonify({"error": "credential_store_unavailable"}), 503
         principal = principal_from_environ(request.environ)
         response = jsonify({
             "csrf_token": csrf_token,
