@@ -1,7 +1,7 @@
 """HTTP API blueprint factory with injected graph dependency."""
 from flask import Blueprint, jsonify
 
-from iskra.security.policy import require_roles
+from iskra.security.policy import require_system_admin
 
 
 def create_api_blueprint(graph):
@@ -9,10 +9,10 @@ def create_api_blueprint(graph):
     api = Blueprint("iskra_api", __name__)
 
     @api.get("/api/network")
-    @require_roles("admin")
+    @require_system_admin
     def get_network():
-        # The legacy graph is global and not tenant-partitioned. Only system
-        # administrators may read it until tenant-aware storage is integrated.
+        # This legacy graph is global, not tenant-partitioned. Only the
+        # system principal may read it; tenant administrators are not enough.
         graph.laduj()
         with graph.lock:
             return jsonify(graph.dane)
