@@ -18,6 +18,9 @@ class AssistantUiTests(unittest.TestCase):
         self.assertIn("/static/assistant.css", body)
         self.assertIn("/static/assistant.js", body)
         self.assertIn('type="password"', body)
+        self.assertIn('id="account-panel"', body)
+        self.assertIn('id="credential-form"', body)
+        self.assertIn('id="issued-token"', body)
 
     def test_assistant_script_does_not_persist_api_token(self):
         response = self.client.get("/static/assistant.js")
@@ -27,6 +30,10 @@ class AssistantUiTests(unittest.TestCase):
         self.assertNotIn("sessionStorage", script)
         self.assertIn("textContent", script)
         self.assertIn("/api/tenant/chat", script)
+        self.assertIn("/api/tenant/session", script)
+        self.assertIn("/api/tenant/credentials", script)
+        self.assertIn("showIssuedToken", script)
+        self.assertIn("credentialForm", script)
         self.assertIn("documents.forEach((doc)", script)
         self.assertNotIn("documents.forEach((document)", script)
         self.assertIn("sessionGeneration", script)
