@@ -42,9 +42,9 @@ If the variable is absent, SQLite registry authentication is not activated. If c
 - No automatic cleanup of expired records exists; expiry is enforced at authentication.
 - Database encryption at rest, backup restore drills, migration tooling and operator key lifecycle procedures remain outstanding.
 - The live knowledge graph is still the shared legacy JSON store. The tenant-scoped SQLite graph prototype is not connected to the live API.
-- A principal carrying a tenant ID does not by itself guarantee tenant data isolation. Every domain service and storage operation must enforce scope from the trusted principal.
+- A principal carrying a tenant ID does not by itself guarantee tenant data isolation. The new `TenantGraphStoreFactory` binds a `SQLiteGraphStore` to the verified `Principal` and rejects missing/untyped principals and the system principal. Domain services should obtain tenant stores only through this factory; never construct a tenant store from request parameters. This factory is a storage boundary prototype, not yet connected to live Flask graph routes.
 - Customer uploads, tenant APIs and RAG must remain disabled until cross-tenant read/write/delete tests, PostgreSQL migrations, authorization coverage and restore drills pass.
 
 ## Verification
 
-The branch adds unit and WSGI integration tests for issuance, token digest-only persistence, expiry, revocation, tenant spoofing, backend failure, untyped principal rejection, legacy admin compatibility and public health behavior. CI results must be reported only after GitHub Actions completes on the exact branch head.
+The branch adds unit and WSGI integration tests for issuance, token digest-only persistence, expiry, revocation, tenant spoofing, backend failure, untyped principal rejection, legacy admin compatibility, public health behavior, principal-bound store construction and cross-tenant read/write isolation. CI results must be reported only after GitHub Actions completes on the exact branch head.
