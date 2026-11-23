@@ -27,7 +27,9 @@ When the SQLite store is configured:
 - sets database file permissions to owner-only (0600);
 - closes database connections deterministically.
 
-A newly issued token is returned once by `issue()`. The caller is responsible for delivering it securely; it must not be logged or committed to source control. There is no public issuance endpoint in this change.
+Issuance, revocation and rotation are recorded in a separate audit table in the same SQLite transaction as the credential change. Rotation atomically revokes the old token and issues a replacement; it preserves subject/tenant and may only retain or reduce roles. Audit records contain no raw token or token digest. This is a local SQLite operator audit trail, not an immutable centralized audit service; file access, encrypted backups, retention and external monitoring still require operational controls.
+
+The local operator CLI is `python -m scripts.manage_credentials` with `issue`, `rotate`, `revoke` and `audit` subcommands. Mutating commands require `--confirm`; issuing an `admin` role also requires `--allow-admin`. The CLI reads the same `ISKRA_CREDENTIAL_DB_PATH` as WSGI, displays a new token once, and does not expose an HTTP credential-management endpoint. Operators must store the token in a secret manager immediately.
 
 ## Configuration
 
@@ -38,13 +40,13 @@ If the variable is absent, SQLite registry authentication is not activated. If c
 ## Limitations and production gates
 
 - SQLite is a single-instance backend; it is not suitable for multiple web workers/replicas sharing network storage. PostgreSQL is required before horizontal scaling.
-- No account provisioning API, password login, self-service token rotation, recovery workflow or audit-event pipeline exists.
+- No public account provisioning API, password login, self-service rotation or account recovery workflow exists. Credential lifecycle is currently a local operator CLI only.
 - No automatic cleanup of expired records exists; expiry is enforced at authentication.
-- Database encryption at rest, backup restore drills, migration tooling and operator key lifecycle procedures remain outstanding.
-- The live knowledge graph is still the shared legacy JSON store. The tenant-scoped SQLite graph prototype is not connected to the live API.
+- Database encryption at rest, backup restore drills, operator identity verification, secret delivery and incident/key lifecycle procedures remain outstanding.
+- The global compatibility graph remains on legacy JSON and is system-admin-only. The tenant API is connected to the principal-bound SQLite tenant graph store; PostgreSQL is an opt-in backend.
 - A principal carrying a tenant ID does not by itself guarantee tenant data isolation. The new `TenantGraphStoreFactory` binds a `SQLiteGraphStore` to the verified `Principal` and rejects missing/untyped principals and the system principal. Domain services should obtain tenant stores only through this factory; never construct a tenant store from request parameters. This factory is a storage boundary prototype, not yet connected to live Flask graph routes.
-- Customer uploads, tenant APIs and RAG must remain disabled until cross-tenant read/write/delete tests, PostgreSQL migrations, authorization coverage and restore drills pass.
+- Customer document uploads and RAG remain disabled until cross-tenant read/write/delete tests, PostgreSQL migration rehearsal, authorization coverage and restore drills pass.
 
 ## Verification
 
-The branch adds unit and WSGI integration tests for issuance, token digest-only persistence, expiry, revocation, tenant spoofing, backend failure, untyped principal rejection, legacy admin compatibility, public health behavior, principal-bound store construction and cross-tenant read/write isolation. CI results must be reported only after GitHub Actions completes on the exact branch head.
+The branch adds unit and WSGI integration tests for token digest-only persistence, expiry, revocation, atomic rotation, privilege non-escalation, audit redaction, operator CLI confirmation, tenant spoofing, backend failure, legacy admin compatibility, public health behavior, principal-bound store construction and cross-tenant read/write isolation. CI results must be reported only after GitHub Actions completes on the exact branch head.

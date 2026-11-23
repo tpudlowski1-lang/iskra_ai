@@ -7,6 +7,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Modular configuration, knowledge graph, LLM router, API, security headers and autonomous worker boundaries.
 - [x] Dashboard renders graph labels with DOM `textContent`, not `innerHTML`.
 - [x] Fail-closed WSGI authentication supports legacy system `API_TOKEN` and an opt-in persistent credential registry with hashed tokens, expiry and revocation.
+- [x] Local operator CLI issues, rotates and revokes credentials with transactionally recorded audit events; role escalation during rotation is blocked.
 - [x] Tenant principals are derived only from verified server-side credentials; request-supplied tenant IDs are ignored.
 - [x] Global compatibility graph is restricted to the fixed system administrator.
 - [x] Tenant graph API uses a principal-bound SQLite store by default; tenant IDs cannot be reassigned by request input.
@@ -16,7 +17,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 
 ## Not yet production-ready
-- [ ] Public account/credential provisioning, account recovery, self-service rotation, expiry policy and auditable credential lifecycle.
+- [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
