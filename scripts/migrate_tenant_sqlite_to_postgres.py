@@ -87,9 +87,9 @@ def _validate_migration_graph(graph):
             created = float(node.get("created"))
         except (TypeError, ValueError, OverflowError):
             raise MigrationError(f"Nieprawidłowe dane liczbowe węzła: {node_id}") from None
-        if not (0.0 <= weight <= 1.0) or !math.isfinite(weight):
+        if not (0.0 <= weight <= 1.0) or not math.isfinite(weight):
             raise MigrationError(f"Waga poza zakresem węzła: {node_id}")
-        if !math.isfinite(created):
+        if not math.isfinite(created):
             raise MigrationError(f"Nieprawidłowy czas węzła: {node_id}")
         clean_neurons[node_id] = {"label": label, "weight": weight, "created": created}
 
