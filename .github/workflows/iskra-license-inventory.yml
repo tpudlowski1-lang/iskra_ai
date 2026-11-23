@@ -3,9 +3,9 @@ name: Iskra Python dependency license inventory
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [iskra-unified-core, refactor/modular-core]
+    branches: [iskra-unified-core, refactor/modular-core, integration/full-release-candidate-v1]
   push:
-    branches: [refactor/modular-core]
+    branches: [refactor/modular-core, integration/full-release-candidate-v1]
   workflow_dispatch:
 
 permissions:
