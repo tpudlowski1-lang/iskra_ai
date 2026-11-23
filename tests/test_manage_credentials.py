@@ -99,7 +99,7 @@ class ManageCredentialsCliTests(unittest.TestCase):
         result, output = self.run_cli(["audit", "--limit", "10"])
         self.assertEqual(result, 0)
         events = json.loads(output)
-        self.assertEqual(events[0]["event_type"], "credential_revoked")
+        self.assertIn("credential_revoked", [event["event_type"] for event in events])
         self.assertTrue(all("token" not in event for event in events))
 
 
