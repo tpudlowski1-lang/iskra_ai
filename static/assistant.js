@@ -79,7 +79,13 @@
     const session = await response.json();
     sessionRoles = Array.isArray(session.roles) ? session.roles : [];
     accountPanel.hidden = !sessionRoles.includes("admin");
-    if (sessionRoles.includes("admin")) await loadCredentials();
+    if (sessionRoles.includes("admin")) {
+      try {
+        await loadCredentials();
+      } catch (error) {
+        addMessage("assistant", error.message || "Panel zarządzania dostępami jest niedostępny.");
+      }
+    }
   }
 
   async function loadCredentials() {
@@ -140,7 +146,11 @@
       if (generation !== sessionGeneration) return;
       if (!response.ok) throw new Error("Nie udało się rotować tokenu (" + response.status + ").");
       showIssuedToken(data.token);
-      await loadCredentials();
+      try {
+        await loadCredentials();
+      } catch (_error) {
+        setStatus("Token został obrócony. Jeśli był to bieżący token, połącz się ponownie nowym tokenem.", true);
+      }
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd rotacji tokenu.");
     }
@@ -155,7 +165,11 @@
       });
       if (generation !== sessionGeneration) return;
       if (!response.ok) throw new Error("Nie udało się unieważnić tokenu (" + response.status + ").");
-      await loadCredentials();
+      try {
+        await loadCredentials();
+      } catch (_error) {
+        setStatus("Token unieważniony. Jeśli był to bieżący token, połącz się ponownie.", true);
+      }
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd unieważniania tokenu.");
     }
@@ -249,7 +263,11 @@
       if (!response.ok) throw new Error("Nie udało się utworzyć dostępu (" + response.status + ").");
       showIssuedToken(data.token);
       credentialSubject.value = "";
-      await loadCredentials();
+      try {
+        await loadCredentials();
+      } catch (_error) {
+        setStatus("Dostęp utworzony, ale lista nie odświeżyła się. Zapisz token i odśwież listę później.", true);
+      }
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd tworzenia dostępu.");
     } finally {
