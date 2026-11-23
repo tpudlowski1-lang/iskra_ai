@@ -56,6 +56,8 @@ jobs:
         run: node --check static/assistant.js
       - name: Exercise browser assistant session race guards
         run: node tests/test_assistant_session_race.js
+      - name: Exercise tenant admin mutation and session isolation guards
+        run: node tests/test_assistant_admin_mutation.js
       - name: Compile all application and test modules
         run: python -m compileall -q app.py wsgi.py security.py iskra tests
       - name: Validate adversarial corpus independently

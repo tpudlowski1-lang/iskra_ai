@@ -24,6 +24,30 @@
   const issuedToken = document.getElementById("issued-token");
   const copyTokenButton = document.getElementById("copy-token");
   let sessionRoles = [];
+  let credentialMutationPending = false;
+
+  function setCredentialMutationPending(pending) {
+    credentialMutationPending = pending;
+    connectButton.disabled = pending;
+    tokenInput.disabled = pending;
+    logoutButton.disabled = pending;
+    credentialForm.querySelectorAll("button, input, select").forEach((control) => {
+      control.disabled = pending;
+    });
+    credentialList.querySelectorAll("button").forEach((control) => {
+      control.disabled = pending;
+    });
+  }
+
+  function beginCredentialMutation() {
+    if (credentialMutationPending) return false;
+    setCredentialMutationPending(true);
+    return true;
+  }
+
+  function endCredentialMutation() {
+    if (credentialMutationPending) setCredentialMutationPending(false);
+  }
 
   function setStatus(message, error = false) {
     statusNode.textContent = message;
@@ -141,6 +165,7 @@
 
   async function rotateCredential(credentialId) {
     if (!apiToken || !window.confirm("Rotować ten token? Poprzedni zostanie natychmiast unieważniony.")) return;
+    if (!beginCredentialMutation()) return;
     const generation = sessionGeneration;
     try {
       const response = await apiRequest("/api/tenant/credentials/" + encodeURIComponent(credentialId) + "/rotate", {
@@ -158,11 +183,14 @@
       }
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd rotacji tokenu.");
+    } finally {
+      endCredentialMutation();
     }
   }
 
   async function revokeCredential(credentialId) {
     if (!apiToken || !window.confirm("Unieważnić ten token? Tej operacji nie można cofnąć.")) return;
+    if (!beginCredentialMutation()) return;
     const generation = sessionGeneration;
     try {
       const response = await apiRequest("/api/tenant/credentials/" + encodeURIComponent(credentialId), {
@@ -177,6 +205,8 @@
       }
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd unieważniania tokenu.");
+    } finally {
+      endCredentialMutation();
     }
   }
 
@@ -207,11 +237,23 @@
   connectForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const candidate = tokenInput.value.trim();
-    if (!candidate) return;
+    if (!candidate || credentialMutationPending) return;
     connectButton.disabled = true;
+    tokenInput.disabled = true;
     setStatus("Sprawdzam dostęp…");
     sessionGeneration += 1;
     const generation = sessionGeneration;
+    workspace.hidden = true;
+    logoutButton.hidden = true;
+    accountPanel.hidden = true;
+    sessionRoles = [];
+    credentialList.replaceChildren();
+    showIssuedToken("");
+    documentList.replaceChildren();
+    documentCount.textContent = "0";
+    messages.replaceChildren();
+    sendButton.disabled = true;
+    credentialSubject.value = "";
     apiToken = candidate;
     try {
       await loadSession();
@@ -229,11 +271,13 @@
       apiToken = "";
       setStatus(error.message || "Nie udało się połączyć.", true);
     } finally {
-      connectButton.disabled = false;
+      connectButton.disabled = credentialMutationPending;
+      tokenInput.disabled = credentialMutationPending;
     }
   });
 
   logoutButton.addEventListener("click", () => {
+    if (credentialMutationPending) return;
     sessionGeneration += 1;
     apiToken = "";
     workspace.hidden = true;
@@ -252,9 +296,9 @@
 
   credentialForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!apiToken || !sessionRoles.includes("admin")) return;
+    if (!apiToken || !sessionRoles.includes("admin") || credentialMutationPending) return;
     const subject = credentialSubject.value.trim();
-    if (!subject) return;
+    if (!subject || !beginCredentialMutation()) return;
     const generation = sessionGeneration;
     const button = document.getElementById("issue-credential");
     button.disabled = true;
@@ -276,7 +320,8 @@
     } catch (error) {
       if (generation === sessionGeneration) addMessage("assistant", error.message || "Błąd tworzenia dostępu.");
     } finally {
-      if (generation === sessionGeneration) button.disabled = false;
+      button.disabled = false;
+      endCredentialMutation();
     }
   });
 
