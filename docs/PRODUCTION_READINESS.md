@@ -46,7 +46,8 @@ Do not enable PostgreSQL in production until staging migration, cross-tenant neg
 ## Operational rules
 - Use `wsgi:app` for public deployment; direct `app:app` bypasses authentication middleware.
 - Keep `ENABLE_AUTONOMOUS_LOOP=false` on web deployments.
-- Do not run multiple Gunicorn workers against the legacy JSON global graph and assume process-local locks are sufficient.
+- The supplied `render.yaml` uses one Gunicorn worker because the legacy global JSON graph relies on process-local locking. Do not increase the worker count or scale multiple web instances until that graph is moved to a shared transactional store and concurrency-tested.
+- `render.yaml` does not provision a persistent disk or managed PostgreSQL database. The default `DATA_DIR` is the application directory; SQLite credential and tenant data must not be treated as durable on an ephemeral host. Before production, attach and verify durable storage or configure a managed database, then run backup/restore and restart tests.
 - Never store API keys, database DSNs or raw bearer tokens in Git.
 - Do not enable customer document uploads or RAG until authorization, storage isolation, retrieval filtering and restore tests pass.
 - Keep the main restructuring PR in draft until reviewed; `main` must remain unchanged until a separate release decision.
