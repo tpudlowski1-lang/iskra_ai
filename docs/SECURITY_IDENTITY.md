@@ -39,7 +39,7 @@ The registry is validated at application startup. Invalid JSON, malformed digest
 
 `iskra.security.policy.require_roles` reads only the trusted principal. Client-provided tenant IDs, role headers, URL parameters, and JSON fields cannot replace it.
 
-The current `/api/network` endpoint returns the single global legacy graph. It is therefore restricted to principals with the `admin` role. A `member` token receives HTTP 403. This is an important safety boundary, not tenant-aware graph isolation: administrators from different tenant IDs must not be given access to this global endpoint in a future public multi-tenant deployment.
+The current `/api/network` endpoint returns the single global legacy graph. It is therefore restricted to the `admin` role AND the fixed `system` tenant. Both ordinary members and tenant-scoped administrators receive HTTP 403. This is an important safety boundary, not tenant-aware graph isolation.
 
 The public `/health` probe remains unauthenticated and does not receive a principal. Use `wsgi:app`; direct `app:app` bypasses the middleware.
 
