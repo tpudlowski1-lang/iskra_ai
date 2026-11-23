@@ -15,6 +15,7 @@ from iskra.security.credentials import (
 from iskra.security.principal import (
     BROWSER_SESSION_COOKIE_NAME,
     BROWSER_SESSION_CSRF_DIGEST_ENV_KEY,
+    BROWSER_SESSION_CSRF_TOKEN_ENV_KEY,
     BROWSER_SESSION_TOKEN_ENV_KEY,
     PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
     PRINCIPAL_ENV_KEY,
@@ -219,4 +220,5 @@ class ApiTokenMiddleware:
         if browser_session is not None:
             environ[BROWSER_SESSION_TOKEN_ENV_KEY] = browser_session_token
             environ[BROWSER_SESSION_CSRF_DIGEST_ENV_KEY] = browser_session.csrf_digest
+            environ[BROWSER_SESSION_CSRF_TOKEN_ENV_KEY] = browser_session.csrf_token
         return self.application(environ, secured_start_response)
