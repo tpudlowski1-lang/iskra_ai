@@ -23,11 +23,11 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
-- [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
+- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. The stacked tenant-account feature branch (PR #82, including the squash-merged minimal `/assistant` admin console from PR #84) contains tenant-admin issue/list/rotate/revoke operations with tenant scoping. It remains draft and is not integrated into the canonical release; public signup, recovery and full onboarding are still absent.
 - [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
 - [ ] Complete production-grade DLP/data classification and prove that outbound minimization covers the application's supported data classes; the current regex minimizer is best-effort only.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
-- [x] SQLite private-path hardening rejects symlinked ancestors and applies 0700/0600 permissions (TOCTOU/OS ownership limits documented).
+- [x] Credential SQLite path hardening requires an owner-private 0700 parent, uses `O_NOFOLLOW` and descriptor-based checks, rejects symlinks/special files/hard links and applies 0600 via `fchmod`; same-service-user processes remain within the trust boundary.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
