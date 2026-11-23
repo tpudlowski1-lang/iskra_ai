@@ -21,11 +21,11 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 
 ## Safety and release gates
 
-- The deployment-level LLM_ALLOWED_PROVIDERS allowlist is default-deny and applies to primary and fallback providers. It is not a per-tenant provider policy.
+- Both deployment-level `LLM_ALLOWED_PROVIDERS` and tenant-level `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON` are default-deny. The tenant map is configured by the operator as JSON keyed by exact tenant ID, e.g. `{"tenant-acme":["deepseek"]}`. A provider is eligible only when approved by both lists; all primary/fallback providers are constrained by the intersection. Missing/invalid tenant policy denies chat inference. This is a technical allowlist, not a consent UI or legal approval.
 - Upload is disabled by default in code and in Render. Do not enable it for customer data until parser sandboxing, malware scanning, retention, audit, backup and incident-response controls are completed.
 - The parser worker has resource/environment hardening but is not a full OS/container sandbox.
 - Prompt-injection instructions in retrieved excerpts are mitigated by a separate system prompt and untrusted-data framing, but no deterministic test can prove universal resistance to model-based prompt injection.
-- The /assistant browser UI is a minimal controlled-pilot interface only; there is no signup, account recovery, HTTP-only browser session, server-side conversation history, semantic/vector retrieval, per-tenant model policy, consent UI or ordinary-prompt PII/secret redaction yet.
+- The /assistant browser UI is a minimal controlled-pilot interface only; there is no signup, account recovery, HTTP-only browser session, server-side conversation history, semantic/vector retrieval, consent UI or ordinary-prompt PII/secret redaction yet.
 - No live provider calls, customer documents or production deployment were used in CI.
 
 This API is a technical foundation for an MVP, not evidence of production or commercial readiness.
