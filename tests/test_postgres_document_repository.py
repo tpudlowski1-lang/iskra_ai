@@ -138,6 +138,16 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                     (self.beta.tenant_id,),
                 )
                 self.assertEqual(cursor.fetchall(), [])
+                cursor.execute(
+                    "UPDATE iskra_tenant_documents SET filename='stolen.txt' WHERE tenant_id=%s",
+                    (self.beta.tenant_id,),
+                )
+                self.assertEqual(cursor.rowcount, 0)
+                cursor.execute(
+                    "DELETE FROM iskra_tenant_documents WHERE tenant_id=%s",
+                    (self.beta.tenant_id,),
+                )
+                self.assertEqual(cursor.rowcount, 0)
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                     cursor.execute(
                         """
@@ -161,6 +171,8 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
         with self.psycopg.connect(APP_DSN) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT tenant_id FROM iskra_tenant_documents")
+                self.assertEqual(cursor.fetchall(), [])
+                cursor.execute("SELECT tenant_id FROM iskra_tenant_document_chunks")
                 self.assertEqual(cursor.fetchall(), [])
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
                     cursor.execute(
