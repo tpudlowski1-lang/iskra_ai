@@ -53,7 +53,7 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         )
         self.beta_doc = self.document_service.add_document(
             self.beta, "beta-procedure.txt",
-            b"BETA-SECRET: zatwierdzenie wydatkow do 500 PLN przez kierownika."
+            b"BETA-PRIVATE-CODE: zatwierdzenie wydatkow do 500 PLN przez kierownika."
         )
 
         class Graph:
@@ -130,7 +130,7 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         response = self.client.post(
             "/api/tenant/chat",
             headers=self.auth("alpha-member-token"),
-            json={"question": "BETA-SECRET"},
+            json={"question": "BETA-PRIVATE-CODE"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["status"], "no_sources")
@@ -141,7 +141,7 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         response = self.client.post(
             "/api/tenant/chat",
             headers=self.auth("beta-member-token"),
-            json={"question": "BETA-SECRET"},
+            json={"question": "BETA-PRIVATE-CODE"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["citations"][0]["document_id"], self.beta_doc["document_id"])
@@ -186,7 +186,7 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
 
     def test_document_search_is_tenant_scoped(self):
         response = self.client.get(
-            "/api/tenant/documents/search?q=BETA-SECRET",
+            "/api/tenant/documents/search?q=BETA-PRIVATE-CODE",
             headers=self.auth("alpha-member-token"),
         )
         self.assertEqual(response.status_code, 200)
