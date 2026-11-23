@@ -29,6 +29,8 @@ class AssistantUiTests(unittest.TestCase):
         self.assertIn("/api/tenant/chat", script)
         self.assertIn("documents.forEach((doc)", script)
         self.assertNotIn("documents.forEach((document)", script)
+        self.assertIn("sessionGeneration", script)
+        self.assertIn("generation !== sessionGeneration", script)
 
     def test_assistant_page_has_security_headers(self):
         response = self.client.get("/assistant")
