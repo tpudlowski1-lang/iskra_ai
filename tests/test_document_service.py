@@ -90,6 +90,16 @@ class TenantDocumentServiceTests(unittest.TestCase):
 
 
 
+    def test_symlink_ancestor_is_rejected_before_creating_descendants(self):
+        real_root = os.path.join(self.tmp.name, "real-root")
+        os.mkdir(real_root)
+        linked_root = os.path.join(self.tmp.name, "linked-root")
+        os.symlink(real_root, linked_root)
+        database = os.path.join(linked_root, "new-private-dir", "documents.sqlite3")
+        with self.assertRaises(DocumentStorageError):
+            SQLiteDocumentRepository(database)
+        self.assertFalse(os.path.exists(os.path.join(real_root, "new-private-dir")))
+
     def test_default_service_uses_isolated_parser_worker(self):
         service = DocumentService(self.repository)
         result = service.add_document(
