@@ -8,7 +8,7 @@ import knowledge
 
 
 class ApiTokenMiddleware:
-    TENANT_PATHS = ("/api/documents", "/api/search")
+    TENANT_PATHS = ("/api/documents", "/api/search", "/api/chat")
 
     def __init__(self, application, token=None, data_dir=None):
         self.application = application

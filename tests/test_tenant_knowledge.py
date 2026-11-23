@@ -144,9 +144,11 @@ class TenantApiIntegrationTests(unittest.TestCase):
             iskra.app.wsgi_app, token="integration-admin-secret", data_dir=self.tmp.name
         )
         self.client = iskra.app.test_client()
+        self.old_router_generate = iskra.bot.router.generate
 
     def tearDown(self):
         self.iskra.app.wsgi_app = self.old_wsgi_app
+        self.iskra.bot.router.generate = self.old_router_generate
         self.iskra.DATA_DIR = self.old_data_dir
         self.iskra.PLIK_SIECI = self.old_network_path
         self.tmp.cleanup()
@@ -177,6 +179,68 @@ class TenantApiIntegrationTests(unittest.TestCase):
             headers={"X-Iskra-Tenant-Key": key_b}
         ).status_code, 404)
 
+
+    def test_grounded_chat_returns_only_valid_citations(self):
+        admin = {"Authorization": "Bearer integration-admin-secret"}
+        created = self.client.post("/admin/tenants", json={"name": "Firma RAG"}, headers=admin)
+        key = created.get_json()["api_key"]
+        tenant_headers = {"X-Iskra-Tenant-Key": key}
+        self.client.post(
+            "/api/documents",
+            data={"file": (io.BytesIO(b"Zwrot towaru jest mozliwy w terminie 30 dni od zakupu."), "zwroty.txt")},
+            headers=tenant_headers, content_type="multipart/form-data"
+        )
+        captured = {}
+        def fake_generate(prompt, system_prompt=None):
+            captured["prompt"] = prompt
+            captured["system_prompt"] = system_prompt
+            return json.dumps({
+                "answer": "Zwrot jest możliwy w terminie 30 dni [S1].",
+                "citations": ["S1"],
+                "insufficient_evidence": False,
+            })
+        self.iskra.bot.router.generate = fake_generate
+        response = self.client.post("/api/chat", json={"question": "Jaki jest termin zwrotu?"},
+                                    headers=tenant_headers)
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertTrue(payload["grounded"])
+        self.assertEqual(payload["citations"], ["S1"])
+        self.assertEqual(payload["sources"][0]["filename"], "zwroty.txt")
+        self.assertIn("NIEZAUFANYMI DANYMI", captured["system_prompt"])
+        self.assertIn("30 dni", captured["prompt"])
+
+    def test_chat_does_not_call_model_without_matching_sources(self):
+        created = self.client.post("/admin/tenants", json={"name": "Pusta firma"},
+                                   headers={"Authorization": "Bearer integration-admin-secret"})
+        key = created.get_json()["api_key"]
+        calls = []
+        self.iskra.bot.router.generate = lambda *args, **kwargs: calls.append(True) or None
+        response = self.client.post("/api/chat", json={"question": "Jaki jest numer umowy?"},
+                                    headers={"X-Iskra-Tenant-Key": key})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["grounded"])
+        self.assertEqual(calls, [])
+
+    def test_chat_rejects_fabricated_source_ids(self):
+        created = self.client.post("/admin/tenants", json={"name": "Firma cytowań"},
+                                   headers={"Authorization": "Bearer integration-admin-secret"})
+        key = created.get_json()["api_key"]
+        tenant_headers = {"X-Iskra-Tenant-Key": key}
+        self.client.post(
+            "/api/documents",
+            data={"file": (io.BytesIO(b"Regulamin przewiduje gwarancje dwa lata."), "gwarancja.txt")},
+            headers=tenant_headers, content_type="multipart/form-data"
+        )
+        self.iskra.bot.router.generate = lambda *args, **kwargs: json.dumps({
+            "answer": "Gwarancja trwa rok [S99].",
+            "citations": ["S99"],
+            "insufficient_evidence": False,
+        })
+        response = self.client.post("/api/chat", json={"question": "Jaki jest okres gwarancji?"},
+                                    headers=tenant_headers)
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.get_json()["error"], "invalid_model_response")
 
 class TenantSchemaRecoveryTests(unittest.TestCase):
     def test_schema_is_recreated_when_sqlite_file_is_replaced(self):
