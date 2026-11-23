@@ -5,6 +5,17 @@ import unittest
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
 import app as iskra
+from flask import request
+from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+
+
+def _attach_test_admin_principal(flask_app):
+    @flask_app.before_request
+    def attach_test_admin():
+        request.environ[PRINCIPAL_ENV_KEY] = SYSTEM_ADMIN
+
+
+_attach_test_admin_principal(iskra.app)
 
 
 class IskraPersistenceTests(unittest.TestCase):
