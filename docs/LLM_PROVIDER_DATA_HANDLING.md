@@ -12,7 +12,7 @@ The current worker reads and updates the legacy global graph, not tenant-specifi
 
 Implemented:
 - Provider API keys are read from environment variables and are not included in the prompt payload.
-- HTTP calls use a 45-second timeout and two attempts per provider.
+- HTTP calls use bounded connect/read timeouts and a shared 100-second generation deadline across primary/fallback, with up to two attempts per provider and a capped retry pause.
 - The router logs provider names, HTTP status codes and exception types; it does not intentionally log the prompt body or API key.
 - The autonomous worker is opt-in and is not started inside ordinary WSGI web workers.
 - The worker prompt is restricted to a fixed public taxonomy; arbitrary mutable graph content is excluded.
