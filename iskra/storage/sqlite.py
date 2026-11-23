@@ -204,7 +204,7 @@ class SQLiteGraphStore:
                 if existing is None:
                     self._insert_snapshot(connection, clean)
                 connection.commit()
-            except BaseException:
+            except Exception:
                 connection.rollback()
                 raise
         return self.load()
