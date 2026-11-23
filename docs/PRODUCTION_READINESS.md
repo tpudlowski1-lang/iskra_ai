@@ -44,7 +44,7 @@ SQLite remains the default tenant backend. PostgreSQL is opt-in:
 Do not enable PostgreSQL in production until staging migration, cross-tenant negative tests, backup/restore and rollback have passed. The PostgreSQL adapter is not automatically migrated and the application must never run as schema owner or superuser.
 
 ## Operational rules
-- Use `wsgi:app` for public deployment; direct `app:app` bypasses authentication middleware.
+- Use `wsgi:app` for public deployment. The `python app.py` development entry point now uses the same fail-closed middleware; do not expose Gunicorn `app:app`, which bypasses the production WSGI wrapper.
 - Keep `ENABLE_AUTONOMOUS_LOOP=false` on web deployments.
 - Do not run multiple Gunicorn workers against the legacy JSON global graph and assume process-local locks are sufficient.
 - Never store API keys, database DSNs or raw bearer tokens in Git.
