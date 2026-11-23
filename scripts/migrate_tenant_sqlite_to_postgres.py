@@ -274,7 +274,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="Ścieżka do iskra_tenants.sqlite3")
     parser.add_argument("--backup-dir", required=True, help="Prywatny katalog kopii")
-    parser.add_argument("--postgres-dsn", default=os.environ.get("DATABASE_URL"))
+    parser.add_argument("--postgres-dsn", default=os.environ.get("ISKRA_POSTGRES_DSN") or os.environ.get("DATABASE_URL"))
     parser.add_argument("--apply", action="store_true", help="Wykonaj zapis do PostgreSQL; bez tego tylko dry-run")
     parser.add_argument("--replace-existing", action="store_true", help="Jawnie zastąp istniejące grafy tenantów")
     args = parser.parse_args(argv)
