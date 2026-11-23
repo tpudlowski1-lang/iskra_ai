@@ -14,6 +14,7 @@ from pathlib import Path
 import secrets
 import shutil
 import sqlite3
+import stat
 import sys
 import tempfile
 
@@ -119,7 +120,7 @@ def restore_private_backup(backup_path, target_path, expected_sha256):
     digest = hashlib.sha256()
     try:
         with os.fdopen(source_fd, "rb") as input_file, os.fdopen(descriptor, "wb") as output:
-            if not os.path.isfile(source) or not __import__("stat").S_ISREG(os.fstat(input_file.fileno()).st_mode):
+            if not os.path.isfile(source) or !stat.S_ISREG(os.fstat(input_file.fileno()).st_mode):
                 raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
             for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
                 digest.update(chunk)
@@ -159,12 +160,15 @@ def restore_private_backup(backup_path, target_path, expected_sha256):
             os.close(directory_fd)
     except FileExistsError:
         raise MigrationError("Plik docelowy już istnieje; odtwarzanie przerwane bez nadpisania") from None
-    except Exception:
+    finally:
+        # Also clean up on the existing-target path; the published target is
+        # a separate hard link and remains intact after this unlink.
         try:
             os.unlink(temporary)
+        except FileNotFoundError:
+            pass
         except OSError:
             pass
-        raise
     return {
         "restored_path": target,
         "sha256": actual,
