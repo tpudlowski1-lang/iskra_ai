@@ -9,6 +9,7 @@ from iskra.storage.postgres import PostgresGraphStore
 from iskra.storage.sqlite import SQLiteGraphStore
 from scripts.migrate_tenant_sqlite_to_postgres import (
     MigrationError,
+    _validate_migration_graph,
     create_private_backup,
     migrate_snapshots,
     read_tenant_snapshots,
@@ -60,6 +61,38 @@ class TenantMigrationUtilityTests(unittest.TestCase):
         self.assertEqual(report["tenant_count"], 2)
         self.assertNotIn("status", report)
 
+    def test_out_of_range_source_values_are_rejected_without_clamping(self):
+        invalid_db = os.path.join(self.tmp.name, "out-of-range.sqlite3")
+        SQLiteGraphStore(invalid_db, "tenant-invalid").save(make_graph("valid"))
+        import sqlite3
+        with sqlite3.connect(invalid_db) as connection:
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            connection.execute(
+                "UPDATE graph_neurons SET weight = 1.5 WHERE tenant_id = ? AND node_id = ?",
+                ("tenant-invalid", "node-1"),
+            )
+        with self.assertRaisesRegex(MigrationError, "Kontrola integralności SQLite"):
+            read_tenant_snapshots(invalid_db)
+        with self.assertRaisesRegex(MigrationError, "Waga poza zakresem"):
+            _validate_migration_graph(make_graph("valid") | {"neurons": {"node-1": {"label": "x", "weight": 1.5, "created": 123.0}}})
+
+    def test_foreign_key_corruption_is_rejected_before_import(self):
+        invalid_db = os.path.join(self.tmp.name, "foreign-key-invalid.sqlite3")
+        SQLiteGraphStore(invalid_db, "tenant-invalid").save(make_graph("valid"))
+        import sqlite3
+        with sqlite3.connect(invalid_db) as connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute(
+                """
+                INSERT INTO graph_synapses
+                    (tenant_id, source_id, target_id, strength)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("tenant-invalid", "node-1", "missing-node", 0.5),
+            )
+        with self.assertRaisesRegex(MigrationError, "naruszenia kluczy obcych"):
+            read_tenant_snapshots(invalid_db)
+
     def test_system_tenant_is_rejected(self):
         system_db = os.path.join(self.tmp.name, "system.sqlite3")
         SQLiteGraphStore(system_db, "system").save(make_graph("global"))
@@ -79,7 +112,7 @@ class TenantMigrationUtilityTests(unittest.TestCase):
                 """,
                 ("tenant-invalid", "node-1", "missing-node", 0.5),
             )
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(MigrationError, "naruszenia kluczy obcych"):
             read_tenant_snapshots(invalid_db)
 
 
