@@ -76,6 +76,19 @@ class FullBackupArchiveTests(unittest.TestCase):
         with self.assertRaises(BackupError):
             restore_archive(str(rewritten), str(self.root / "restore-symlink-member"))
 
+    def test_sqlite_source_path_with_reserved_uri_characters(self):
+        directory = self.root / "db?set#one"
+        directory.mkdir()
+        database = directory / "graph.sqlite3"
+        with sqlite3.connect(database) as db:
+            db.execute("CREATE TABLE records (value TEXT)")
+            db.execute("INSERT INTO records(value) VALUES ('reserved-path')")
+        archive = self.root / "reserved-path.zip"
+        create_archive([{"name": "data/graph.sqlite3", "path": str(database), "kind": "sqlite"}], str(archive), writes_paused=True)
+        target = self.root / "reserved-path-restore"
+        restore_archive(str(archive), str(target))
+        with sqlite3.connect(target / "data/graph.sqlite3") as db:
+            self.assertEqual(db.execute("SELECT value FROM records").fetchone()[0], "reserved-path")
     def test_requires_explicit_quiescence_acknowledgement(self):
         with self.assertRaises(BackupError):
             create_archive(self.resources(), str(self.archive), writes_paused=False)
