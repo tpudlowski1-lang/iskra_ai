@@ -43,3 +43,8 @@ a persistent writable disk. Do not share it across multiple replicas or use an
 ephemeral filesystem. Use a properly provisioned shared database backend before
 scaling horizontally. A passing CI test proves application wiring and local
 SQLite behavior, not the host's secret, disk, TLS or backup configuration.
+
+
+## Credential resolution order
+
+When multiple server-side mechanisms are configured, the middleware checks the persistent SQLite registry first, then the legacy system-admin token, then the static SHA-256 digest registry. A persistent-registry miss may fall through to the other configured mechanisms. A persistent-registry exception returns HTTP 503 and does **not** fall through, so an unavailable identity store cannot silently change the authentication source. A non-Principal object returned by a credential backend is rejected.
