@@ -24,12 +24,12 @@ When the SQLite store is configured:
 - supports optional expiry and immediate revocation;
 - rejects malformed and oversized tokens;
 - uses parameterized SQL and transactional writes;
-- sets database file permissions to owner-only (0600);
+- requires the parent directory to be owned by the service user and inaccessible to group/other users (0700); opens the directory and database with `O_NOFOLLOW`, checks regular-file ownership/link count, and applies database permissions through the file descriptor (0600);
 - closes database connections deterministically.
 
 Issuance, revocation and rotation are recorded in a separate audit table in the same SQLite transaction as the credential change. Rotation atomically revokes the old token and issues a replacement; it preserves subject/tenant and may only retain or reduce roles. Audit records contain no raw token or token digest. This is a local SQLite operator audit trail, not an immutable centralized audit service; file access, encrypted backups, retention and external monitoring still require operational controls.
 
-The local operator CLI is `python -m scripts.manage_credentials` with `issue`, `rotate`, `revoke` and `audit` subcommands. Mutating commands require `--confirm`; issuing an `admin` role also requires `--allow-admin`. The CLI reads the same `ISKRA_CREDENTIAL_DB_PATH` as WSGI, displays a new token once, and does not expose an HTTP credential-management endpoint. Operators must store the token in a secret manager immediately.
+The local operator CLI is `python -m scripts.manage_credentials` with `issue`, `rotate`, `revoke` and `audit` subcommands. Mutating commands require `--confirm`; issuing an `admin` role also requires `--allow-admin`. Draft PR #86 carries the rebased tenant-scoped API and minimal browser admin console: tenant admins can issue/list/rotate/revoke only credentials bound to their own Principal tenant. New tokens are returned once; list responses contain metadata only. These routes require the persistent SQLite registry and are not yet integrated into the canonical release candidate. Operators must store newly issued tokens in a secret manager immediately.
 
 ## Configuration
 
@@ -40,7 +40,7 @@ If the variable is absent, SQLite registry authentication is not activated. If c
 ## Limitations and production gates
 
 - SQLite is a single-instance backend; it is not suitable for multiple web workers/replicas sharing network storage. PostgreSQL is required before horizontal scaling.
-- No public account provisioning API, password login, self-service rotation or account recovery workflow exists. Credential lifecycle is currently a local operator CLI only.
+- No public signup, password login, account recovery, email verification, billing or complete customer account lifecycle exists. Draft PR #86 includes tenant-admin issue/list/rotate/revoke endpoints and a minimal admin console; it still requires canonical integration, staging security review, and a full customer account lifecycle before it can be considered a managed account product.
 - No automatic cleanup of expired records exists; expiry is enforced at authentication.
 - Database encryption at rest, backup restore drills, operator identity verification, secret delivery and incident/key lifecycle procedures remain outstanding.
 - The global compatibility graph remains on legacy JSON and is system-admin-only. The tenant API is connected to the principal-bound SQLite tenant graph store; PostgreSQL is an opt-in backend.
