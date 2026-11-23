@@ -51,5 +51,31 @@ class DocumentRepositoryFactoryTests(unittest.TestCase):
             postgres_repository = DocumentRepositoryFactory.from_settings(postgres_settings).build()
             self.assertIsInstance(postgres_repository, PostgresDocumentRepository)
 
+    def test_document_backend_is_independent_from_graph_backend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            postgres_graph_sqlite_documents = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="postgres",
+                document_storage_backend="sqlite",
+                postgres_dsn="postgresql://app:secret@localhost/iskra",
+            )
+            documents_sqlite = DocumentRepositoryFactory.from_settings(
+                postgres_graph_sqlite_documents
+            ).build()
+            self.assertIsInstance(documents_sqlite, SQLiteDocumentRepository)
+
+            sqlite_graph_postgres_documents = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="sqlite",
+                document_storage_backend="postgres",
+                postgres_dsn="postgresql://app:secret@localhost/iskra",
+            )
+            documents_postgres = DocumentRepositoryFactory.from_settings(
+                sqlite_graph_postgres_documents
+            ).build()
+            self.assertIsInstance(documents_postgres, PostgresDocumentRepository)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
