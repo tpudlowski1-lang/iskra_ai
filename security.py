@@ -1,15 +1,26 @@
 """Fail-closed WSGI authentication for public Iskra deployments."""
 import base64
+import hashlib
 import hmac
 import json
 import os
+from http.cookies import CookieError, SimpleCookie
+from urllib.parse import urlsplit
 
 from iskra.security.credentials import (
     CredentialConfigError,
     load_api_credentials,
     principal_for_token,
 )
-from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY, Principal
+from iskra.security.principal import (
+    BROWSER_SESSION_COOKIE_NAME,
+    BROWSER_SESSION_CSRF_DIGEST_ENV_KEY,
+    BROWSER_SESSION_TOKEN_ENV_KEY,
+    PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
+    PRINCIPAL_ENV_KEY,
+    SYSTEM_ADMIN,
+    Principal,
+)
 
 
 class ApiTokenMiddleware:
@@ -59,9 +70,45 @@ class ApiTokenMiddleware:
         start_response(status, headers)
         return [body]
 
+    @staticmethod
+    def _browser_session_cookie(environ):
+        cookie_header = environ.get("HTTP_COOKIE", "")
+        if not isinstance(cookie_header, str) or not cookie_header:
+            return ""
+        cookies = SimpleCookie()
+        try:
+            cookies.load(cookie_header)
+        except CookieError:
+            return ""
+        morsel = cookies.get(BROWSER_SESSION_COOKIE_NAME)
+        return morsel.value if morsel is not None else ""
+
+    @staticmethod
+    def _is_public_shell_request(environ):
+        method = str(environ.get("REQUEST_METHOD", "GET")).upper()
+        path = environ.get("PATH_INFO", "/")
+        return method in {"GET", "HEAD"} and path in {
+            "/assistant",
+            "/static/assistant.css",
+            "/static/assistant.js",
+        }
+
     def __call__(self, environ, start_response):
-        if environ.get("PATH_INFO", "/") == "/health":
-            return self.application(environ, start_response)
+        def secured_start_response(status, headers, exc_info=None):
+            headers = list(headers)
+            existing = {name.lower() for name, _ in headers}
+            for name, value in [
+                ("X-Content-Type-Options", "nosniff"),
+                ("X-Frame-Options", "DENY"),
+                ("Referrer-Policy", "no-referrer"),
+                ("Cache-Control", "no-store"),
+            ]:
+                if name.lower() not in existing:
+                    headers.append((name, value))
+            return start_response(status, headers, exc_info)
+
+        if environ.get("PATH_INFO", "/") == "/health" or self._is_public_shell_request(environ):
+            return self.application(environ, secured_start_response)
 
         if self.configuration_error:
             return self._response(
@@ -79,54 +126,97 @@ class ApiTokenMiddleware:
 
         supplied = self._provided_token(environ)
         principal = None
+        credential_id = None
+        browser_session_token = ""
+        browser_session = None
+
         if supplied and self.credential_store is not None:
             try:
-                candidate = self.credential_store.authenticate(supplied)
+                authenticated = None
+                if hasattr(self.credential_store, "authenticate_with_metadata"):
+                    authenticated = self.credential_store.authenticate_with_metadata(supplied)
+                if authenticated is not None:
+                    principal, credential_id = authenticated
+                else:
+                    candidate = self.credential_store.authenticate(supplied)
+                    if isinstance(candidate, Principal):
+                        principal = candidate
+                    elif candidate is not None:
+                        principal = None
             except Exception:
                 return self._response(
                     start_response,
                     "503 Service Unavailable",
                     {"error": "authentication_unavailable", "message": "Credential verification is temporarily unavailable."},
                 )
-            if isinstance(candidate, Principal):
-                principal = candidate
-            elif candidate is not None:
-                # Never trust a backend that returns an untyped identity object.
-                principal = None
-            elif self.token and hmac.compare_digest(supplied, self.token):
+            if principal is None and self.token and hmac.compare_digest(supplied, self.token):
                 principal = SYSTEM_ADMIN
-            else:
-                # A miss in the persistent registry may still match the
-                # separately configured static digest registry. Database
-                # outages above fail closed and never reach this fallback.
+            elif principal is None:
                 principal = principal_for_token(supplied, self.credentials)
         elif supplied and self.token and hmac.compare_digest(supplied, self.token):
             principal = SYSTEM_ADMIN
         elif supplied:
             principal = principal_for_token(supplied, self.credentials)
+        else:
+            browser_session_token = self._browser_session_cookie(environ)
+            if browser_session_token and self.credential_store is not None:
+                try:
+                    browser_session = self.credential_store.authenticate_browser_session(browser_session_token)
+                except Exception:
+                    return self._response(
+                        start_response,
+                        "503 Service Unavailable",
+                        {"error": "authentication_unavailable", "message": "Browser session verification is temporarily unavailable."},
+                    )
+                if browser_session is not None:
+                    principal = browser_session.principal
 
         if principal is None:
             return self._response(
                 start_response,
                 "401 Unauthorized",
-                {"error": "unauthorized", "message": "Valid API credential required."},
+                {"error": "unauthorized", "message": "Valid API credential or browser session required."},
                 [("WWW-Authenticate", 'Basic realm="Iskra AI", charset="UTF-8"')],
             )
 
-        def secured_start_response(status, headers, exc_info=None):
-            headers = list(headers)
-            existing = {name.lower() for name, _ in headers}
-            for name, value in [
-                ("X-Content-Type-Options", "nosniff"),
-                ("X-Frame-Options", "DENY"),
-                ("Referrer-Policy", "no-referrer"),
-                ("Cache-Control", "no-store"),
-            ]:
-                if name.lower() not in existing:
-                    headers.append((name, value))
-            return start_response(status, headers, exc_info)
+        if browser_session is not None:
+            method = str(environ.get("REQUEST_METHOD", "GET")).upper()
+            if method not in {"GET", "HEAD", "OPTIONS"}:
+                fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
+                origin = environ.get("HTTP_ORIGIN", "")
+                host = str(environ.get("HTTP_HOST", "")).lower()
+                if fetch_site == "cross-site":
+                    return self._response(
+                        start_response, "403 Forbidden",
+                        {"error": "csrf_rejected", "message": "Cross-site browser requests are not allowed."},
+                    )
+                if origin:
+                    try:
+                        origin_host = urlsplit(origin).netloc.lower()
+                    except ValueError:
+                        origin_host = ""
+                    if not host or origin_host != host:
+                        return self._response(
+                            start_response, "403 Forbidden",
+                            {"error": "csrf_rejected", "message": "Request origin does not match this host."},
+                        )
+                csrf_token = environ.get("HTTP_X_CSRF_TOKEN", "")
+                csrf_digest = (
+                    hashlib.sha256(csrf_token.encode("utf-8")).hexdigest()
+                    if isinstance(csrf_token, str) and csrf_token else ""
+                )
+                if not csrf_digest or not hmac.compare_digest(csrf_digest, browser_session.csrf_digest):
+                    return self._response(
+                        start_response, "403 Forbidden",
+                        {"error": "csrf_rejected", "message": "A valid CSRF token is required."},
+                    )
 
-        # Principal is derived only from a verified server-side credential.
-        # Request body, query parameters and caller-supplied tenant headers are ignored.
+        # Principal and credential/session identifiers are installed only by
+        # this middleware; request bodies and tenant headers are never trusted.
         environ[PRINCIPAL_ENV_KEY] = principal
+        if credential_id:
+            environ[PRINCIPAL_CREDENTIAL_ID_ENV_KEY] = credential_id
+        if browser_session is not None:
+            environ[BROWSER_SESSION_TOKEN_ENV_KEY] = browser_session_token
+            environ[BROWSER_SESSION_CSRF_DIGEST_ENV_KEY] = browser_session.csrf_digest
         return self.application(environ, secured_start_response)
