@@ -48,6 +48,24 @@ def create_api_blueprint(graph, tenant_store_factory=None):
         if not isinstance(payload, dict):
             return jsonify({"error": "invalid_graph_payload"}), 400
 
+        required_neurons = set(graph.fundament.get("neurons", {}))
+        submitted_neurons = payload.get("neurons")
+        submitted_synapses = payload.get("synapses")
+        if not isinstance(submitted_neurons, dict) or not required_neurons.issubset(submitted_neurons):
+            return jsonify({"error": "foundational_pillars_required"}), 400
+        required_edges = {
+            (edge.get("from"), edge.get("to"))
+            for edge in graph.fundament.get("synapses", [])
+            if isinstance(edge, dict)
+        }
+        submitted_edges = {
+            (edge.get("from"), edge.get("to"))
+            for edge in submitted_synapses
+            if isinstance(edge, dict)
+        } if isinstance(submitted_synapses, list) else set()
+        if not required_edges.issubset(submitted_edges):
+            return jsonify({"error": "foundational_connections_required"}), 400
+
         principal = principal_from_environ(request.environ)
         try:
             store = tenant_store_factory(principal.tenant_id)
