@@ -132,16 +132,16 @@ A release can be considered **commercial-candidate** only when every item below 
 
 ## 10. Current known blockers — verified 2026-11-23
 
-The current integrated release candidate is branch `integration/full-release-candidate-v1`. PR #89 was squash-merged into this branch at commit `f03254204e1c22b0c8f16a2a1661446ebb529fb8`; the canonical `refactor/modular-core` branch and `main` have not been changed.
+The current canonical integration branch is `refactor/modular-core`. Full release candidate PR #67 was squash-merged into it at commit `c80446d94f492ba62bbb95a34c2222b773153bf8`. The default `main` branch remains untouched; no production deployment has been made.
 
-At the exact merge commit, all five GitHub workflows passed:
-- Unified quality gates [45227417701](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227417701): SUCCESS — 337 tests on Python 3.11 and 337 tests on Python 3.12, plus dependency vulnerability audit.
-- Security/reliability [45227417710](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227417710): SUCCESS.
-- Quality Engine [45227417619](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227417619): SUCCESS.
-- Adversarial corpus [45227417647](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227417647): SUCCESS.
-- Dependency/license inventory [45227417663](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227417663): SUCCESS.
+The exact source tree for PR #67 (source HEAD `a157109a9cb005e302811c12220fe1e26bc1c685`) passed all five GitHub workflows:
+- Unified quality gates [45227924095](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227924095): SUCCESS — 337 tests on Python 3.11 and 337 tests on Python 3.12, plus dependency vulnerability audit.
+- Security/reliability [45227923887](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227923887): SUCCESS.
+- Quality Engine [45227923877](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227923877): SUCCESS.
+- Adversarial corpus [45227924137](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227924137): SUCCESS.
+- Dependency/license inventory [45227923901](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227923901): SUCCESS.
 
-Documentation was updated after this merge to reflect the integrated branch status. Re-run the same five workflows on the latest branch head before promoting it into the canonical integration branch.
+The squash merge commit `c80446d94f492ba62bbb95a34c2222b773153bf8` contains the exact same 93-file patch as PR #67. Its push-triggered unified quality gates [45228450937](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228450937) and dependency/license inventory [45228451041](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228451041) also passed. Subsequent commits on `refactor/modular-core` update documentation only; recheck the push-triggered workflows on the latest branch head before the next promotion gate.
 
 The repository still has **no verified production deployment and is NOT READY FOR SALE**. No live customer data, real provider calls, paid infrastructure or production secrets were used. The current feature remains a controlled-pilot foundation.
 
