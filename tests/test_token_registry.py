@@ -82,7 +82,11 @@ class TokenRegistryTests(unittest.TestCase):
 
     def test_registry_only_mode_works_without_legacy_token(self):
         registry = TokenRegistry.from_json(self.registry_json)
-        middleware = ApiTokenMiddleware(lambda env, start: [b"ok"], token="", token_registry=registry)
+        def application(env, start):
+            start("200 OK", [])
+            return [b"ok"]
+
+        middleware = ApiTokenMiddleware(application, token="", token_registry=registry)
         environ = {"PATH_INFO": "/"}
         result = {}
 
@@ -122,9 +126,15 @@ class GlobalGraphAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn(b"private", response.data)
 
-    def test_tenant_admin_can_read_global_graph(self):
+    def test_tenant_admin_cannot_read_global_graph(self):
         admin = Principal("admin-1", "tenant-a", frozenset({"admin"}))
         response = self.make_client(admin).get("/api/network")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(b"private", response.data)
+
+    def test_only_system_admin_can_read_global_graph(self):
+        system_admin = Principal("system-admin", "system", frozenset({"admin"}))
+        response = self.make_client(system_admin).get("/api/network")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"private", response.data)
 
