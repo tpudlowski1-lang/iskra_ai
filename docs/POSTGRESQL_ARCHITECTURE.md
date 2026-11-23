@@ -1,10 +1,34 @@
 # Iskra AI — PostgreSQL architecture and migration design
 
-**Status:** design proposal; not production implementation  
+**Status:** design proposal and implementation-state record; not production cutover  
 **Base:** `refactor/modular-core`  
 **Scope:** durable graph persistence, tenant isolation, migration from legacy JSON and the current SQLite prototype.
 
 ## 1. Decision summary
+
+## Implementation status snapshot — 2026-11-23
+
+The repository now contains a tested PostgreSQL prototype; this document must not be read as saying that the adapter or RLS do not exist. The distinction is between code/CI evidence and a verified production cutover.
+
+Implemented on the canonical modular-core baseline:
+
+- `iskra/storage/postgres.py`: `PostgresGraphStore` requires a verified `Principal`, rejects the system principal as a customer tenant, derives the tenant ID from the principal, uses transaction-local `set_config('iskra.tenant_id', ..., true)`, and includes explicit tenant predicates.
+- `iskra/documents/postgres_repository.py`: internal `PostgresDocumentRepository` binds each operation to a verified principal and applies the same transaction-local tenant scope. The document service has no public HTTP routes and does not generate RAG answers.
+- `migrations/0001_tenant_graph.sql` and `0002_tenant_documents.sql`: graph and document/chunk tables, composite tenant keys/foreign keys, `iskra_schema_migrations(version, applied_at)`, and ENABLE/FORCE RLS policies.
+- CI applies both migrations to ephemeral PostgreSQL 16 and tests graph/document isolation using a separate `NOSUPERUSER NOBYPASSRLS` runtime role.
+- `SQLiteGraphStore` has tenant-bound operations and atomic `load_or_initialize()`, but its validator intentionally normalizes/clamps application input and the adapter is not wired into the legacy Flask graph path.
+- `SQLiteCredentialStore` and an operator credential CLI exist. WSGI authentication and direct development-entrypoint regression coverage are being hardened in draft PRs #50/#51.
+- The baseline includes a dry-run-first SQLite-to-PostgreSQL migration utility. Strict lossless migration validation and verified backup restore are proposed together in draft PR #59; that draft is not part of the canonical baseline until reviewed and merged.
+
+Not implemented/verified:
+
+- No live PostgreSQL deployment, production cutover, persistent hosted database, migration/restore/rollback drill, or customer traffic.
+- No PostgreSQL tenant/user/membership/credential lifecycle tables; the identity schema below remains a future design proposal.
+- No general checksum-verified schema migration runner or production migration orchestration is attested. The SQL migration files and version table are present, but production operator procedures remain a release gate.
+- No public document upload routes, production object storage, RAG generation, or full parser OS/container sandbox.
+
+For operational facts about the current adapter and database role, also see [PostgreSQL tenant storage](POSTGRES_TENANT_STORAGE.md). For current migration and recovery implementation, check the GitHub PR and CI evidence rather than assuming a draft is part of the base branch.
+
 
 PostgreSQL is the target durable backend for a multi-process deployment. The current JSON graph remains a compatibility/import-export format. The current `SQLiteGraphStore` remains useful for local development and isolated tests; it is not promoted to the production multi-tenant backend.
 
@@ -21,10 +45,11 @@ The inspected canonical branch currently has:
 - A `KnowledgeGraphStore` protocol with only `load()` and `save(graph)`; transaction and tenant-scope semantics are not yet part of the contract.
 - A tenant-bound SQLite graph adapter. Its graph tables use composite tenant/node keys and composite foreign keys, and every graph query is scoped to the store's constructor-bound tenant.
 - Tenant API routes that obtain `tenant_id` from the authenticated `Principal`, not from the request body. The SQLite first-read initialization must use the separately developed atomic `load_or_initialize()` path before concurrent production use.
-- A security design with immutable server-derived principals. The new credential-store work is still a draft PR and must be reviewed as part of the auth integration sequence.
-- No PostgreSQL adapter, schema migration runner, schema-version table, or verified production cutover.
+- A security design with immutable server-derived principals and a persistent SQLite credential registry. WSGI integration and entrypoint regression coverage remain under review in draft PRs #50/#51.
+- A PostgreSQL graph adapter and internal PostgreSQL document repository, with SQL migrations v1/v2, a schema-version table, and FORCE RLS. These are CI-tested prototypes, not a production deployment.
+- A dry-run-first SQLite tenant migration utility; strict migration validation and verified restore are being combined in draft PR #59.
 
-The existing SQLite schema does not yet model tenant lifecycle, users, credentials, audit events, or migration runs. It also has no formal schema-versioning mechanism.
+The current PostgreSQL schema models graph and document/chunk data only. It does not yet implement the proposed tenant lifecycle, users, memberships, PostgreSQL credentials, audit events, or migration-run ledger. The current schema-version table stores version and applied timestamp; checksum-based schema migration governance remains future work.
 
 ## 3. Target runtime flow and trust boundary
 
@@ -91,11 +116,11 @@ Required controls:
 - Use parameterized SQL exclusively.
 - Do not return tenant identifiers or internal database errors in responses unless the API contract explicitly permits them.
 
-PostgreSQL row-level security (RLS) is recommended as defense in depth once connection handling is proven. Policies should use a transaction-local tenant setting, set with `SET LOCAL` inside every transaction. The connection pool must never leak tenant context between requests. RLS is not a replacement for application authorization, and table owners/bypass roles must not be used by the application runtime. Test RLS both as the real runtime role and under pooled connection reuse.
+PostgreSQL RLS is already enabled and forced by migrations 0001/0002 for the graph and document tables. Policies use the transaction-local `iskra.tenant_id` setting; both adapters set it within each transaction and also use explicit tenant predicates. CI verifies missing-context and cross-tenant read/write behavior with a separate `NOSUPERUSER NOBYPASSRLS` role. Remaining gates are an independent review, connection-pool/reuse testing in the actual hosting topology, and staging verification. RLS is not a replacement for application authorization and does not protect against SQL injection or arbitrary code executing with application DB credentials.
 
 ## 6. Storage interface evolution
 
-Before implementing the PostgreSQL adapter, evolve the storage boundary deliberately:
+The baseline already has SQLite and PostgreSQL graph adapters implementing the snapshot-style `load()`/`save()` contract, plus an internal PostgreSQL document repository. The current graph protocol is still minimal; evolve it deliberately before production cutover:
 
 - Keep a graph repository contract for tenant-scoped `load`, `save`, and atomic `load_or_initialize`.
 - Define explicit transaction/unit-of-work semantics; do not hide multi-step operations behind unrelated autocommit calls.
@@ -198,16 +223,16 @@ The repository should not bind itself to a paid database vendor in this design p
 
 Do not commit a hosting provider, paid plan, or production database URL. Never put credentials in GitHub Actions logs or repository files.
 
-## 13. Implementation sequence
+## 13. Remaining implementation and release sequence
 
-1. Stabilize and review the authentication/principal/credential PR stack against one canonical base.
-2. Add repository contract semantics and a PostgreSQL schema/migration package behind tests; no live route switch.
-3. Implement and contract-test PostgreSQL adapter with tenant isolation and transaction semantics.
-4. Build JSON and SQLite importers with dry-run, backup, validation, and rollback.
-5. Run migration and restore drills in isolated staging.
-6. Integrate service wiring behind an explicit disabled-by-default feature flag.
-7. Enable only after security, compatibility, and operations gates are signed off.
+1. Review the authentication/principal/credential stack (#50/#51) and confirm the exact production WSGI entrypoint and durable credential-store configuration.
+2. Review the existing graph/document adapters, migrations 0001/0002, FORCE RLS policies, and runtime-role grants; complete an independent tenant-isolation review.
+3. Review the combined strict migration/verified restore work in draft PR #59; resolve any remaining migration, checksum, semantic-readback, and rollback gaps.
+4. Provision an isolated staging PostgreSQL database with a restricted runtime role; apply migrations, migrate representative synthetic data, verify semantic equality, and rehearse restore/rollback.
+5. Add and test a real schema migration workflow with immutable checksums and controlled upgrade/rollback semantics before schema changes become operationally routine.
+6. Keep the global JSON graph and document/RAG service paths disabled for customers until service wiring, parser sandbox, object storage, retrieval isolation, privacy and operational gates pass.
+7. Perform production cutover only after staging evidence, operational ownership, cost review, and a separate explicit release decision.
 
 ## 14. Explicit non-goals
 
-This design does not create customer accounts, enable public token issuance, enable customer uploads, enable RAG, configure a hosted database, change production WSGI behavior, migrate live data, or merge any existing draft PR. The live JSON graph remains the current backend until a separately reviewed implementation and cutover are complete.
+This design does not create the proposed PostgreSQL customer-account/membership/credential lifecycle, enable public self-service token issuance, enable customer uploads, enable RAG, configure a hosted database, wire the PostgreSQL graph into the legacy live Flask graph path, migrate live data, or merge any existing draft PR. The legacy JSON graph remains the live backend until a separately reviewed service integration and production cutover are complete.
