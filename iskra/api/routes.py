@@ -168,6 +168,8 @@ def create_api_blueprint(
             return jsonify(result), 201
         except ValueError:
             return jsonify({"error": "invalid_document"}), 400
+        except RuntimeError:
+            return jsonify({"error": "document_processing_failed"}), 422
         except PermissionError:
             return jsonify({"error": "forbidden"}), 403
         except (DocumentStorageError, OSError, sqlite3.Error):
