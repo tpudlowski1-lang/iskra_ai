@@ -157,5 +157,23 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
             SQLiteCredentialStore(link)
 
 
+    def test_legacy_persistent_system_tenant_credential_is_rejected(self):
+        issued = self.store.issue(
+            Principal("legacy-system", "tenant-before-migration", frozenset({"admin"}))
+        )
+        with self.store._connection() as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE api_credentials SET tenant_id = ? WHERE credential_id = ?",
+                    ("system", issued.credential_id),
+                )
+        self.assertIsNone(self.store.authenticate(issued.token))
+
+    def test_reserved_system_tenant_cannot_receive_persistent_credential(self):
+        system_like = Principal("forged-admin", "system", frozenset({"admin"}))
+        with self.assertRaisesRegex(ValueError, "tenant system"):
+            self.store.issue(system_like)
+
+
 if __name__ == "__main__":
     unittest.main()

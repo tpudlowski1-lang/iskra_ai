@@ -160,6 +160,8 @@ class SQLiteCredentialStore:
     def issue(self, principal, expires_at=None, actor="local-operator"):
         if not isinstance(principal, Principal):
             raise TypeError("Wymagany jest zweryfikowany Principal")
+        if principal.tenant_id == "system":
+            raise ValueError("Rejestr tenantów nie może wydawać poświadczeń dla tenant system")
         expiry = self._timestamp(expires_at, "expires_at")
         now = time.time()
         if expiry is not None and expiry <= now:
@@ -201,7 +203,9 @@ class SQLiteCredentialStore:
                 """,
                 (digest,),
             ).fetchone()
-        if row is None or row["revoked_at"] is not None:
+        # Legacy rows created before the reserved-system boundary must not
+        # continue authenticating as a tenant principal after the fix.
+        if row is None or row["tenant_id"] == "system" or row["revoked_at"] is not None:
             return None
         if row["expires_at"] is not None and current >= row["expires_at"]:
             return None
@@ -268,6 +272,8 @@ class SQLiteCredentialStore:
                 ).fetchone()
                 if old is None or old["revoked_at"] is not None:
                     raise ValueError("Nie znaleziono aktywnego tokenu do rotacji")
+                if old["tenant_id"] == "system":
+                    raise ValueError("Rejestr tenantów nie może rotować tożsamości systemowej")
                 if old["expires_at"] is not None and now >= old["expires_at"]:
                     raise ValueError("Wygasłego tokenu nie można rotować")
 

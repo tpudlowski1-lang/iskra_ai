@@ -50,3 +50,8 @@ If the variable is absent, SQLite registry authentication is not activated. If c
 ## Verification
 
 The branch adds unit and WSGI integration tests for token digest-only persistence, expiry, revocation, atomic rotation, privilege non-escalation, audit redaction, operator CLI confirmation, tenant spoofing, backend failure, legacy admin compatibility, public health behavior, principal-bound store construction and cross-tenant read/write isolation. CI results must be reported only after GitHub Actions completes on the exact branch head.
+
+
+## Reserved system-administrator identity
+
+Global system routes require the exact fixed `SYSTEM_ADMIN` principal installed by the legacy system-administrator credential. A tenant-scoped principal with the string tenant ID `system` and role `admin` is not sufficient. The static tenant credential registry and persistent SQLite tenant credential issuer reject the reserved `system` tenant. This prevents an accidentally or incorrectly provisioned tenant credential from inheriting global-administrator access. Tenant admins remain scoped to their own tenant. Authentication also rejects pre-existing persistent credential rows whose stored `tenant_id` is `system`; operators must revoke such legacy rows and use only the fixed `API_TOKEN` identity for system administration.
