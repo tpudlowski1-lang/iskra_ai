@@ -123,7 +123,12 @@ class RouterProvider:
             if provider is None:
                 print(f"LLM: nieznany provider '{name}' — pomijam.")
                 continue
-            result = provider(prompt)
+            try:
+                result = provider(prompt)
+            except Exception as exc:
+                # A provider failure must not prevent the configured fallback chain.
+                print(f"LLM {name}: provider zgłosił {type(exc).__name__} — uruchamiam fallback.")
+                continue
             cleaned = self.clean_json(result)
             if cleaned is None:
                 if result:
