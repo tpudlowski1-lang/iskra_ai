@@ -1,4 +1,4 @@
-"""Persistent SQLite API credential registry.
+"""Persistent SQLite API credential registry with atomic lifecycle audit.
 
 Only SHA-256 digests of high-entropy bearer tokens are persisted. This is a
 single-instance backend; use PostgreSQL before running multiple app instances.
@@ -13,7 +13,7 @@ import secrets
 import sqlite3
 import time
 
-from iskra.security.principal import Principal
+from iskra.security.principal import ALLOWED_ROLES, Principal
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,6 @@ class SQLiteCredentialStore:
 
     def _initialize(self):
         try:
-            # Create the file with owner-only permissions before SQLite opens it.
             if os.path.islink(self.database_path):
                 raise OSError("Credential database path must not be a symbolic link")
             try:
@@ -89,6 +88,26 @@ class SQLiteCredentialStore:
                         "CREATE INDEX IF NOT EXISTS idx_api_credentials_subject "
                         "ON api_credentials(subject, tenant_id)"
                     )
+                    connection.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS credential_audit_events (
+                            event_id TEXT PRIMARY KEY,
+                            event_type TEXT NOT NULL CHECK (
+                                event_type IN ('credential_issued', 'credential_revoked', 'credential_rotated')
+                            ),
+                            credential_id TEXT NOT NULL,
+                            related_credential_id TEXT,
+                            subject TEXT NOT NULL,
+                            tenant_id TEXT NOT NULL,
+                            actor TEXT NOT NULL,
+                            occurred_at REAL NOT NULL
+                        )
+                        """
+                    )
+                    connection.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_credential_audit_time "
+                        "ON credential_audit_events(occurred_at DESC)"
+                    )
         except OSError as exc:
             raise CredentialStoreUnavailable("Credential database permissions could not be secured") from exc
 
@@ -105,16 +124,46 @@ class SQLiteCredentialStore:
         return result
 
     @staticmethod
+    def _validate_actor(actor):
+        if (not isinstance(actor, str) or not actor.strip()
+                or len(actor) > 255 or any(ord(char) < 32 for char in actor)):
+            raise ValueError("Nieprawidłowy identyfikator operatora")
+        return actor.strip()
+
+    @staticmethod
     def _digest(token):
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def issue(self, principal, expires_at=None):
+    @staticmethod
+    def _record_event(connection, event_type, credential_id, principal, actor,
+                      occurred_at, related_credential_id=None):
+        connection.execute(
+            """
+            INSERT INTO credential_audit_events
+                (event_id, event_type, credential_id, related_credential_id,
+                 subject, tenant_id, actor, occurred_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                secrets.token_urlsafe(18),
+                event_type,
+                credential_id,
+                related_credential_id,
+                principal.subject,
+                principal.tenant_id,
+                actor,
+                occurred_at,
+            ),
+        )
+
+    def issue(self, principal, expires_at=None, actor="local-operator"):
         if not isinstance(principal, Principal):
             raise TypeError("Wymagany jest zweryfikowany Principal")
         expiry = self._timestamp(expires_at, "expires_at")
         now = time.time()
         if expiry is not None and expiry <= now:
             raise ValueError("Token musi wygasać w przyszłości")
+        actor = self._validate_actor(actor)
         credential_id = secrets.token_urlsafe(18)
         token = secrets.token_urlsafe(48)
         roles_json = json.dumps(sorted(principal.roles), separators=(",", ":"))
@@ -129,6 +178,10 @@ class SQLiteCredentialStore:
                     """,
                     (credential_id, self._digest(token), principal.subject,
                      principal.tenant_id, roles_json, now, expiry),
+                )
+                self._record_event(
+                    connection, "credential_issued", credential_id,
+                    principal, actor, now,
                 )
         return IssuedCredential(credential_id, token)
 
@@ -157,9 +210,11 @@ class SQLiteCredentialStore:
         except (TypeError, ValueError, json.JSONDecodeError):
             return None
 
-    def revoke(self, credential_id):
+    def revoke(self, credential_id, actor="local-operator"):
         if not isinstance(credential_id, str) or not credential_id:
             return False
+        actor = self._validate_actor(actor)
+        now = time.time()
         with self._connection() as connection:
             with connection:
                 cursor = connection.execute(
@@ -167,6 +222,102 @@ class SQLiteCredentialStore:
                     UPDATE api_credentials SET revoked_at = ?
                     WHERE credential_id = ? AND revoked_at IS NULL
                     """,
-                    (time.time(), credential_id),
+                    (now, credential_id),
                 )
-        return cursor.rowcount == 1
+                if cursor.rowcount != 1:
+                    return False
+                row = connection.execute(
+                    "SELECT subject, tenant_id, roles_json FROM api_credentials WHERE credential_id = ?",
+                    (credential_id,),
+                ).fetchone()
+                principal = Principal(
+                    row["subject"], row["tenant_id"],
+                    frozenset(json.loads(row["roles_json"])),
+                )
+                self._record_event(
+                    connection, "credential_revoked", credential_id,
+                    principal, actor, now,
+                )
+        return True
+
+    def rotate(self, credential_id, expires_at=None, roles=None,
+               actor="local-operator"):
+        """Atomically issue a replacement and revoke the old token.
+
+        Rotation preserves the old subject and tenant. Optional roles may only
+        reduce the existing role set; privilege escalation requires a separate
+        explicit issue operation.
+        """
+        if not isinstance(credential_id, str) or not credential_id:
+            raise ValueError("Wymagany jest credential_id")
+        actor = self._validate_actor(actor)
+        now = time.time()
+        expiry_override = self._timestamp(expires_at, "expires_at")
+        new_id = secrets.token_urlsafe(18)
+        new_token = secrets.token_urlsafe(48)
+
+        with self._connection() as connection:
+            with connection:
+                old = connection.execute(
+                    """
+                    SELECT subject, tenant_id, roles_json, expires_at, revoked_at
+                    FROM api_credentials WHERE credential_id = ?
+                    """,
+                    (credential_id,),
+                ).fetchone()
+                if old is None or old["revoked_at"] is not None:
+                    raise ValueError("Nie znaleziono aktywnego tokenu do rotacji")
+                if old["expires_at"] is not None and now >= old["expires_at"]:
+                    raise ValueError("Wygasłego tokenu nie można rotować")
+
+                old_roles = frozenset(json.loads(old["roles_json"]))
+                new_roles = old_roles if roles is None else frozenset(roles)
+                if not new_roles or not new_roles.issubset(old_roles) or not new_roles.issubset(ALLOWED_ROLES):
+                    raise ValueError("Rotacja może zachować role lub je ograniczyć, nie może zwiększać uprawnień")
+                principal = Principal(old["subject"], old["tenant_id"], new_roles)
+                expiry = expiry_override if expiry_override is not None else old["expires_at"]
+                if expiry is not None and expiry <= now:
+                    raise ValueError("Nowy token musi mieć datę ważności w przyszłości")
+
+                connection.execute(
+                    """
+                    INSERT INTO api_credentials
+                    (credential_id, token_digest, subject, tenant_id, roles_json,
+                     created_at, expires_at, revoked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        new_id,
+                        self._digest(new_token),
+                        principal.subject,
+                        principal.tenant_id,
+                        json.dumps(sorted(principal.roles), separators=(",", ":")),
+                        now,
+                        expiry,
+                    ),
+                )
+                connection.execute(
+                    "UPDATE api_credentials SET revoked_at = ? WHERE credential_id = ?",
+                    (now, credential_id),
+                )
+                self._record_event(
+                    connection, "credential_rotated", credential_id,
+                    principal, actor, now, related_credential_id=new_id,
+                )
+        return IssuedCredential(new_id, new_token)
+
+    def list_audit_events(self, limit=100):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit musi należeć do zakresu 1..500")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT event_id, event_type, credential_id, related_credential_id,
+                       subject, tenant_id, actor, occurred_at
+                FROM credential_audit_events
+                ORDER BY occurred_at DESC, event_id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
