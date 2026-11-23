@@ -86,6 +86,26 @@ class DocumentParserTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_document("many.docx", stream.getvalue())
 
+    def test_docx_path_traversal_entry_is_rejected(self):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("word/document.xml", b"<root/>")
+            archive.writestr("../outside.txt", b"escape")
+        with self.assertRaises(ValueError):
+            parse_document("traversal.docx", stream.getvalue())
+
+    def test_duplicate_docx_archive_entries_are_rejected(self):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, "w") as archive:
+            archive.writestr("word/document.xml", b"<root/>")
+            archive.writestr("word/document.xml", b"<root/>")
+        with self.assertRaises(ValueError):
+            parse_document("duplicate.docx", stream.getvalue())
+
+    def test_filename_path_is_reduced_to_safe_basename(self):
+        parsed = parse_document("../../private\\report.txt", b"safe text")
+        self.assertEqual(parsed.filename, "report.txt")
+
     def test_pdf_signature_is_required(self):
         with self.assertRaises(ValueError):
             parse_document("fake.pdf", b"not a pdf")
