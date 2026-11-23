@@ -99,3 +99,5 @@ The current feature branch adds an authenticated POST /api/tenant/chat endpoint.
 The repository quality, security, adversarial, and license workflows also target the integrated release-candidate and the active stacked tenant/privacy feature branches. This ensures that dependent Draft PRs receive the same verification gates before any integration decision.
 
 The stacked pull-request triggers are configured separately from push triggers; quality-engine and adversarial-corpus workflows retain their original push branches and include the tenant/privacy branches under pull_request.
+
+The current tenant chat UI and its API remain a draft feature; the latest verified application code is covered by the CI run recorded in the PR description. Workflow-filter-only commits do not change application behavior.
