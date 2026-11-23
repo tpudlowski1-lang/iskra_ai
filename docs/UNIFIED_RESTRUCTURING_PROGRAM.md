@@ -156,14 +156,14 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant storage, opt-in PostgreSQL backend, tenant migration utility and audited local credential lifecycle from PRs #28, #31, #33 and #36 are integrated into `refactor/modular-core`:
+The security, tenant storage, opt-in PostgreSQL backend, tenant migration utility, audited local credential lifecycle and internal document-service foundation from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core` at `a2bac3a6250388f967c463cf3fd7db2765697516`:
 
 - WSGI principal authentication with digest-only credentials, expiry/revocation and local issue/rotate/revoke/audit CLI.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - PostgreSQL graph schema/adapter with RLS ENABLE + FORCE and opt-in backend selection.
 - Dry-run-first tenant SQLite → PostgreSQL migration utility with private backup, checksum, transactional rollback and semantic verification.
 - Python 3.11/3.12: 133 tests each on PR #36; PostgreSQL 16, compileall and pip-audit passed.
-- PR #39 adds internal document parsing, tenant-scoped lexical repository and resource-limited parser worker; its CI is pending on the exact head.
+- Document service is internal only: no HTTP routes or RAG answer generation; parent validates worker schema, safe filename, extension and SHA-256.
 
 No document HTTP routes or RAG answer generation are connected. SQLite remains the default graph/document development backend; PostgreSQL is opt-in. No production data cutover or restore rehearsal has been performed.
 
