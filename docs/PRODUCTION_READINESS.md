@@ -23,18 +23,21 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 
 ## Not yet production-ready
 - [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
+- [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
+- [x] SQLite private-path hardening rejects symlinked ancestors and applies 0700/0600 permissions (TOCTOU/OS ownership limits documented).
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
-- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is resource-limited but still runs under the application OS user.
+- [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
+- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
-- [ ] Per-tenant provider policy, consent/notice, ordinary-prompt PII/secret minimization, and contractual review remain incomplete; the deployment-level allowlist is not a substitute.
-- [ ] Data classification, user notice/consent, ordinary-prompt minimization/redaction, per-tenant provider policy, provider-specific retention/region controls and contractual/legal review. The router allowlist is deployment-level only.
+- [ ] Data classification, user notice/consent, ordinary-prompt PII/secret minimization, per-tenant provider policy, provider-specific retention/region controls and contractual/legal review. The router allowlist is deployment-level only.
 - [ ] Dedicated single-owner autonomous worker with lease/coordination.
 - [ ] Staging deployment and production smoke tests.
+- [x] Python dependency license inventory and tracked-asset inventory generated; legal review of LGPL-3.0-only psycopg packages remains outstanding.
 
 ## Storage configuration
 
