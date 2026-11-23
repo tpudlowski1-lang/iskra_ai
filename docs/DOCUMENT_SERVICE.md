@@ -34,7 +34,7 @@ The service is intentionally kept behind the application boundary. The default s
 - This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
-- SQLite is single-instance only. PostgreSQL document/chunk tables, composite tenant keys, FORCE RLS and GIN full-text index are implemented in migration `0002_tenant_documents.sql` and tested with a separate NOSUPERUSER/NOBYPASSRLS role.
+- SQLite is single-instance only. PostgreSQL document/chunk tables, composite tenant keys, FORCE RLS and GIN full-text index are implemented in migration `0002_tenant_documents.sql` and tested with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - `ISKRA_DOCUMENT_STORAGE_BACKEND=postgres` selects the PostgreSQL repository through the internal factory; SQLite remains the default. The shared `ISKRA_POSTGRES_DSN` is required and migrations are never applied automatically.
 - FTS5 is lexical retrieval only. Retrieved content must be treated as untrusted data; no model prompt or answer generation is connected.
 - The service and repository factory are not wired into `app.py` or WSGI and have no public routes.
