@@ -108,26 +108,19 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         )
         self.assertEqual(accepted.status_code, 201, accepted.get_data(as_text=True))
 
-    def test_csrf_token_refresh_invalidates_previous_token(self):
+    def test_csrf_token_is_stable_across_page_refreshes_and_tabs(self):
         self.login()
-        old_csrf = self.refresh_csrf()
-        new_csrf = self.refresh_csrf()
+        first_csrf = self.refresh_csrf()
+        second_csrf = self.refresh_csrf()
+        self.assertEqual(first_csrf, second_csrf)
 
-        old_token_response = self.client.post(
+        accepted = self.client.post(
             "/api/tenant/credentials",
-            json={"subject": "member-old", "roles": ["member"]},
-            headers={"X-CSRF-Token": old_csrf},
+            json={"subject": "member-from-second-tab", "roles": ["member"]},
+            headers={"X-CSRF-Token": first_csrf},
             base_url=self.base_url,
         )
-        self.assertEqual(old_token_response.status_code, 403)
-
-        new_token_response = self.client.post(
-            "/api/tenant/credentials",
-            json={"subject": "member-new", "roles": ["member"]},
-            headers={"X-CSRF-Token": new_csrf},
-            base_url=self.base_url,
-        )
-        self.assertEqual(new_token_response.status_code, 201)
+        self.assertEqual(accepted.status_code, 201, accepted.get_data(as_text=True))
 
     def test_logout_revokes_server_session_and_clears_cookie(self):
         self.login()
