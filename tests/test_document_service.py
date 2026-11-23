@@ -6,6 +6,8 @@ import unittest
 from iskra.security.principal import Principal, SYSTEM_ADMIN
 from iskra.documents.repository import DocumentStorageError, SQLiteDocumentRepository
 from iskra.documents.service import DocumentService
+from iskra.documents.parsers import parse_document
+from iskra.documents.worker import parse_document_isolated
 
 
 class TenantDocumentServiceTests(unittest.TestCase):
@@ -14,7 +16,7 @@ class TenantDocumentServiceTests(unittest.TestCase):
         self.directory = os.path.join(self.tmp.name, "private")
         self.database = os.path.join(self.directory, "documents.sqlite3")
         self.repository = SQLiteDocumentRepository(self.database)
-        self.service = DocumentService(self.repository)
+        self.service = DocumentService(self.repository, parser=parse_document)
         self.alpha = Principal("member-a", "tenant-alpha", frozenset({"member"}))
         self.beta = Principal("member-b", "tenant-beta", frozenset({"member"}))
 
@@ -85,6 +87,23 @@ class TenantDocumentServiceTests(unittest.TestCase):
         with self.assertRaises((DocumentStorageError, OSError)):
             SQLiteDocumentRepository(link)
 
+
+
+    def test_default_service_uses_isolated_parser_worker(self):
+        service = DocumentService(self.repository)
+        result = service.add_document(
+            self.alpha, "isolated.txt", b"Tekst przetworzony w osobnym procesie."
+        )
+        self.assertFalse(result["duplicate"])
+        self.assertEqual(len(service.list_documents(self.alpha)), 1)
+
+    def test_isolated_parser_rejects_invalid_timeout_before_spawning(self):
+        with self.assertRaises(ValueError):
+            parse_document_isolated("x.txt", b"text", timeout_seconds=0)
+
+    def test_isolated_parser_returns_safe_validation_error(self):
+        with self.assertRaises(ValueError):
+            parse_document_isolated("bad.pdf", b"not a pdf")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
