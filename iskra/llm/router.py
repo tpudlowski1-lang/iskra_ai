@@ -9,6 +9,8 @@ REQUEST_TIMEOUT = (3, 12)  # bounded connect/read timeout in seconds
 REQUEST_RETRIES = 2
 MAX_GENERATION_SECONDS = 100  # leave headroom under the 120s Render/Gunicorn timeout
 _ACTIVE_DEADLINE = contextvars.ContextVar("iskra_llm_deadline", default=None)
+_DEFAULT_SYSTEM_PROMPT = "Return only a valid JSON object."
+_ACTIVE_SYSTEM_PROMPT = contextvars.ContextVar("iskra_llm_system_prompt", default=_DEFAULT_SYSTEM_PROMPT)
 
 class RouterProvider:
     """Jednolity router modeli z kolejnością primary + fallback z ENV."""
@@ -81,7 +83,7 @@ class RouterProvider:
         payload = {
             "model": cfg["model"],
             "messages": [
-                {"role": "system", "content": "Return only a valid JSON object."},
+                {"role": "system", "content": _ACTIVE_SYSTEM_PROMPT.get()},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.3,
@@ -152,9 +154,13 @@ class RouterProvider:
                 time.sleep(min(1, remaining))
         return None
 
-    def generate(self, prompt):
+    def generate(self, prompt, system_prompt=None):
         deadline = time.monotonic() + MAX_GENERATION_SECONDS
         context_token = _ACTIVE_DEADLINE.set(deadline)
+        system_token = _ACTIVE_SYSTEM_PROMPT.set(
+            system_prompt if isinstance(system_prompt, str) and system_prompt.strip()
+            else _DEFAULT_SYSTEM_PROMPT
+        )
         try:
             if not self.allowed_providers:
                 print("LLM: zewnętrzne providery wyłączone — ustaw LLM_ALLOWED_PROVIDERS, aby jawnie je dopuścić.")
@@ -187,4 +193,5 @@ class RouterProvider:
             print("LLM: wszystkie skonfigurowane providery zawiodły.")
             return None
         finally:
+            _ACTIVE_SYSTEM_PROMPT.reset(system_token)
             _ACTIVE_DEADLINE.reset(context_token)
