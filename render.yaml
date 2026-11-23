@@ -28,6 +28,9 @@ services:
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
 
+      # For multi-worker production, set RATELIMIT_STORAGE_URI to shared Redis.
+      # If omitted, the in-memory limiter is local to each worker.
+
       # Semantic retrieval is opt-in and uses OPENAI_API_KEY when enabled.
       - key: ENABLE_SEMANTIC_SEARCH
         value: false
