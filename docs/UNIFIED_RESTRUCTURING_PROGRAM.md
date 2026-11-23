@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4 (modular core); security and PostgreSQL tenant-storage foundations from PR #28 are integrated into `refactor/modular-core`  
+**Current review:** draft PR #4 (modular core); security, PostgreSQL tenant storage and migration tooling from PRs #28 and #31 are integrated into `refactor/modular-core`  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -92,11 +92,9 @@ These streams can be investigated in parallel, but code is integrated in depende
 - `PostgresGraphStore` derives scope from Principal and sets a transaction-local tenant context; CI verifies it against PostgreSQL 16 with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - Runtime configuration can select PostgreSQL with `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN`; SQLite remains the default. PostgreSQL is opt-in and requires a separately applied migration.
 - The legacy global graph remains JSON and system-admin-only.
-- Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON/SQLite-to-PostgreSQL cutover, rollback and restore drills.
+- Dry-run-first SQLite tenant migration utility is implemented: private online backup, SHA-256 manifest, source validation, no-overwrite-by-default, one transaction for all tenants and semantic read-back before commit.
+- Remaining: production-like migration rehearsal, restore drill, cutover/rollback operations, and separate decision for the legacy global JSON graph.
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
-
-- A dry-run-first SQLite tenant DB migration utility creates a private online backup and SHA-256 manifest, validates source snapshots, refuses overwrites by default, and migrates all tenants in one transaction with semantic read-back before commit.
-- Remaining: run the migration against a production-like backup, rehearse restore, define cutover/rollback operations, and separately decide how the legacy global JSON graph is retained or migrated.
 
 ### Stream D — Documents and retrieval
 - Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its useful ideas are retained, but the monolithic branch is not merged.
@@ -156,23 +154,23 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant storage and opt-in PostgreSQL foundation from PR #28 is integrated into `refactor/modular-core`. The backend-selection follow-up passed CI on commit `28f3caad53b7ed9a55666c9f3ffa88e058b27ed8`:
+The security, tenant storage, opt-in PostgreSQL backend and tenant migration utility from PRs #28 and #31 are integrated into `refactor/modular-core` at `5c1b40954b7e5879deaaa52980fb79b08030b5df`:
 
 - WSGI principal authentication with hashed credentials, expiry and revocation.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - Atomic initialization of the twelve foundational pillars.
 - PostgreSQL graph schema and adapter with RLS policies, tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - Runtime configuration validates SQLite (default) or PostgreSQL (`ISKRA_TENANT_STORAGE_BACKEND=postgres` requires `ISKRA_POSTGRES_DSN`).
-- Python 3.11 and 3.12: 111 tests each; PostgreSQL 16 RLS integration, compileall and pip-audit passed.
+- Python 3.11 and 3.12: 118 tests each on PR #31; PostgreSQL 16 RLS/migration integration, compileall and pip-audit passed.
 
 PostgreSQL remains opt-in and requires a separately applied migration, dedicated runtime role, staging cutover and restore/rollback drills. Passing CI does not establish production readiness.
 
-This does not mean PostgreSQL is already the default or that Iskra is production-ready. No production migration/cutover, rollback, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
+This does not mean PostgreSQL is already the default or that Iskra is production-ready. The migration utility has not been run against production data; no production cutover, rollback rehearsal, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
 
 ## 9. Current blockers — do not mark production-ready
 
 - Public account/credential lifecycle, recovery, controlled rotation and audit events remain incomplete.
-- PostgreSQL backend selection is implemented as opt-in; production migration, staging cutover, rollback and restore drills remain outstanding.
+- PostgreSQL backend selection is implemented as opt-in; production-like migration rehearsal, staging cutover, rollback and restore drills remain outstanding.
 - Tenant API is SQLite by default; multi-replica operation requires PostgreSQL and an independently reviewed deployment.
 - The tenant document/RAG prototype is not integrated and has not passed a full security review.
 - Dedicated worker leases, observability, staging verification and restore drills remain outstanding.
