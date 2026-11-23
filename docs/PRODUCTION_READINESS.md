@@ -15,6 +15,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] PostgreSQL graph adapter and migration with RLS ENABLE + FORCE are implemented and integration-tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - [x] Dry-run-first SQLite tenant migration utility creates private backups, checksums, validates snapshots, refuses overwrites by default, migrates all tenants in one transaction and verifies semantic read-back before commit.
 - [x] Internal tenant document service with bounded PDF/DOCX/TXT parsing, private SQLite/FTS5 repository and resource-limited parser process; no HTTP routes or customer uploads are enabled.
+- [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 
 ## Not yet production-ready
@@ -22,8 +23,8 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
-- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox, malware quarantine, PostgreSQL document schema/RLS, audit events, quotas, retention and secure backup/restore. The current worker is resource-limited but still runs under the application OS user.
-- [ ] Tenant-filtered retrieval, RAG evaluation, provenance and source citations.
+- [ ] Before exposing the internal document service: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is resource-limited but still runs under the application OS user.
+- [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
@@ -35,7 +36,9 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 SQLite remains the default tenant backend. PostgreSQL is opt-in:
 
 - `ISKRA_TENANT_STORAGE_BACKEND=sqlite` (default): uses the private tenant SQLite database.
-- `ISKRA_TENANT_STORAGE_BACKEND=postgres`: requires `ISKRA_POSTGRES_DSN`, a pre-applied migration and a dedicated runtime role with `NOSUPERUSER NOBYPASSRLS`.
+- `ISKRA_TENANT_STORAGE_BACKEND=postgres`: requires `ISKRA_POSTGRES_DSN`, a pre-applied graph migration and a dedicated runtime role with `NOSUPERUSER NOBYPASSRLS`.
+- `ISKRA_DOCUMENT_STORAGE_BACKEND=sqlite` (default): uses the private tenant document SQLite database.
+- `ISKRA_DOCUMENT_STORAGE_BACKEND=postgres`: requires `ISKRA_POSTGRES_DSN`, pre-applied migration `0002_tenant_documents.sql` and the same restricted runtime role.
 
 Do not enable PostgreSQL in production until staging migration, cross-tenant negative tests, backup/restore and rollback have passed. The PostgreSQL adapter is not automatically migrated and the application must never run as schema owner or superuser.
 
