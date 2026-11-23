@@ -4,11 +4,9 @@ import tempfile
 import unittest
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
+os.environ["ISKRA_TESTING"] = "true"
 import app as iskra
 
-# Keep shared application limiter out of unrelated API/concurrency tests;
-# dedicated tests/test_rate_limit.py exercise the limiter explicitly.
-iskra.app.config["RATELIMIT_ENABLED"] = False
 from flask import request
 from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
 
