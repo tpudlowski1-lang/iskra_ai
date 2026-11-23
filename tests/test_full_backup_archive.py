@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+from unittest.mock import patch
 
 from scripts.backup_iskra_data import BackupError, create_archive, restore_archive
 
@@ -158,6 +159,44 @@ class FullBackupArchiveTests(unittest.TestCase):
         resources[0]["name"] = "../escape.sqlite3"
         with self.assertRaises(BackupError):
             create_archive(resources, str(self.archive), writes_paused=True)
+
+
+    def test_create_rejects_json_above_memory_limit(self):
+        oversized = self.root / "oversized.json"
+        oversized.write_text('{"xxx":1}', encoding="utf-8")
+        with patch("scripts.backup_iskra_data.MAX_JSON_BYTES", 8):
+            with self.assertRaisesRegex(BackupError, "limit"):
+                create_archive(
+                    [{"name": "data/oversized.json", "path": str(oversized), "kind": "json"}],
+                    str(self.archive),
+                    writes_paused=True,
+                )
+        self.assertFalse(self.archive.exists())
+
+    def test_restore_rejects_json_above_memory_limit_before_parsing(self):
+        payload = b'{"xxx":1}'
+        manifest = {
+            "format": "iskra-backup-v1",
+            "created_at": "2026-11-23T00:00:00+00:00",
+            "writes_paused_by_caller": True,
+            "resources": [{
+                "name": "data/oversized.json",
+                "kind": "json",
+                "required": True,
+                "status": "included",
+                "size": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }],
+        }
+        malicious = self.root / "oversized-json.zip"
+        with zipfile.ZipFile(malicious, "w") as archive:
+            archive.writestr("iskra-backup-manifest.json", json.dumps(manifest))
+            archive.writestr("data/oversized.json", payload)
+        target = self.root / "oversized-json-restore"
+        with patch("scripts.backup_iskra_data.MAX_JSON_BYTES", 8):
+            with self.assertRaisesRegex(BackupError, "limit"):
+                restore_archive(str(malicious), str(target))
+        self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":
