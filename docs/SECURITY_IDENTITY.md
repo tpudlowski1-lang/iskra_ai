@@ -31,7 +31,7 @@ Existing routes retain their compatibility behavior. The role decorator is a fou
 - fails closed for unknown, expired, revoked, malformed or corrupt records;
 - creates the database file with owner-only permissions (`0600`).
 
-This component is not wired into `ApiTokenMiddleware`, has no public token-issuance endpoint, and does not provision user accounts. The current shared `API_TOKEN` remains the only active credential. SQLite is a single-instance prototype, not a high-availability credential service; PostgreSQL and operational key management remain future work. The registry must not be treated as production-ready until its migration, concurrency, backup/restore, permission and security review gates pass.
+The WSGI middleware now accepts an injected credential store and resolves a registry token to its server-bound principal. Store failures return 503 (fail closed); revoked/unknown tokens return 401. The production `wsgi.py` entry point does not yet instantiate or inject the store, so the current shared `API_TOKEN` remains the only active credential. There is no public token-issuance endpoint and no user provisioning workflow. SQLite is a single-instance prototype, not a high-availability credential service; PostgreSQL and operational key management remain future work. The registry and middleware integration must not be treated as production-ready until migration, concurrency, backup/restore, permission, key lifecycle and security review gates pass.
 
 ## Explicit limitations
 
