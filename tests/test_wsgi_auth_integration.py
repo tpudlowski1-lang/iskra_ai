@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -97,6 +99,32 @@ class WsgiAuthenticationIntegrationTests(unittest.TestCase):
             self.assertEqual(member_response.get_json()["tenant_id"], "tenant-amber")
             self.assertEqual(admin_response.status_code, 200)
             self.assertEqual(admin_response.get_json()["tenant_id"], "system")
+
+
+    def test_static_registry_works_alongside_persistent_registry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database = os.path.join(directory, "registry.sqlite3")
+            token = "static-member-secret"
+            static_principal = {
+                "token_sha256": hashlib.sha256(token.encode("utf-8")).hexdigest(),
+                "subject": "static-member",
+                "tenant_id": "tenant-static",
+                "roles": ["member"],
+            }
+            client = self.make_client({
+                "ISKRA_CREDENTIAL_DB_PATH": database,
+                "ISKRA_API_CREDENTIALS_JSON": json.dumps([static_principal]),
+            })
+            response = client.get(
+                "/private",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json(), {
+                "subject": "static-member",
+                "tenant_id": "tenant-static",
+                "roles": ["member"],
+            })
 
 
 if __name__ == "__main__":
