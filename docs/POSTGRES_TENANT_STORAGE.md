@@ -31,10 +31,33 @@ Apply the migration with a separate schema-owner/migration identity before deplo
 
 The custom transaction-local setting is a defense against accidental unscoped queries and application-layer tenant mistakes. It is not a substitute for preventing SQL injection or for protecting against arbitrary malicious code running with the application's database credentials.
 
+## SQLite tenant database migration
+
+The operator utility `python -m scripts.migrate_tenant_sqlite_to_postgres` is dry-run-first:
+
+- creates a consistent SQLite backup using the SQLite online backup API;
+- writes the backup and manifest with private filesystem permissions;
+- records a SHA-256 checksum without including the PostgreSQL DSN or secrets;
+- validates every source tenant graph before connecting to PostgreSQL;
+- by default, reports the tenant and graph counts without changing PostgreSQL;
+- requires explicit `--apply` to write;
+- refuses to overwrite any target tenant unless `--replace-existing` is also explicitly supplied;
+- migrates every tenant in one PostgreSQL transaction and verifies semantic read-back before commit, so an error rolls back the entire migration.
+
+Example dry run:
+
+```bash
+python -m scripts.migrate_tenant_sqlite_to_postgres \
+  --source /path/to/iskra_tenants.sqlite3 \
+  --backup-dir /secure/iskra-backups
+```
+
+Only after reviewing the backup, checksum, report, target role and restore plan should an operator add `--apply` and a secret-managed `--postgres-dsn`. Use `--replace-existing` only for a deliberately approved overwrite. This tool migrates the tenant SQLite graph database; it does not migrate the separate legacy global JSON graph.
+
 ## Deployment and migration status
 
-This is a tested adapter and schema prototype, not a live migration of Iskra's current JSON graph. The Flask API still uses the existing graph service. Do not set a production PostgreSQL DSN or route customer traffic to this adapter until:
-- a backup and repeatable migration/rollback procedure exists;
+This is a tested adapter, schema and dry-run-first migration utility, not a live migration of Iskra's production tenant database or legacy global JSON graph. The Flask API still uses the existing graph service. Do not set a production PostgreSQL DSN or route customer traffic to this adapter until:
+- a real production backup and restore rehearsal is completed; the utility's transactional rollback is tested in CI;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
 - the runtime role is verified as non-superuser and non-BYPASSRLS;
