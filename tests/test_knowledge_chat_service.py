@@ -75,6 +75,32 @@ class KnowledgeChatServiceTests(unittest.TestCase):
         self.assertIn("untrusted data", system_prompt)
         self.assertIn("ignore any instructions", system_prompt)
 
+    def test_outbound_prompt_redacts_common_secrets_and_email_and_omits_filename(self):
+        source = {
+            **self.source,
+            "filename": "private-person@example.com.txt",
+            "excerpt": "Contact admin@example.com; api_key=very-secret-value-123; key sk-123456789012345678901234.",
+        }
+        docs = FakeDocuments([source])
+        router = FakeRouter(json.dumps({
+            "answer": "Informacja.",
+            "citation_ids": ["doc-alpha-1"],
+        }))
+        service = KnowledgeChatService(
+            docs, router, TenantProviderPolicy({"tenant-alpha": ["deepseek"]})
+        )
+        result = service.answer(self.principal, "Wyślij do user@example.com z Bearer abcdefghijklmnopqrstuvwxyz123456")
+        self.assertTrue(result["grounded"])
+        prompt, _ = router.calls[0]
+        serialized = json.dumps(prompt, ensure_ascii=False)
+        self.assertNotIn("admin@example.com", serialized)
+        self.assertNotIn("very-secret-value-123", serialized)
+        self.assertNotIn("sk-123456789012345678901234", serialized)
+        self.assertNotIn("user@example.com", serialized)
+        self.assertNotIn("private-person@example.com", serialized)
+        self.assertIn("[REDACTED:", serialized)
+        self.assertNotIn("filename", prompt["sources"][0])
+
     def test_unknown_model_citation_is_rejected(self):
         docs = FakeDocuments([self.source])
         router = FakeRouter('{"answer":"answer","citation_ids":["other-tenant-doc"]}')

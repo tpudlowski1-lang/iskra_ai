@@ -49,6 +49,30 @@
           <span id="document-count" class="count">0</span>
         </div>
         <ul id="document-list" class="document-list"></ul>
+        <section id="account-panel" class="account-panel" hidden aria-labelledby="account-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">ADMINISTRACJA</p>
+              <h2 id="account-title">Dostępy organizacji</h2>
+            </div>
+          </div>
+          <form id="credential-form" class="credential-form">
+            <label for="credential-subject">Identyfikator użytkownika</label>
+            <input id="credential-subject" maxlength="255" required placeholder="np. anna@firma.pl">
+            <label for="credential-role">Rola</label>
+            <select id="credential-role">
+              <option value="member">Użytkownik</option>
+              <option value="admin">Administrator</option>
+            </select>
+            <button id="issue-credential" type="submit">Utwórz dostęp</button>
+          </form>
+          <div id="issued-token-panel" class="issued-token-panel" hidden>
+            <p class="small-note">Token wyświetlany jest tylko raz. Skopiuj go do bezpiecznego menedżera sekretów.</p>
+            <textarea id="issued-token" rows="3" readonly aria-label="Nowy token API"></textarea>
+            <button id="copy-token" class="quiet-button" type="button">Kopiuj token</button>
+          </div>
+          <ul id="credential-list" class="credential-list"></ul>
+        </section>
         <p class="small-note">Wgrywanie dokumentów jest domyślnie wyłączone. Administrator może je włączyć dopiero po zatwierdzeniu zabezpieczeń parsera.</p>
       </aside>
 

@@ -37,7 +37,7 @@ class FakeRouter:
             return self.response_override
         source = payload["sources"][0]
         return json.dumps({
-            "answer": f"Informacja z dokumentu {source['filename']}.",
+            "answer": f"Informacja z dokumentu {source['document_id']}.",
             "citation_ids": [source["document_id"]],
         })
 

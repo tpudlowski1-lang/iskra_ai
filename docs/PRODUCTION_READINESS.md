@@ -19,14 +19,15 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 - [x] LLM router external providers are deny-by-default; each primary/fallback must be listed in `LLM_ALLOWED_PROVIDERS`.
-- [ ] Draft branch adds a second per-tenant allowlist (`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`) intersected with deployment approval; requires review/integration and an operator workflow for documented processing instructions before production use.
+- [ ] The provider-policy feature branch implements a second per-tenant allowlist (`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`) intersected with deployment approval; carried into Draft PR #86. It still requires canonical integration and an operator workflow for documented processing instructions before production use.
 - [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
-- [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
+- [ ] Public signup, account recovery, verification, billing and complete managed account lifecycle. Draft PR #86 contains tenant-admin issue/list/rotate/revoke operations with tenant scoping and a minimal `/assistant` admin console. It remains draft and is not integrated into the canonical release; public signup, recovery and full onboarding are still absent.
 - [x] Documented PostgreSQL staging migration and rollback runbook with restricted roles, DSN priority and acceptance checklist.
+- [ ] Complete production-grade DLP/data classification and prove that outbound minimization covers the application's supported data classes; the current regex minimizer is best-effort only.
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
-- [x] SQLite private-path hardening rejects symlinked ancestors and applies 0700/0600 permissions (TOCTOU/OS ownership limits documented).
+- [x] Credential SQLite path hardening requires an owner-private 0700 parent, uses `O_NOFOLLOW` and descriptor-based checks, rejects symlinks/special files/hard links and applies 0600 via `fchmod`; same-service-user processes remain within the trust boundary.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.

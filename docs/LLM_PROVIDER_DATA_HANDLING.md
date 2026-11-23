@@ -18,13 +18,17 @@ Implemented:
 - The worker prompt is restricted to a fixed public taxonomy; arbitrary mutable graph content is excluded.
 
 Not implemented:
-- Draft implementation in `privacy/tenant-provider-policy-v1`: per-tenant provider allowlists configured by the operator through `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant list is intersected with deployment-wide `LLM_ALLOWED_PROVIDERS`; either missing approval blocks the provider. Missing tenant entries deny by default. This is server-side configuration only, not a consent UI or proof that the operator has obtained lawful consent.
+- Per-tenant provider allowlists are implemented on the provider-policy feature branch (PR #80, carried into Draft PR #86) through `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant list is intersected with deployment-wide `LLM_ALLOWED_PROVIDERS`; either missing approval blocks the provider. Missing tenant entries deny by default. This is server-side configuration only, not a consent UI or proof that the operator has obtained lawful consent.
 - User-facing notice/consent and controls for external processing.
-- Prompt-level PII/secret detection, redaction or data minimization.
+- Complete DLP, reliable PII detection, document classification or secret detection/redaction for every possible format. A draft best-effort minimizer now redacts several common token/secret patterns, email addresses, IBANs and PEM private-key blocks from tenant chat questions/excerpts before provider calls; it is not exhaustive and can miss sensitive data.
 - Provider-specific retention, region, training-use or deletion configuration.
 - A central record of which provider received which prompt, with safe data classification metadata.
 - A local-only inference mode enforced by policy.
 - A guarantee that provider-side retention/deletion behavior matches Iskra's intended retention policy.
+
+## Best-effort outbound minimization in draft PR
+
+`iskra/llm/data_minimization.py` applies deterministic patterns to tenant chat question text and retrieved excerpts before serialization. It targets common bearer/API/cloud tokens, JWT-like strings, password/secret assignments, PEM private keys, email addresses and IBANs. Document filenames are not sent to the model. The filter is defense-in-depth only: it can miss unknown formats, phone numbers, names, addresses, free-form personal details and other sensitive content. It is not a DLP scanner, anonymization guarantee or legal basis for external processing.
 
 ## Release requirements before customer data can be sent to an external model
 
@@ -129,4 +133,4 @@ Before enabling any provider for a commercial tenant, record the legal entity/ac
 
 The router now applies the same deployment-level provider allowlist to the primary and every fallback provider. An unset or empty `LLM_ALLOWED_PROVIDERS` blocks all registered external provider calls before a request is made. The Render blueprint keeps this variable empty and disables auto-deploy until an operator explicitly approves both provider processing and deployment.
 
-The autonomous worker prompt contains only a fixed public taxonomy. This reduces one previously identified data-transfer risk, but it does not redact normal user prompts. There is no per-tenant allowlist, consent UI, automatic PII/secret redaction, customer-facing privacy controls or network egress firewall. Customer-data processing by external models remains NOT APPROVED until account-specific provider terms, DPA, data location, retention, deletion and transfer review are complete.
+The autonomous worker prompt contains only a fixed public taxonomy. This reduces one previously identified data-transfer risk, but it does not redact normal user prompts. Per-tenant allowlist code exists on the provider-policy feature branch and is carried into Draft PR #86; there is still no consent UI, automatic PII/secret redaction for every prompt path, customer-facing privacy controls or network egress firewall. Tenant chat questions/excerpts receive best-effort minimization, but other prompt paths are not automatically redacted. Customer-data processing by external models remains NOT APPROVED until account-specific provider terms, DPA, data location, retention, deletion and transfer review are complete.
