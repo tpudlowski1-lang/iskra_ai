@@ -79,6 +79,19 @@ class PostgresGraphStoreTests(unittest.TestCase):
             "beta private",
         )
 
+    def test_load_or_initialize_seeds_each_tenant_once(self):
+        self.alpha_store.load_or_initialize(self.graph("alpha seed"))
+        self.alpha_store.load_or_initialize(self.graph("replacement seed"))
+        self.beta_store.load_or_initialize(self.graph("beta seed"))
+        self.assertEqual(
+            self.alpha_store.load()["neurons"]["node-1"]["label"],
+            "alpha seed",
+        )
+        self.assertEqual(
+            self.beta_store.load()["neurons"]["node-1"]["label"],
+            "beta seed",
+        )
+
     def test_rls_blocks_cross_tenant_reads_and_writes_even_with_direct_sql(self):
         with self.psycopg.connect(APP_DSN) as connection:
             with connection.cursor() as cursor:
