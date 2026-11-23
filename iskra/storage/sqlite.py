@@ -168,6 +168,47 @@ class SQLiteGraphStore:
             ],
         }
 
+    def _insert_snapshot(self, connection, clean):
+        """Insert a validated snapshot inside the caller's transaction."""
+        connection.executemany(
+            """
+            INSERT INTO graph_neurons (tenant_id, node_id, label, weight, created)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (self._tenant_id, node_id, node["label"], node["weight"], node["created"])
+                for node_id, node in clean["neurons"].items()
+            ],
+        )
+        connection.executemany(
+            """
+            INSERT INTO graph_synapses (tenant_id, source_id, target_id, strength)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (self._tenant_id, edge["from"], edge["to"], edge["strength"])
+                for edge in clean["synapses"]
+            ],
+        )
+
+    def load_or_initialize(self, default_graph):
+        """Atomically seed an empty tenant without overwriting concurrent writes."""
+        clean = self._validate_graph(default_graph)
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                existing = connection.execute(
+                    "SELECT 1 FROM graph_neurons WHERE tenant_id = ? LIMIT 1",
+                    (self._tenant_id,),
+                ).fetchone()
+                if existing is None:
+                    self._insert_snapshot(connection, clean)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return self.load()
+
     def save(self, graph):
         clean = self._validate_graph(graph)
         with self._connection() as connection:
