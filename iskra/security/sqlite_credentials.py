@@ -290,8 +290,13 @@ class SQLiteCredentialStore:
 
                 old_roles = frozenset(json.loads(old["roles_json"]))
                 new_roles = old_roles if roles is None else frozenset(roles)
-                if not new_roles or not new_roles.issubset(old_roles) or not new_roles.issubset(ALLOWED_ROLES):
-                    raise ValueError("Rotacja może zachować role lub je ograniczyć, nie może zwiększać uprawnień")
+                if not self._roles_are_non_escalating(old_roles, new_roles):
+                    raise ValueError("Rotacja może zachować uprawnienia lub je ograniczyć, nie może ich zwiększać")
+                if ("admin" in old_roles and "admin" not in new_roles
+                        and not self._has_other_active_admin(
+                            connection, old["tenant_id"], credential_id, now
+                        )):
+                    raise LastTenantAdminError("Nie można zdegradować ostatniego aktywnego administratora")
                 principal = Principal(old["subject"], old["tenant_id"], new_roles)
                 expiry = expiry_override if expiry_override is not None else old["expires_at"]
                 if expiry is not None and expiry <= now:
@@ -323,6 +328,16 @@ class SQLiteCredentialStore:
                     principal, actor, now, related_credential_id=new_id,
                 )
         return IssuedCredential(new_id, new_token, expiry)
+
+    @staticmethod
+    def _roles_are_non_escalating(old_roles, new_roles):
+        if not new_roles or not new_roles.issubset(ALLOWED_ROLES):
+            return False
+        if "admin" in new_roles and "admin" not in old_roles:
+            return False
+        if "member" in new_roles and not ({"member", "admin"} & old_roles):
+            return False
+        return True
 
     @staticmethod
     def _has_other_active_admin(connection, tenant_id, exclude_credential_id, now):
@@ -451,8 +466,8 @@ class SQLiteCredentialStore:
 
                 old_roles = frozenset(json.loads(old["roles_json"]))
                 new_roles = old_roles if roles is None else frozenset(roles)
-                if not new_roles or not new_roles.issubset(old_roles) or not new_roles.issubset(ALLOWED_ROLES):
-                    raise ValueError("Rotacja może zachować role lub je ograniczyć")
+                if not self._roles_are_non_escalating(old_roles, new_roles):
+                    raise ValueError("Rotacja może zachować uprawnienia lub je ograniczyć, nie może ich zwiększać")
                 if ("admin" in old_roles and "admin" not in new_roles
                         and not self._has_other_active_admin(
                             connection, principal.tenant_id, credential_id, now
