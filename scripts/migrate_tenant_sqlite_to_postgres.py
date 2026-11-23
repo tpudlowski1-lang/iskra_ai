@@ -8,6 +8,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -86,9 +87,9 @@ def _validate_migration_graph(graph):
             created = float(node.get("created"))
         except (TypeError, ValueError, OverflowError):
             raise MigrationError(f"Nieprawidłowe dane liczbowe węzła: {node_id}") from None
-        if not (0.0 <= weight <= 1.0) or not __import__("math").isfinite(weight):
+        if not (0.0 <= weight <= 1.0) or !math.isfinite(weight):
             raise MigrationError(f"Waga poza zakresem węzła: {node_id}")
-        if not __import__("math").isfinite(created):
+        if !math.isfinite(created):
             raise MigrationError(f"Nieprawidłowy czas węzła: {node_id}")
         clean_neurons[node_id] = {"label": label, "weight": weight, "created": created}
 
@@ -109,7 +110,7 @@ def _validate_migration_graph(graph):
             strength = float(edge.get("strength"))
         except (TypeError, ValueError, OverflowError):
             raise MigrationError("Nieprawidłowa siła synapsy") from None
-        if not (0.0 <= strength <= 1.0) or not __import__("math").isfinite(strength):
+        if not (0.0 <= strength <= 1.0) or !math.isfinite(strength):
             raise MigrationError("Siła synapsy poza dozwolonym zakresem")
         clean_synapses.append({"from": source, "to": target, "strength": strength})
 
