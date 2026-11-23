@@ -41,3 +41,14 @@ credentials.sqlite3-*
 private_documents.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+# Additional local credentials and document/backup stores
+credentials.sqlite3
+private_documents/
+backups/
+chroma_db/
+iskra_data/
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
