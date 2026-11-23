@@ -92,3 +92,8 @@ Implemented tenant adapters and green CI do not equal a production SaaS. Remaini
 ## Tenant knowledge chat API (draft feature)
 
 The current feature branch adds an authenticated POST /api/tenant/chat endpoint. It searches only documents belonging to the authenticated Principal, sends at most five bounded excerpts to the configured LLM, and requires exact server-resolved citations. No source means no provider call. Tenant document list/search/delete routes are also available; upload is admin-only and disabled by default through ISKRA_ENABLE_DOCUMENT_INGESTION=false. A minimal responsive chat UI is available at /assistant; it accepts an API token for the current page session only and does not persist it or maintain server-side chat history. See docs/KNOWLEDGE_CHAT_API.md.
+
+
+## Stacked feature CI
+
+The repository quality, security, adversarial, and license workflows also target the integrated release-candidate and the active stacked tenant/privacy feature branches. This ensures that dependent Draft PRs receive the same verification gates before any integration decision.
