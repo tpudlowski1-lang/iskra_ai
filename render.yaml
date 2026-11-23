@@ -38,6 +38,10 @@ services:
       - key: DEEPSEEK_API_KEY
         sync: false
 
+      # Render terminates TLS at one trusted load balancer; restore the external scheme.
+      - key: ISKRA_TRUST_PROXY_HEADERS
+        value: true
+
       - key: ISKRA_RATE_LIMIT_ENABLED
         value: true
 
