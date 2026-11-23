@@ -52,3 +52,11 @@ iskra_data/
 *.sqlite3-*
 *.db
 *.db-*
+
+# Explicitly anchor sensitive runtime stores and their contents.
+/credentials.sqlite3
+/credentials.sqlite3-*
+/private_documents/
+/private_documents/**
+/backups/
+/backups/**
