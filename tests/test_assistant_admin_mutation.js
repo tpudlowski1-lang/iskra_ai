@@ -46,9 +46,13 @@ for (const control of [controls.connect, controls.token, controls.logout, ...con
 const connectStart = source.indexOf('connectForm.addEventListener("submit"');
 const connectEnd = source.indexOf('\n  logoutButton.addEventListener', connectStart);
 const connectHandler = source.slice(connectStart, connectEnd);
-assert.ok(connectHandler.indexOf("credentialList.replaceChildren()") < connectHandler.indexOf("apiToken = candidate"));
-assert.ok(connectHandler.indexOf('showIssuedToken("")') < connectHandler.indexOf("apiToken = candidate"));
-assert.ok(connectHandler.indexOf("documentList.replaceChildren()") < connectHandler.indexOf("apiToken = candidate"));
+const loginExchangeIndex = connectHandler.indexOf('fetch("/api/browser/session"');
+assert.ok(loginExchangeIndex > 0, "login must exchange the one-time API token for a browser session");
+assert.ok(connectHandler.indexOf("credentialList.replaceChildren()") < loginExchangeIndex);
+assert.ok(connectHandler.indexOf('showIssuedToken("")') < loginExchangeIndex);
+assert.ok(connectHandler.indexOf("documentList.replaceChildren()") < loginExchangeIndex);
+assert.ok(connectHandler.includes('headers: { "Authorization": "Bearer " + candidate'));
+assert.ok(!connectHandler.includes("apiToken = candidate"));
 assert.ok(connectHandler.includes("workspace.hidden = true"));
 
 const logoutStart = source.indexOf('logoutButton.addEventListener("click"');
