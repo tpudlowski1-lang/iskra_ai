@@ -4,9 +4,9 @@
 
 The existing live graph is stored in `wiedza.json`. The extracted `SiecNeuronowa` keeps this format for compatibility. The `KnowledgeGraphStore` protocol is currently an interface contract; it does not silently change the production backend.
 
-The tenant-scoped SQLite graph adapter is a tested development/migration component, not the production multi-tenant backend. PostgreSQL is the target for multi-process and multi-tenant hosting. No PostgreSQL adapter or production cutover is implemented yet.
+The tenant-scoped SQLite graph adapter is a tested prototype and is not wired into the legacy Flask graph path. A PostgreSQL graph adapter and internal PostgreSQL document repository now exist, with SQL migrations v1/v2, tenant-scoped queries and FORCE RLS; CI tests them against an ephemeral PostgreSQL service using a restricted runtime role. PostgreSQL remains opt-in and no production database, live cutover, durable hosted volume or staging restore/rollback drill has been verified. Draft PR #59 combines strict SQLite migration validation with verified tenant-database backup restore; it is not part of the canonical base until reviewed and merged.
 
-See [PostgreSQL architecture and migration design](POSTGRESQL_ARCHITECTURE.md) for the proposed schema, tenant-isolation rules, transaction policy, import procedure, rollback, and release gates. That document is a design proposal, not a claim that PostgreSQL is already available.
+See [PostgreSQL architecture and migration design](POSTGRESQL_ARCHITECTURE.md) for the target schema, current adapter/RLS status, tenant-isolation rules, transaction policy, import procedure, rollback, and release gates. The architecture document distinguishes implemented CI-tested components from future identity schema and production operations.
 
 ## Required migration sequence
 
