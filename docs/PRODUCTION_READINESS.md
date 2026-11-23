@@ -28,6 +28,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
+- [ ] External LLM data-flow review: the opt-in autonomous worker currently serializes the entire legacy global graph into prompts; add data classification, provider allowlists, redaction, customer notice/consent, provider contract/retention review and fallback policy before any customer data is sent externally. See [LLM provider data handling](LLM_PROVIDER_DATA_HANDLING.md).
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
 - [ ] Dedicated single-owner autonomous worker with lease/coordination.
 - [ ] Staging deployment and production smoke tests.
