@@ -21,7 +21,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
-- [ ] Private document upload, malware/type/size validation and secure object storage.
+- [ ] Document service PR #34 is still separate and unexposed: require OS/container sandboxing, malware quarantine, PostgreSQL document schema/RLS, audit, quotas, retention and secure backup/restore before routes or uploads.
 - [ ] Tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
