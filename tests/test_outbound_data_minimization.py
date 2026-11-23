@@ -8,14 +8,15 @@ class OutboundDataMinimizationTests(unittest.TestCase):
         value = (
             "github_pat_abcdefghijklmnopqrstuvwxyz123456 "
             "ghp_abcdefghijklmnopqrstuvwxyz123456 "
-            "AKIA1234567890ABCDEF sk-abcdefghijklmnopqrstuvwxyz123456"
+            "AKIA1234567890ABCDEF ASIA1234567890ABCDEF sk-abcdefghijklmnopqrstuvwxyz123456"
         )
         result = minimize_outbound_text(value)
         self.assertNotIn("github_pat_", result)
         self.assertNotIn("ghp_", result)
         self.assertNotIn("AKIA1234567890ABCDEF", result)
+        self.assertNotIn("ASIA1234567890ABCDEF", result)
         self.assertNotIn("sk-abcdefghijklmnopqrstuvwxyz123456", result)
-        self.assertEqual(result.count("[REDACTED:"), 4)
+        self.assertEqual(result.count("[REDACTED:"), 5)
 
     def test_redacts_bearer_password_assignment_email_and_iban(self):
         value = (
