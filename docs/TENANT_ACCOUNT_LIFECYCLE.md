@@ -34,7 +34,7 @@ Issuance defaults to a 90-day expiry and tenant admins cannot request more than 
 ## Limitations and production gates
 
 - Static API-token lifecycle only; no password login, MFA, self-service recovery, invitation emails, signup or billing.
-- No browser admin console yet.
+- Draft PR #83 contains a minimal browser admin console in `/assistant`; it is not yet independently reviewed or production-ready.
 - SQLite credential store is single-instance; use a reviewed PostgreSQL backend before horizontal scaling.
 - No customer-visible audit log retention/export, alerting, operator separation of duties or secure token delivery workflow.
 - A tenant administrator is trusted to issue/revoke that tenant's own credentials; the system does not independently verify the identity represented by the supplied subject label.
