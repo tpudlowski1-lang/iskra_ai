@@ -4,8 +4,9 @@ import os
 import time
 import requests
 
-REQUEST_TIMEOUT = 45
+REQUEST_TIMEOUT = (3, 12)  # bounded connect/read timeout in seconds
 REQUEST_RETRIES = 2
+MAX_GENERATION_SECONDS = 100  # leave headroom under the 120s Render/Gunicorn timeout
 
 class RouterProvider:
     """Jednolity router modeli z kolejnością primary + fallback z ENV."""
@@ -36,7 +37,19 @@ class RouterProvider:
                 return json.dumps(value, ensure_ascii=False)
         return None
 
-    def _chat_completion(self, provider, prompt):
+    @staticmethod
+    def _request_timeout(deadline):
+        """Return connect/read timeouts bounded by the shared generation deadline."""
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        connect_timeout = min(REQUEST_TIMEOUT[0], remaining / 3)
+        read_timeout = min(REQUEST_TIMEOUT[1], remaining - connect_timeout)
+        if connect_timeout <= 0 or read_timeout <= 0:
+            return None
+        return (connect_timeout, read_timeout)
+
+    def _chat_completion(self, provider, prompt, deadline):
         configs = {
             "openai": {
                 "key": os.environ.get("OPENAI_API_KEY", ""),
@@ -67,24 +80,31 @@ class RouterProvider:
             "response_format": {"type": "json_object"},
         }
         for attempt in range(REQUEST_RETRIES):
+            timeout = self._request_timeout(deadline)
+            if timeout is None:
+                print(f"LLM {provider}: przekroczono wspólny limit czasu — przechodzę do fallback.")
+                return None
             try:
-                response = requests.post(cfg["url"], headers=headers, json=payload, timeout=REQUEST_TIMEOUT)
+                response = requests.post(cfg["url"], headers=headers, json=payload, timeout=timeout)
                 if response.ok:
                     return response.json()["choices"][0]["message"]["content"]
                 print(f"LLM {provider}: HTTP {response.status_code}")
             except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
                 print(f"LLM {provider}: błąd żądania ({type(exc).__name__}).")
             if attempt + 1 < REQUEST_RETRIES:
-                time.sleep(2)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                time.sleep(min(1, remaining))
         return None
 
-    def _openai(self, prompt):
-        return self._chat_completion("openai", prompt)
+    def _openai(self, prompt, deadline):
+        return self._chat_completion("openai", prompt, deadline)
 
-    def _deepseek(self, prompt):
-        return self._chat_completion("deepseek", prompt)
+    def _deepseek(self, prompt, deadline):
+        return self._chat_completion("deepseek", prompt, deadline)
 
-    def _gemini(self, prompt):
+    def _gemini(self, prompt, deadline):
         api_key = os.environ.get("GEMINI_API_KEY", "")
         model = os.environ.get("GEMINI_MODEL", "").strip()
         if not api_key or not model:
@@ -99,12 +119,16 @@ class RouterProvider:
             },
         }
         for attempt in range(REQUEST_RETRIES):
+            timeout = self._request_timeout(deadline)
+            if timeout is None:
+                print("LLM gemini: przekroczono wspólny limit czasu — kończę fallback.")
+                return None
             try:
                 response = requests.post(
                     url,
                     headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
                     json=payload,
-                    timeout=REQUEST_TIMEOUT,
+                    timeout=timeout,
                 )
                 if response.ok:
                     data = response.json()
@@ -113,18 +137,25 @@ class RouterProvider:
             except (requests.RequestException, ValueError, KeyError, IndexError) as exc:
                 print(f"LLM gemini: błąd żądania ({type(exc).__name__}).")
             if attempt + 1 < REQUEST_RETRIES:
-                time.sleep(2)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                time.sleep(min(1, remaining))
         return None
 
     def generate(self, prompt):
+        deadline = time.monotonic() + MAX_GENERATION_SECONDS
         order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
         for name in order:
+            if self._request_timeout(deadline) is None:
+                print("LLM: wyczerpano wspólny limit czasu — przerywam łańcuch providerów.")
+                break
             provider = self.providers.get(name)
             if provider is None:
                 print(f"LLM: nieznany provider '{name}' — pomijam.")
                 continue
             try:
-                result = provider(prompt)
+                result = provider(prompt, deadline)
             except Exception as exc:
                 # A provider failure must not prevent the configured fallback chain.
                 print(f"LLM {name}: provider zgłosił {type(exc).__name__} — uruchamiam fallback.")
