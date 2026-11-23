@@ -147,6 +147,7 @@ class IskraConcurrencyTests(unittest.TestCase):
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         router.providers = {
             "deepseek": lambda prompt: calls.append("deepseek") or None,
             "openai": lambda prompt: calls.append("openai") or None,
