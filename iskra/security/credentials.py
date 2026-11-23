@@ -114,7 +114,7 @@ class SQLiteCredentialStore:
         credential_id = secrets.token_urlsafe(12)
         token = secrets.token_urlsafe(32)
         roles_json = json.dumps(sorted(principal.roles), separators=(",", ":"))
-        with self._connect() as connection:
+        with self._connection() as connection:
             with connection:
                 connection.execute(
                     """
@@ -142,7 +142,7 @@ class SQLiteCredentialStore:
         if current_time is None:
             current_time = time.time()
         digest = self._digest(token)
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT token_digest, subject, tenant_id, roles_json, expires_at, revoked_at
@@ -170,7 +170,7 @@ class SQLiteCredentialStore:
     def revoke(self, credential_id: str) -> bool:
         if not isinstance(credential_id, str) or not credential_id:
             return False
-        with self._connect() as connection:
+        with self._connection() as connection:
             with connection:
                 cursor = connection.execute(
                     """
