@@ -9,7 +9,8 @@ This checklist is intentionally conservative. The modular refactor does not by i
 - [x] Runtime port and data directory validated.
 - [x] Dashboard graph labels are rendered with DOM `textContent`, not `innerHTML`.
 - [x] Baseline security headers added.
-- [x] Fail-closed WSGI authentication supports the legacy system `API_TOKEN` and an explicitly configured SQLite credential store with hashed tokens, tenant-bound principals, expiry and revocation. SQLite remains a single-instance prototype.\n- [x] The global `/api/network` route is restricted to the system-admin principal; tenant admins and members receive 403.
+- [x] Fail-closed WSGI authentication supports the legacy system `API_TOKEN` and an explicitly configured SQLite credential store with hashed tokens, tenant-bound principals, expiry and revocation. SQLite remains a single-instance prototype.
+- [x] The global `/api/network` route is restricted to the system-admin principal; tenant admins and members receive 403.
 - [x] Tenant-scoped transactional SQLite graph adapter added and tested; it is not yet wired into the live Flask application.
 - [x] Existing deterministic tests run on Python 3.11 and 3.12 in GitHub Actions.
 - [x] Existing multi-thread/process stress suite run in GitHub Actions.
@@ -27,7 +28,8 @@ This checklist is intentionally conservative. The modular refactor does not by i
 - [ ] Staging deployment, backup/restore drill, and production smoke tests.
 
 ## Operational rules
-- Use `wsgi:app` for public deployment; direct `app:app` does not install authentication middleware.\n- Set `CREDENTIAL_DB_PATH` only to a persistent, access-controlled local SQLite path for the prototype; do not assume multi-instance or HA safety. The legacy `API_TOKEN` remains a system-admin fallback.
+- Use `wsgi:app` for public deployment; direct `app:app` does not install authentication middleware.
+- Set `CREDENTIAL_DB_PATH` only to a persistent, access-controlled local SQLite path for the prototype; do not assume multi-instance or HA safety. The legacy `API_TOKEN` remains a system-admin fallback.
 - Keep `ENABLE_AUTONOMOUS_LOOP=false` on web deployments.
 - Do not run multiple Gunicorn workers against JSON storage and assume process-local locks are sufficient. The current POSIX file lock is a compatibility safeguard, not a substitute for database transactions.
 - Never store API keys in Git. Configure them as hosting secrets.
