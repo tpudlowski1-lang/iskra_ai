@@ -35,6 +35,13 @@ class ApiTokenMiddlewareTests(unittest.TestCase):
         self.assertEqual(response["status"], "200 OK")
         self.assertEqual(self.calls, ["/health"])
 
+    def test_workspace_shell_is_public_but_api_stays_protected(self):
+        middleware = ApiTokenMiddleware(self.application, token="secret")
+        response = self.request(middleware, path="/workspace")
+        self.assertEqual(response["status"], "200 OK")
+        protected = self.request(middleware, path="/api/chat")
+        self.assertEqual(protected["status"], "401 Unauthorized")
+
     def test_missing_server_token_fails_closed(self):
         response = self.request(ApiTokenMiddleware(self.application, token=""))
         self.assertEqual(response["status"], "503 Service Unavailable")

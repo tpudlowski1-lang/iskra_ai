@@ -68,7 +68,7 @@ This branch now contains a tenant-isolated document pilot API with per-company A
 
 ## Tenant document knowledge (pilot API)
 
-The authenticated administrator creates a company workspace:
+Open `/workspace` in a browser to use the company document library and grounded chat. The tenant key is entered in the page and kept only in the current tab's `sessionStorage`. The authenticated administrator creates a company workspace:
 
 ```http
 POST /admin/tenants

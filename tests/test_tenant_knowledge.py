@@ -154,6 +154,12 @@ class TenantApiIntegrationTests(unittest.TestCase):
         self.iskra.PLIK_SIECI = self.old_network_path
         self.tmp.cleanup()
 
+    def test_workspace_page_is_public_and_contains_no_tenant_data(self):
+        response = self.client.get("/workspace")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Przestr", response.data)
+        self.assertIn(b"sessionStorage", response.data)
+
     def test_end_to_end_tenant_isolation_through_flask_routes(self):
         admin = {"Authorization": "Bearer integration-admin-secret"}
         a = self.client.post("/admin/tenants", json={"name": "Alfa"}, headers=admin)

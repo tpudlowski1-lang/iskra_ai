@@ -47,7 +47,7 @@ class ApiTokenMiddleware:
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "/")
-        if path == "/health":
+        if path in ("/health", "/workspace"):
             return self.application(environ, start_response)
 
         authorization = environ.get("HTTP_AUTHORIZATION", "")
