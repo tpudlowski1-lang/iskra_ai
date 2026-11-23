@@ -24,6 +24,15 @@ class IssuedCredential:
     expires_at: float | None = None
 
 
+@dataclass(frozen=True)
+class BrowserSession:
+    principal: Principal
+    credential_id: str
+    csrf_digest: str
+    csrf_token: str | None
+    expires_at: float
+
+
 class CredentialStoreUnavailable(RuntimeError):
     """Raised when the credential database cannot be safely accessed."""
 
@@ -146,6 +155,29 @@ class SQLiteCredentialStore:
                     )
                     connection.execute(
                         """
+                        CREATE TABLE IF NOT EXISTS browser_sessions (
+                            session_digest TEXT PRIMARY KEY,
+                            credential_id TEXT NOT NULL,
+                            csrf_digest TEXT NOT NULL,
+                            csrf_token TEXT NOT NULL,
+                            created_at REAL NOT NULL,
+                            expires_at REAL NOT NULL,
+                            revoked_at REAL,
+                            FOREIGN KEY (credential_id) REFERENCES api_credentials(credential_id)
+                        )
+                        """
+                    )
+                    session_columns = {
+                        row["name"] for row in connection.execute("PRAGMA table_info(browser_sessions)")
+                    }
+                    if "csrf_token" not in session_columns:
+                        connection.execute("ALTER TABLE browser_sessions ADD COLUMN csrf_token TEXT")
+                    connection.execute(
+                        "CREATE INDEX IF NOT EXISTS idx_browser_sessions_credential "
+                        "ON browser_sessions(credential_id, expires_at)"
+                    )
+                    connection.execute(
+                        """
                         CREATE TABLE IF NOT EXISTS credential_audit_events (
                             event_id TEXT PRIMARY KEY,
                             event_type TEXT NOT NULL CHECK (
@@ -261,7 +293,8 @@ class SQLiteCredentialStore:
                 )
         return IssuedCredential(credential_id, token, expiry)
 
-    def authenticate(self, token, now=None):
+    def authenticate_with_metadata(self, token, now=None):
+        """Return the verified Principal and persistent credential ID."""
         if not isinstance(token, str) or not token or len(token) > 512:
             return None
         current = self._timestamp(now, "now")
@@ -271,22 +304,157 @@ class SQLiteCredentialStore:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT token_digest, subject, tenant_id, roles_json, expires_at, revoked_at
+                SELECT credential_id, subject, tenant_id, roles_json, expires_at, revoked_at
                 FROM api_credentials WHERE token_digest = ?
                 """,
                 (digest,),
             ).fetchone()
-        # Legacy rows created before the reserved-system boundary must not
-        # continue authenticating as a tenant principal after the fix.
         if row is None or row["tenant_id"] == "system" or row["revoked_at"] is not None:
             return None
         if row["expires_at"] is not None and current >= row["expires_at"]:
             return None
         try:
             roles = frozenset(json.loads(row["roles_json"]))
-            return Principal(row["subject"], row["tenant_id"], roles)
+            principal = Principal(row["subject"], row["tenant_id"], roles)
+            return principal, row["credential_id"]
         except (TypeError, ValueError, json.JSONDecodeError):
             return None
+
+    def authenticate(self, token, now=None):
+        authenticated = self.authenticate_with_metadata(token, now=now)
+        return authenticated[0] if authenticated is not None else None
+
+    def create_browser_session(self, principal, credential_id, session_token,
+                               csrf_token, expires_at):
+        """Create an opaque browser session tied to one active API credential."""
+        if not isinstance(principal, Principal) or principal.tenant_id == "system":
+            raise PermissionError("Browser sessions require a tenant Principal")
+        if (not isinstance(credential_id, str) or not credential_id
+                or not isinstance(session_token, str) or len(session_token) < 32
+                or not isinstance(csrf_token, str) or len(csrf_token) < 32):
+            raise ValueError("Invalid browser session material")
+        now = time.time()
+        expiry = self._timestamp(expires_at, "expires_at")
+        if expiry is None or expiry <= now or expiry > now + 8 * 60 * 60:
+            raise ValueError("Browser session expiry must be within eight hours")
+        with self._connection() as connection:
+            with connection:
+                connection.execute(
+                    "DELETE FROM browser_sessions WHERE expires_at <= ? OR (revoked_at IS NOT NULL AND revoked_at <= ?)",
+                    (now, now - 30 * 24 * 60 * 60),
+                )
+                credential = connection.execute(
+                    """
+                    SELECT subject, tenant_id, roles_json, expires_at, revoked_at
+                    FROM api_credentials WHERE credential_id = ?
+                    """,
+                    (credential_id,),
+                ).fetchone()
+                if (credential is None or credential["revoked_at"] is not None
+                        or (credential["expires_at"] is not None and credential["expires_at"] <= now)):
+                    raise PermissionError("Credential is no longer active")
+                try:
+                    stored_principal = Principal(
+                        credential["subject"], credential["tenant_id"],
+                        frozenset(json.loads(credential["roles_json"])),
+                    )
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raise CredentialStoreUnavailable("Credential metadata is invalid") from None
+                if stored_principal != principal:
+                    raise PermissionError("Credential Principal mismatch")
+                if credential["expires_at"] is not None:
+                    expiry = min(expiry, credential["expires_at"])
+                connection.execute(
+                    """
+                    INSERT INTO browser_sessions
+                    (session_digest, credential_id, csrf_digest, csrf_token,
+                     created_at, expires_at, revoked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (self._digest(session_token), credential_id,
+                     self._digest(csrf_token), csrf_token, now, expiry),
+                )
+        return expiry
+
+    def authenticate_browser_session(self, session_token, now=None):
+        if not isinstance(session_token, str) or not session_token or len(session_token) > 512:
+            return None
+        current = self._timestamp(now, "now")
+        if current is None:
+            current = time.time()
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT s.credential_id, s.csrf_digest, s.csrf_token, s.expires_at AS session_expires_at,
+                       s.revoked_at AS session_revoked_at,
+                       c.subject, c.tenant_id, c.roles_json, c.expires_at AS credential_expires_at,
+                       c.revoked_at AS credential_revoked_at
+                FROM browser_sessions AS s
+                JOIN api_credentials AS c ON c.credential_id = s.credential_id
+                WHERE s.session_digest = ?
+                """,
+                (self._digest(session_token),),
+            ).fetchone()
+        if (row is None or row["session_revoked_at"] is not None
+                or row["credential_revoked_at"] is not None
+                or current >= row["session_expires_at"]
+                or (row["credential_expires_at"] is not None and current >= row["credential_expires_at"])):
+            return None
+        try:
+            principal = Principal(
+                row["subject"], row["tenant_id"], frozenset(json.loads(row["roles_json"]))
+            )
+            return BrowserSession(
+                principal=principal,
+                credential_id=row["credential_id"],
+                csrf_digest=row["csrf_digest"],
+                csrf_token=row["csrf_token"],
+                expires_at=row["session_expires_at"],
+            )
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+
+    def rotate_browser_session_csrf(self, session_token, csrf_token, now=None):
+        if (not isinstance(session_token, str) or not session_token
+                or not isinstance(csrf_token, str) or len(csrf_token) < 32):
+            return False
+        current = self._timestamp(now, "now")
+        if current is None:
+            current = time.time()
+        with self._connection() as connection:
+            with connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE browser_sessions
+                    SET csrf_digest = ?, csrf_token = ?
+                    WHERE session_digest = ? AND revoked_at IS NULL AND expires_at > ?
+                      AND EXISTS (
+                        SELECT 1 FROM api_credentials AS c
+                        WHERE c.credential_id = browser_sessions.credential_id
+                          AND c.revoked_at IS NULL
+                          AND (c.expires_at IS NULL OR c.expires_at > ?)
+                      )
+                    """,
+                    (self._digest(csrf_token), csrf_token, self._digest(session_token), current, current),
+                )
+                return cursor.rowcount == 1
+
+    def revoke_browser_session(self, session_token, now=None):
+        if not isinstance(session_token, str) or not session_token:
+            return False
+        current = self._timestamp(now, "now")
+        if current is None:
+            current = time.time()
+        with self._connection() as connection:
+            with connection:
+                cursor = connection.execute(
+                    """
+                    UPDATE browser_sessions SET revoked_at = ?
+                    WHERE session_digest = ? AND revoked_at IS NULL
+                    """,
+                    (current, self._digest(session_token)),
+                )
+                return cursor.rowcount == 1
 
     def revoke(self, credential_id, actor="local-operator"):
         if not isinstance(credential_id, str) or not credential_id:

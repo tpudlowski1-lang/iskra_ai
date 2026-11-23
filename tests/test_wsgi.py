@@ -37,6 +37,67 @@ class WsgiEntrypointTests(unittest.TestCase):
             )
             self.assertIsNotNone(middleware)
 
+
+    def test_wsgi_trusts_one_forwarded_proto_only_when_explicitly_enabled(self):
+        application = Flask("trusted-proxy-scheme-test")
+
+        @application.post("/mutate")
+        def mutate():
+            return {"scheme": __import__("flask").request.scheme}
+
+        trusted = wsgi.create_wsgi_app(
+            application,
+            environ={
+                "API_TOKEN": "proxy-test-secret",
+                "ISKRA_API_CREDENTIALS_JSON": "",
+                "ISKRA_CREDENTIAL_DB_PATH": "",
+                "ISKRA_TRUST_PROXY_HEADERS": "true",
+            },
+        )
+        client = Client(trusted, Response)
+        import base64
+        basic = base64.b64encode(b"user:proxy-test-secret").decode("ascii")
+        response = client.post(
+            "/mutate",
+            base_url="http://iskra.test",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "https://iskra.test",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["scheme"], "https")
+
+    def test_wsgi_does_not_trust_forwarded_proto_by_default(self):
+        application = Flask("untrusted-proxy-scheme-test")
+
+        @application.post("/mutate")
+        def mutate():
+            return {"scheme": __import__("flask").request.scheme}
+
+        untrusted = wsgi.create_wsgi_app(
+            application,
+            environ={
+                "API_TOKEN": "proxy-test-secret",
+                "ISKRA_API_CREDENTIALS_JSON": "",
+                "ISKRA_CREDENTIAL_DB_PATH": "",
+            },
+        )
+        client = Client(untrusted, Response)
+        import base64
+        basic = base64.b64encode(b"user:proxy-test-secret").decode("ascii")
+        response = client.post(
+            "/mutate",
+            base_url="http://iskra.test",
+            headers={
+                "Authorization": f"Basic {basic}",
+                "Origin": "https://iskra.test",
+                "X-Forwarded-Proto": "https",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+
     def test_wsgi_factory_sets_missing_credential_store_to_none(self):
         application = Flask("tenant-account-no-store-test")
         wsgi.create_wsgi_app(

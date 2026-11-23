@@ -1,10 +1,18 @@
 """HTTP API blueprint factory with injected graph and tenant storage dependencies."""
+import secrets
 import sqlite3
+import time
 
 from flask import Blueprint, current_app, jsonify, request
 
 from iskra.security.policy import require_roles, require_system_admin
-from iskra.security.principal import principal_from_environ
+from iskra.security.principal import (
+    BROWSER_SESSION_COOKIE_NAME,
+    BROWSER_SESSION_CSRF_TOKEN_ENV_KEY,
+    BROWSER_SESSION_TOKEN_ENV_KEY,
+    PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
+    principal_from_environ,
+)
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
 from iskra.security.sqlite_credentials import CredentialStoreUnavailable, LastTenantAdminError
@@ -120,6 +128,105 @@ def create_api_blueprint(
             return jsonify({"error": "invalid_model_response"}), 502
         except (DocumentStorageError, OSError, sqlite3.Error):
             return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.post("/api/browser/session")
+    @require_roles("member", "admin")
+    def create_browser_session():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        credential_id = request.environ.get(PRINCIPAL_CREDENTIAL_ID_ENV_KEY)
+        if not credential_id:
+            return jsonify({"error": "persistent_credential_required"}), 403
+        if not request.is_json:
+            return jsonify({"error": "application_json_required"}), 415
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or payload:
+            return jsonify({"error": "invalid_session_payload"}), 400
+        session_token = secrets.token_urlsafe(48)
+        csrf_token = secrets.token_urlsafe(32)
+        expires_at = time.time() + 8 * 60 * 60
+        try:
+            expires_at = store.create_browser_session(
+                principal, credential_id, session_token, csrf_token, expires_at
+            )
+        except PermissionError:
+            return jsonify({"error": "credential_not_active"}), 401
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid_session"}), 400
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+        response = jsonify({
+            "csrf_token": csrf_token,
+            "subject": principal.subject,
+            "tenant_id": principal.tenant_id,
+            "roles": sorted(principal.roles),
+            "expires_at": expires_at,
+        })
+        response.set_cookie(
+            BROWSER_SESSION_COOKIE_NAME,
+            session_token,
+            max_age=max(0, int(expires_at - time.time())),
+            secure=True,
+            httponly=True,
+            samesite="Strict",
+            path="/",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response, 201
+
+    @api.get("/api/browser/session")
+    @require_roles("member", "admin")
+    def refresh_browser_session():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        session_token = request.environ.get(BROWSER_SESSION_TOKEN_ENV_KEY)
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if not session_token:
+            return jsonify({"error": "browser_session_required"}), 401
+        csrf_token = request.environ.get(BROWSER_SESSION_CSRF_TOKEN_ENV_KEY)
+        if not csrf_token:
+            csrf_token = secrets.token_urlsafe(32)
+            try:
+                if not store.rotate_browser_session_csrf(session_token, csrf_token):
+                    return jsonify({"error": "browser_session_expired"}), 401
+            except CredentialStoreUnavailable:
+                return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        response = jsonify({
+            "csrf_token": csrf_token,
+            "subject": principal.subject,
+            "tenant_id": principal.tenant_id,
+            "roles": sorted(principal.roles),
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @api.post("/api/browser/session/logout")
+    @require_roles("member", "admin")
+    def revoke_browser_session():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        session_token = request.environ.get(BROWSER_SESSION_TOKEN_ENV_KEY)
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if not session_token:
+            return jsonify({"error": "browser_session_required"}), 401
+        try:
+            store.revoke_browser_session(session_token)
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        response = jsonify({"status": "logged_out"})
+        response.delete_cookie(
+            BROWSER_SESSION_COOKIE_NAME,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="Strict",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @api.get("/api/tenant/session")
     @require_roles("member", "admin")
