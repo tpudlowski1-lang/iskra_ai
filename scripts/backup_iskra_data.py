@@ -222,7 +222,7 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
                 raise BackupError("Archiwum przekracza limit rozpakowania")
             if len([i for i in infos if i.filename == MANIFEST_NAME]) != 1:
                 raise BackupError("Brak lub duplikat manifestu")
-            if any(info.is_dir() or (info.external_attr >> 16) & stat.S_IFLNK for info in infos):
+            if any(info.is_dir() or stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK for info in infos):
                 raise BackupError("Katalogi i symlinki w archiwum są zabronione")
             manifest = json.loads(archive.read(MANIFEST_NAME).decode("utf-8"))
             if manifest.get("format") != "iskra-backup-v1":
