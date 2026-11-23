@@ -39,11 +39,17 @@ def _apply_worker_limits(cpu_seconds, memory_limit_bytes):
     resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     resource.setrlimit(resource.RLIMIT_FSIZE, (0, 0))
+    _soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(32, hard_limit), hard_limit))
+    os.umask(0o077)
 
 
 def _worker_entry(connection, filename, data, cpu_seconds, memory_limit_bytes):
     try:
         _apply_worker_limits(cpu_seconds, memory_limit_bytes)
+        # The parser only consumes in-memory bytes; inherited application secrets
+        # are unnecessary and should not be visible to code handling untrusted files.
+        os.environ.clear()
         parsed = parse_document(filename, data)
         payload = {
             "ok": True,
