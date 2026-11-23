@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover - the production target is Linux
 from iskra.documents.parsers import (
     ALLOWED_EXTENSIONS,
     CHUNK_SIZE,
+    CHUNK_OVERLAP,
     MAX_CHUNKS,
     MAX_EXTRACTED_CHARS,
     MAX_UPLOAD_BYTES,
@@ -128,6 +129,7 @@ def parse_document_isolated(
             set(payload) != {"ok", "filename", "extension", "sha256", "chunks"}
             or not isinstance(filename_value, str)
             or not filename_value
+            or len(filename_value) > 255
             or os.path.basename(filename_value) != filename_value
             or "/" in filename_value
             or "\\" in filename_value
@@ -141,7 +143,7 @@ def parse_document_isolated(
             or len(chunks_value) > MAX_CHUNKS
             or any(not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
                    for chunk in chunks_value)
-            or sum(len(chunk) for chunk in chunks_value) > MAX_EXTRACTED_CHARS
+            or sum(len(chunk) for chunk in chunks_value) > MAX_EXTRACTED_CHARS + MAX_CHUNKS * CHUNK_OVERLAP
         ):
             raise RuntimeError("Parser zwrócił nieprawidłową strukturę wyniku")
         return ParsedDocument(
