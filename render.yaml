@@ -25,7 +25,7 @@ services:
 
       # Provider allowlist is deny-by-default in the runtime router.
       - key: LLM_ALLOWED_PROVIDERS
-        value: openai,deepseek
+        value: ""
 
       # Add secret values in the Render dashboard; never commit API keys.
       - key: OPENAI_API_KEY
@@ -44,4 +44,4 @@ services:
 
 
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false
