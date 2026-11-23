@@ -4,7 +4,7 @@ import hmac
 import json
 import os
 
-from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN, Principal
 
 
 class ApiTokenMiddleware:
@@ -51,8 +51,10 @@ class ApiTokenMiddleware:
             except Exception:
                 # A credential backend failure must never downgrade to unauthenticated access.
                 return None, "unavailable"
-            if principal is not None:
+            if isinstance(principal, Principal):
                 return principal, None
+            if principal is not None:
+                return None, None
 
         if supplied and self.token and hmac.compare_digest(supplied, self.token):
             return SYSTEM_ADMIN, None
