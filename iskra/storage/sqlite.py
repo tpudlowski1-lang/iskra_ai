@@ -10,6 +10,8 @@ import stat
 import time
 from contextlib import contextmanager
 
+from iskra.storage.private_path import ensure_private_parent
+
 
 class SQLiteGraphStore:
     """A graph repository permanently scoped to one tenant identifier."""
@@ -30,11 +32,7 @@ class SQLiteGraphStore:
 
     def _prepare_private_path(self):
         """Create a private directory and reject symlink/non-regular DB paths."""
-        parent = os.path.dirname(self.database_path)
-        os.makedirs(parent, mode=0o700, exist_ok=True)
-        if os.path.islink(parent) or not os.path.isdir(parent):
-            raise OSError("Katalog bazy grafu musi być zwykłym katalogiem")
-        os.chmod(parent, 0o700)
+        ensure_private_parent(self.database_path)
 
         flags = os.O_CREAT | os.O_RDWR
         if hasattr(os, "O_NOFOLLOW"):
