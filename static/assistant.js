@@ -112,7 +112,7 @@
     logoutButton.hidden = true;
     sendButton.disabled = true;
     messages.replaceChildren();
-    addMessage("assistant", "Sesja została zakończona. Token nie jest już przechowywany w pamięci strony.");
+    addMessage("assistant", "Sesja została zakończona. Strona odrzuciła referencję do tokena.");
     setStatus("Rozłączono.");
     tokenInput.focus();
   });
