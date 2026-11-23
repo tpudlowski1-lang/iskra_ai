@@ -1,8 +1,8 @@
 """Persistent, tenant-bound API credential registry (SQLite prototype).
 
 The registry stores only SHA-256 digests of high-entropy random bearer tokens.
-It is not wired into WSGI authentication yet; callers must not enable tenant
-routes until the registry is integrated and the isolation gates pass.
+It can be injected into the WSGI authentication middleware. SQLite remains
+a single-instance prototype and does not establish tenant data isolation.
 """
 from dataclasses import dataclass
 import hashlib
