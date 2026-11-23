@@ -1,8 +1,10 @@
+import os
 import unittest
 
 from werkzeug.test import Client
 from werkzeug.wrappers import Response
 
+os.environ["ISKRA_TESTING"] = "true"
 import wsgi
 
 
