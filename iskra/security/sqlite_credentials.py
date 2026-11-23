@@ -132,6 +132,13 @@ class SQLiteCredentialStore:
         return actor.strip()
 
     @staticmethod
+    def _require_tenant_admin(principal):
+        if (not isinstance(principal, Principal)
+                or "admin" not in principal.roles
+                or principal.tenant_id == "system"):
+            raise PermissionError("Wymagany administrator tenant")
+
+    @staticmethod
     def _digest(token):
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -310,6 +317,146 @@ class SQLiteCredentialStore:
                 self._record_event(
                     connection, "credential_rotated", credential_id,
                     principal, actor, now, related_credential_id=new_id,
+                )
+        return IssuedCredential(new_id, new_token, expiry)
+
+    def list_for_tenant(self, principal):
+        """List tenant credential metadata without token digests or plaintext tokens."""
+        self._require_tenant_admin(principal)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT credential_id, subject, tenant_id, roles_json,
+                       created_at, expires_at, revoked_at
+                FROM api_credentials
+                WHERE tenant_id = ?
+                ORDER BY created_at DESC, credential_id
+                """,
+                (principal.tenant_id,),
+            ).fetchall()
+        return [
+            {
+                "credential_id": row["credential_id"],
+                "subject": row["subject"],
+                "tenant_id": row["tenant_id"],
+                "roles": json.loads(row["roles_json"]),
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+                "revoked_at": row["revoked_at"],
+                "active": row["revoked_at"] is None and (
+                    row["expires_at"] is None or time.time() < row["expires_at"]
+                ),
+            }
+            for row in rows
+        ]
+
+    def issue_for_tenant(self, principal, subject, roles=None, expires_at=None):
+        """Issue a tenant-bound credential; tenant ID is never caller-supplied."""
+        self._require_tenant_admin(principal)
+        selected_roles = frozenset({"member"} if roles is None else roles)
+        new_principal = Principal(subject, principal.tenant_id, selected_roles)
+        return self.issue(new_principal, expires_at=expires_at, actor=principal.subject)
+
+    def revoke_for_tenant(self, principal, credential_id):
+        """Revoke only a credential belonging to the authenticated tenant."""
+        self._require_tenant_admin(principal)
+        if not isinstance(credential_id, str) or not credential_id:
+            return False
+        now = time.time()
+        with self._connection() as connection:
+            with connection:
+                row = connection.execute(
+                    """
+                    SELECT subject, tenant_id, roles_json, revoked_at
+                    FROM api_credentials
+                    WHERE credential_id = ? AND tenant_id = ?
+                    """,
+                    (credential_id, principal.tenant_id),
+                ).fetchone()
+                if row is None or row["revoked_at"] is not None:
+                    return False
+                cursor = connection.execute(
+                    """
+                    UPDATE api_credentials SET revoked_at = ?
+                    WHERE credential_id = ? AND tenant_id = ? AND revoked_at IS NULL
+                    """,
+                    (now, credential_id, principal.tenant_id),
+                )
+                if cursor.rowcount != 1:
+                    return False
+                target = Principal(
+                    row["subject"], row["tenant_id"],
+                    frozenset(json.loads(row["roles_json"])),
+                )
+                self._record_event(
+                    connection, "credential_revoked", credential_id,
+                    target, principal.subject, now,
+                )
+        return True
+
+    def rotate_for_tenant(self, principal, credential_id, expires_at=None, roles=None):
+        """Atomically rotate only a credential within the authenticated tenant."""
+        self._require_tenant_admin(principal)
+        if not isinstance(credential_id, str) or not credential_id:
+            raise ValueError("Wymagany jest credential_id")
+        now = time.time()
+        expiry_override = self._timestamp(expires_at, "expires_at")
+        new_id = "cred_" + secrets.token_urlsafe(18)
+        new_token = secrets.token_urlsafe(48)
+
+        with self._connection() as connection:
+            with connection:
+                old = connection.execute(
+                    """
+                    SELECT subject, tenant_id, roles_json, expires_at, revoked_at
+                    FROM api_credentials
+                    WHERE credential_id = ? AND tenant_id = ?
+                    """,
+                    (credential_id, principal.tenant_id),
+                ).fetchone()
+                if old is None or old["revoked_at"] is not None:
+                    raise ValueError("Nie znaleziono aktywnego tokenu w tym tenant")
+                if old["expires_at"] is not None and now >= old["expires_at"]:
+                    raise ValueError("Wygasłego tokenu nie można rotować")
+
+                old_roles = frozenset(json.loads(old["roles_json"]))
+                new_roles = old_roles if roles is None else frozenset(roles)
+                if not new_roles or not new_roles.issubset(old_roles) or not new_roles.issubset(ALLOWED_ROLES):
+                    raise ValueError("Rotacja może zachować role lub je ograniczyć")
+                target = Principal(old["subject"], old["tenant_id"], new_roles)
+                expiry = expiry_override if expiry_override is not None else old["expires_at"]
+                if expiry is not None and expiry <= now:
+                    raise ValueError("Nowy token musi mieć datę ważności w przyszłości")
+
+                connection.execute(
+                    """
+                    INSERT INTO api_credentials
+                    (credential_id, token_digest, subject, tenant_id, roles_json,
+                     created_at, expires_at, revoked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        new_id,
+                        self._digest(new_token),
+                        target.subject,
+                        target.tenant_id,
+                        json.dumps(sorted(target.roles), separators=(",", ":")),
+                        now,
+                        expiry,
+                    ),
+                )
+                cursor = connection.execute(
+                    """
+                    UPDATE api_credentials SET revoked_at = ?
+                    WHERE credential_id = ? AND tenant_id = ? AND revoked_at IS NULL
+                    """,
+                    (now, credential_id, principal.tenant_id),
+                )
+                if cursor.rowcount != 1:
+                    raise ValueError("Token został już zmieniony")
+                self._record_event(
+                    connection, "credential_rotated", credential_id,
+                    target, principal.subject, now, related_credential_id=new_id,
                 )
         return IssuedCredential(new_id, new_token, expiry)
 
