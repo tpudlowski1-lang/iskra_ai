@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4 (modular core); security, PostgreSQL tenant storage and migration tooling from PRs #28 and #31 are integrated into `refactor/modular-core`  
+**Current review:** draft PR #4 (modular core) and PR #43 (PostgreSQL document storage); security, graph storage, tenant migration, credential lifecycle and bounded document foundation from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core`  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -99,14 +99,13 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
 ### Stream D — Documents and retrieval
-- Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its useful ideas are retained, but the monolithic branch is not merged.
-- Rebuild the tenant document prototype behind modular service/repository interfaces.
-- Enforce upload size, file type, decompression/page/text limits, safe parsing, malware scanning strategy, and private storage.
-- Store document ownership and chunk ownership with composite tenant constraints.
-- Apply tenant filters to every retrieval query; test adversarial cross-tenant searches.
-- Add retrieval quality fixtures and source attribution before model answer generation.
-- Uploads remain disabled by default. Parser resource limits, private storage, malware/quarantine strategy and adversarial prompt-injection tests are mandatory.
-- Exit gate: all tenant-isolation and retrieval-grounding tests pass. No customer document upload before this gate.
+- Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its monolithic branch is not merged.
+- PR #39 is integrated: bounded PDF/DOCX/TXT parsers, principal-bound tenant SQLite repository, lexical FTS5 search and a spawned parser process with CPU/RAM/file-size limits and parent-enforced timeout.
+- Parent validates worker output schema, sanitized filename, extension and SHA-256 against the original bytes.
+- PR #43 adds PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index, a principal-scoped repository adapter and opt-in backend factory. SQLite remains the default.
+- No document HTTP routes are registered and no RAG answer generation is connected.
+- Remaining: dedicated low-privilege OS/container sandbox with no network, malware scanning/quarantine, quotas, retention, audit, object storage, production backup/restore rehearsal, retrieval evaluation and source attribution.
+- Uploads remain disabled by default. Do not expose customer documents until parser sandbox, tenant isolation and retrieval-grounding gates pass.
 
 ### Stream E — LLM router and assistant behavior
 - Preserve provider fallback order and JSON schema validation.
@@ -156,23 +155,23 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant storage, opt-in PostgreSQL backend, tenant migration utility, audited local credential lifecycle and internal document-service foundation from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core` at `6aa602c03a2e45e7836971c163763f84135f3f9e`:
+The security, tenant graph storage, opt-in PostgreSQL backend, tenant migration utility, audited local credential lifecycle and bounded document service from PRs #28, #31, #33, #36 and #39 are integrated into `refactor/modular-core`.
 
 - WSGI principal authentication with digest-only credentials, expiry/revocation and local issue/rotate/revoke/audit CLI.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - PostgreSQL graph schema/adapter with RLS ENABLE + FORCE and opt-in backend selection.
 - Dry-run-first tenant SQLite → PostgreSQL migration utility with private backup, checksum, transactional rollback and semantic verification.
-- Python 3.11/3.12: 159 tests each on PR #39; PostgreSQL 16, compileall and pip-audit passed.
-- Document service is internal only: no HTTP routes or RAG answer generation; parent validates worker schema, safe filename, extension and SHA-256.
+- Internal document service with bounded parsers, tenant SQLite/FTS5 and resource-limited parser process.
+- PR #43 adds PostgreSQL document/chunk schema with RLS and opt-in repository factory; its CI result is pending on the exact head.
 
-No document HTTP routes or RAG answer generation are connected. SQLite remains the default graph/document development backend; PostgreSQL is opt-in. No production data cutover or restore rehearsal has been performed.
+No document HTTP routes or RAG answer generation are connected. SQLite remains the default; PostgreSQL is opt-in. No production data cutover or restore rehearsal has been performed.
 
 ## 9. Current blockers — do not mark production-ready
 
 - Public account/credential lifecycle, recovery, controlled rotation and audit events remain incomplete.
 - PostgreSQL backend selection is implemented as opt-in; production-like migration rehearsal, staging cutover, rollback and restore drills remain outstanding.
 - Tenant API is SQLite by default; multi-replica operation requires PostgreSQL and an independently reviewed deployment.
-- The historical tenant document/RAG monolith has been statically audited; PR #39 integrated a modular parser, tenant-safe repository and resource-limited parser worker. It has no HTTP routes and remains unexposed pending a stronger OS/container sandbox, PostgreSQL document schema/RLS and operational controls.
+- The historical tenant document/RAG monolith has been statically audited; PR #39 and PR #43 integrate bounded parsing, tenant-safe SQLite/PostgreSQL repositories and a resource-limited parser worker. The service has no HTTP routes and remains unexposed pending a stronger OS/container sandbox and operational controls.
 - Dedicated worker leases, observability, staging verification and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
 
