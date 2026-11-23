@@ -52,6 +52,35 @@ class RuntimeConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.tenant_storage_backend, "postgres")
         self.assertEqual(settings.postgres_dsn, "postgresql://app:secret@localhost/iskra")
 
+    def test_document_storage_defaults_to_sqlite(self):
+        settings = load_settings(environ={}, project_root="/tmp")
+        self.assertEqual(settings.document_storage_backend, "sqlite")
+
+    def test_postgres_document_backend_requires_dsn(self):
+        with self.assertRaises(ValueError):
+            load_settings(
+                environ={"ISKRA_DOCUMENT_STORAGE_BACKEND": "postgres"},
+                project_root="/tmp",
+            )
+
+    def test_postgres_document_backend_accepts_shared_dsn(self):
+        settings = load_settings(
+            environ={
+                "ISKRA_DOCUMENT_STORAGE_BACKEND": "postgres",
+                "ISKRA_POSTGRES_DSN": "postgresql://app:secret@localhost/iskra",
+            },
+            project_root="/tmp",
+        )
+        self.assertEqual(settings.document_storage_backend, "postgres")
+        self.assertEqual(settings.postgres_dsn, "postgresql://app:secret@localhost/iskra")
+
+    def test_unknown_document_storage_backend_is_rejected(self):
+        with self.assertRaises(ValueError):
+            load_settings(
+                environ={"ISKRA_DOCUMENT_STORAGE_BACKEND": "mysql"},
+                project_root="/tmp",
+            )
+
     def test_unknown_tenant_storage_backend_is_rejected(self):
         with self.assertRaises(ValueError):
             load_settings(
