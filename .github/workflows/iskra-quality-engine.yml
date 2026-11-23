@@ -1,9 +1,9 @@
 name: Iskra Quality Engine v1
 on:
   push:
-    branches: [quality/engine-v1]
+    branches: [quality/engine-v1, integration/full-release-candidate-v1]
   pull_request:
-    branches: [refactor/modular-core]
+    branches: [refactor/modular-core, integration/full-release-candidate-v1]
   workflow_dispatch:
 permissions:
   contents: read
