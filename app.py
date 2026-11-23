@@ -17,6 +17,8 @@ try:
 except ImportError:  # pragma: no cover - non-POSIX development environments
     fcntl = None
 from flask import Flask, jsonify, render_template, render_template_string, request
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import knowledge
 from embeddings import EmbeddingProvider
@@ -35,6 +37,28 @@ REQUEST_RETRIES = 2
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = knowledge.MAX_UPLOAD_BYTES
 embedding_provider = EmbeddingProvider()
+
+
+def _rate_limit_identity():
+    tenant_id = request.environ.get("iskra.tenant_id")
+    return f"tenant:{tenant_id}" if tenant_id else get_remote_address()
+
+
+limiter = Limiter(
+    key_func=_rate_limit_identity,
+    app=app,
+    storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),
+    strategy="moving-window",
+    headers_enabled=True,
+)
+
+
+@app.errorhandler(429)
+def rate_limit_exceeded(_error):
+    return jsonify({
+        "error": "rate_limit_exceeded",
+        "message": "Przekroczono limit zapytań. Spróbuj ponownie za chwilę.",
+    }), 429
 
 
 # =========================
@@ -646,6 +670,7 @@ def upload_too_large(_error):
 
 
 @app.route("/admin/tenants", methods=["GET", "POST"])
+@limiter.limit("30 per minute")
 def admin_tenants():
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
@@ -663,6 +688,7 @@ def admin_tenants():
 
 
 @app.route("/admin/tenants/<tenant_id>/rotate-key", methods=["POST"])
+@limiter.limit("10 per minute")
 def admin_rotate_tenant_key(tenant_id):
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
@@ -673,6 +699,7 @@ def admin_rotate_tenant_key(tenant_id):
 
 
 @app.route("/admin/tenants/<tenant_id>", methods=["DELETE"])
+@limiter.limit("10 per minute")
 def admin_delete_tenant(tenant_id):
     if request.environ.get("iskra.auth_role") != "admin":
         return jsonify({"error": "admin_required"}), 403
@@ -682,6 +709,7 @@ def admin_delete_tenant(tenant_id):
 
 
 @app.route("/api/documents", methods=["GET", "POST"])
+@limiter.limit("20 per minute")
 def documents():
     tenant_id = _tenant_id()
     if not tenant_id:
@@ -705,6 +733,7 @@ def documents():
 
 
 @app.route("/api/documents/<document_id>", methods=["DELETE"])
+@limiter.limit("20 per minute")
 def remove_document(document_id):
     tenant_id = _tenant_id()
     if not tenant_id:
@@ -716,6 +745,7 @@ def remove_document(document_id):
 
 
 @app.route("/api/chat", methods=["POST"])
+@limiter.limit("15 per minute")
 def grounded_chat():
     tenant_id = _tenant_id()
     if not tenant_id:
@@ -797,6 +827,7 @@ def grounded_chat():
 
 
 @app.route("/api/search", methods=["POST"])
+@limiter.limit("60 per minute")
 def search_documents():
     tenant_id = _tenant_id()
     if not tenant_id:
