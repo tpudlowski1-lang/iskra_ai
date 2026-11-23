@@ -138,7 +138,10 @@ def create_api_blueprint(
         credential_id = request.environ.get(PRINCIPAL_CREDENTIAL_ID_ENV_KEY)
         if not credential_id:
             return jsonify({"error": "persistent_credential_required"}), 403
-        if request.is_json and request.get_json(silent=True) not in ({}, None):
+        if not request.is_json:
+            return jsonify({"error": "application_json_required"}), 415
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or payload:
             return jsonify({"error": "invalid_session_payload"}), 400
         session_token = secrets.token_urlsafe(48)
         csrf_token = secrets.token_urlsafe(32)
