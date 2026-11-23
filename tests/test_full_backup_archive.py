@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
-from unittest.mock import patch
 
 from scripts.backup_iskra_data import BackupError, create_archive, restore_archive
 
@@ -99,8 +98,8 @@ class FullBackupArchiveTests(unittest.TestCase):
             {"name": "data/first.json", "path": str(self.knowledge), "kind": "json"},
             {"name": "data/second.json", "path": str(second), "kind": "json"},
         ]
-        with patch("scripts.backup_iskra_data.MAX_ARCHIVE_BYTES", 100):
-            with self.assertRaises(BackupError):
+        with patch("scripts.backup_iskra_data.MAX_ARCHIVE_BYTES", 40):
+            with self.assertRaisesRegex(BackupError, "Łączny rozmiar zasobów"):
                 create_archive(resources, str(self.archive), writes_paused=True)
         self.assertFalse(self.archive.exists())
 
@@ -142,6 +141,29 @@ class FullBackupArchiveTests(unittest.TestCase):
         link = self.root / "linked.json"
         link.symlink_to(self.knowledge)
         resources = [{"name": "data/link.json", "path": str(link), "kind": "json"}]
+        with self.assertRaises(BackupError):
+            create_archive(resources, str(self.archive), writes_paused=True)
+
+    def test_optional_dangling_symlink_is_rejected_not_treated_as_absent(self):
+        link = self.root / "dangling.json"
+        link.symlink_to(self.root / "missing-target.json")
+        resources = [{
+            "name": "optional/dangling.json",
+            "path": str(link),
+            "kind": "json",
+            "required": False,
+        }]
+        with self.assertRaises(BackupError):
+            create_archive(resources, str(self.archive), writes_paused=True)
+        self.assertFalse(self.archive.exists())
+
+    def test_resource_required_flag_must_be_boolean(self):
+        resources = [{
+            "name": "data/graph.sqlite3",
+            "path": str(self.graph),
+            "kind": "sqlite",
+            "required": "false",
+        }]
         with self.assertRaises(BackupError):
             create_archive(resources, str(self.archive), writes_paused=True)
 
