@@ -2,7 +2,7 @@
 
 **Status:** active integration program  
 **Canonical integration branch:** `refactor/modular-core`  
-**Current review:** draft PR #4 (modular core); security, PostgreSQL tenant storage and migration tooling from PRs #28 and #31 are integrated into `refactor/modular-core`  
+**Current review:** draft PR #4 (modular core) and PR #38 (internal document service); security, PostgreSQL tenant storage, migration and credential lifecycle from PRs #28, #31, #33 and #36 are integrated into `refactor/modular-core`  
 **Architecture:** modular Flask monolith  
 **Last inventory:** 2026-11-23
 
@@ -99,14 +99,11 @@ These streams can be investigated in parallel, but code is integrated in depende
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
 ### Stream D — Documents and retrieval
-- Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its useful ideas are retained, but the monolithic branch is not merged.
-- Rebuild the tenant document prototype behind modular service/repository interfaces.
-- Enforce upload size, file type, decompression/page/text limits, safe parsing, malware scanning strategy, and private storage.
-- Store document ownership and chunk ownership with composite tenant constraints.
-- Apply tenant filters to every retrieval query; test adversarial cross-tenant searches.
-- Add retrieval quality fixtures and source attribution before model answer generation.
-- Uploads remain disabled by default. Parser resource limits, private storage, malware/quarantine strategy and adversarial prompt-injection tests are mandatory.
-- Exit gate: all tenant-isolation and retrieval-grounding tests pass. No customer document upload before this gate.
+- Static security review of historical `iskra-tenant-rag` completed; see `docs/RAG_SECURITY_REVIEW.md`. Its monolithic branch is not merged.
+- PR #38 adds bounded PDF/DOCX/TXT parsers, a principal-bound tenant SQLite repository, lexical FTS5 search and an isolated parser process with CPU/RAM/file-size limits and a parent-enforced timeout.
+- Parent verifies the worker result schema, safe filename, extension and SHA-256 against the original bytes. No document HTTP routes are registered and no RAG answer generation is connected.
+- Remaining: dedicated low-privilege OS/container sandbox with no network, malware scanning/quarantine, quotas, retention, audit, PostgreSQL document/chunk schema with RLS, restore drills and retrieval quality/source attribution.
+- Uploads remain disabled by default. Do not expose customer documents until all tenant-isolation, parser-sandbox and retrieval-grounding gates pass.
 
 ### Stream E — LLM router and assistant behavior
 - Preserve provider fallback order and JSON schema validation.
@@ -156,25 +153,25 @@ A passing unit suite is not a production-readiness claim. The release record mus
 
 ## 8. Implementation snapshot — 2026-11-23
 
-The security, tenant storage, opt-in PostgreSQL backend and tenant migration utility from PRs #28 and #31 are integrated into `refactor/modular-core` at `5c1b40954b7e5879deaaa52980fb79b08030b5df`:
+The security, tenant storage, opt-in PostgreSQL backend, tenant migration utility and audited local credential lifecycle from PRs #28, #31, #33 and #36 are integrated into `refactor/modular-core`:
 
-- WSGI principal authentication with hashed credentials, expiry and revocation.
+- WSGI principal authentication with hashed credentials, expiry and revocation; local issue/rotate/revoke/audit CLI with role non-escalation.
 - Tenant-scoped SQLite graph API and principal-bound store factory.
 - Atomic initialization of the twelve foundational pillars.
 - PostgreSQL graph schema and adapter with RLS policies, tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - Runtime configuration validates SQLite (default) or PostgreSQL (`ISKRA_TENANT_STORAGE_BACKEND=postgres` requires `ISKRA_POSTGRES_DSN`).
-- Python 3.11 and 3.12: 118 tests each on PR #31; PostgreSQL 16 RLS/migration integration, compileall and pip-audit passed.
+- Python 3.11 and 3.12: 133 tests each on PR #36; PostgreSQL 16 RLS/migration integration, compileall and pip-audit passed.
 
 PostgreSQL remains opt-in and requires a separately applied migration, dedicated runtime role, staging cutover and restore/rollback drills. Passing CI does not establish production readiness.
 
-This does not mean PostgreSQL is already the default or that Iskra is production-ready. The migration utility has not been run against production data; no production cutover, rollback rehearsal, restore drill, public credential provisioning, audit pipeline or staging deployment has been performed.
+This does not mean PostgreSQL is already the default or that Iskra is production-ready. The migration utility has not been run against production data; no production cutover, rollback rehearsal, restore drill, public credential provisioning, centralized audit pipeline or staging deployment has been performed.
 
 ## 9. Current blockers — do not mark production-ready
 
-- Public account/credential lifecycle, recovery, controlled rotation and audit events remain incomplete.
+- Public account/credential lifecycle, recovery and centralized immutable audit remain incomplete; local operator credential lifecycle is implemented.
 - PostgreSQL backend selection is implemented as opt-in; production-like migration rehearsal, staging cutover, rollback and restore drills remain outstanding.
 - Tenant API is SQLite by default; multi-replica operation requires PostgreSQL and an independently reviewed deployment.
-- The historical tenant document/RAG monolith has been statically audited; draft PR #34 contains the modular parser, tenant-safe repository and resource-limited parser worker. It has no HTTP routes and remains unexposed pending a stronger OS/container sandbox, PostgreSQL document schema/RLS and operational controls.
+- The historical tenant document/RAG monolith has been statically audited; draft PR #38 contains bounded parsers, tenant-safe repository and resource-limited parser worker. It has no HTTP routes and remains unexposed pending a stronger OS/container sandbox, PostgreSQL document schema/RLS and operational controls.
 - Dedicated worker leases, observability, staging verification and restore drills remain outstanding.
 - Billing and paid customer onboarding are out of scope until the preceding controls pass.
 
