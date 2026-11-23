@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [iskra-unified-core, refactor/modular-core, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1, feature/tenant-account-lifecycle-v1, feature/tenant-admin-console-v1]
   push:
-    branches: [refactor/modular-core]
+    branches: [refactor/modular-core, integration/full-release-candidate-v1]
   workflow_dispatch:
 
 permissions:
