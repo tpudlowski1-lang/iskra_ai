@@ -42,19 +42,24 @@ class ApiTokenMiddleware:
             self.configuration_error = True
 
     @staticmethod
-    def _provided_token(environ):
+    def _provided_token_details(environ):
         authorization = environ.get("HTTP_AUTHORIZATION", "")
         scheme, separator, credentials = authorization.partition(" ")
         if separator and scheme.lower() == "bearer":
-            return credentials.strip()
+            return credentials.strip(), "bearer"
         if separator and scheme.lower() == "basic":
             try:
                 decoded = base64.b64decode(credentials.strip(), validate=True).decode("utf-8")
                 _username, colon, password = decoded.partition(":")
-                return password if colon else ""
+                return (password if colon else ""), "basic"
             except (ValueError, UnicodeDecodeError):
-                return ""
-        return environ.get("HTTP_X_API_TOKEN", "")
+                return "", "basic"
+        token = environ.get("HTTP_X_API_TOKEN", "")
+        return token, "header" if token else ""
+
+    @staticmethod
+    def _provided_token(environ):
+        return ApiTokenMiddleware._provided_token_details(environ)[0]
 
     @staticmethod
     def _response(start_response, status, payload, extra_headers=()):
@@ -125,7 +130,7 @@ class ApiTokenMiddleware:
                 {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN or ISKRA_API_CREDENTIALS_JSON."},
             )
 
-        supplied = self._provided_token(environ)
+        supplied, supplied_scheme = self._provided_token_details(environ)
         principal = None
         credential_id = None
         browser_session_token = ""
@@ -180,8 +185,22 @@ class ApiTokenMiddleware:
                 [("WWW-Authenticate", 'Basic realm="Iskra AI", charset="UTF-8"')],
             )
 
+        method = str(environ.get("REQUEST_METHOD", "GET")).upper()
+        if supplied_scheme == "basic" and method not in {"GET", "HEAD", "OPTIONS"}:
+            fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
+            origin = environ.get("HTTP_ORIGIN", "")
+            host = str(environ.get("HTTP_HOST", "")).lower()
+            try:
+                origin_host = urlsplit(origin).netloc.lower() if origin else ""
+            except ValueError:
+                origin_host = ""
+            if fetch_site == "cross-site" or not host or origin_host != host:
+                return self._response(
+                    start_response, "403 Forbidden",
+                    {"error": "csrf_rejected", "message": "Basic-authenticated browser mutations require a same-origin request."},
+                )
+
         if browser_session is not None:
-            method = str(environ.get("REQUEST_METHOD", "GET")).upper()
             if method not in {"GET", "HEAD", "OPTIONS"}:
                 fetch_site = str(environ.get("HTTP_SEC_FETCH_SITE", "")).lower()
                 origin = environ.get("HTTP_ORIGIN", "")
