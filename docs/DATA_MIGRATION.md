@@ -52,3 +52,8 @@ print(result)
 ```
 
 A successful file restore is not the same as a production recovery test. Before changing application configuration, validate tenant counts and graph snapshots, confirm the restored file is on durable storage, and test application access in an isolated staging environment. This helper restores only the tenant graph SQLite database; it does not restore legacy JSON state, credentials, uploaded source documents outside this database, or PostgreSQL.
+
+
+## Staging execution and DSN safety
+
+For the full preflight, separate database identities, staging acceptance tests and rollback procedure, follow [PostgreSQL staging runbook](POSTGRES_STAGING_RUNBOOK.md). The migration CLI resolves the target in this order: explicit --postgres-dsn, ISKRA_POSTGRES_MIGRATION_DSN, then ISKRA_POSTGRES_DSN. It intentionally does not guess from generic DATABASE_URL, which may point to an unrelated service database. Use a dedicated migration credential with NOSUPERUSER NOBYPASSRLS, no table ownership and only the required graph-table DML grants.
