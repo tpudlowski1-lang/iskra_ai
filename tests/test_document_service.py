@@ -56,9 +56,9 @@ class TenantDocumentServiceTests(unittest.TestCase):
         self.assertEqual(self.service.list_documents(self.alpha), [])
 
     def test_duplicate_document_is_deduplicated_only_inside_same_tenant(self):
-        first = self.service.add_document(self.alpha, "first.txt", b"Treść do deduplikacji.")
-        duplicate = self.service.add_document(self.alpha, "renamed.txt", b"Treść do deduplikacji.")
-        other_tenant = self.service.add_document(self.beta, "same.txt", b"Treść do deduplikacji.")
+        first = self.service.add_document(self.alpha, "first.txt", "Treść do deduplikacji.".encode("utf-8"))
+        duplicate = self.service.add_document(self.alpha, "renamed.txt", "Treść do deduplikacji.".encode("utf-8"))
+        other_tenant = self.service.add_document(self.beta, "same.txt", "Treść do deduplikacji.".encode("utf-8"))
         self.assertFalse(first["duplicate"])
         self.assertTrue(duplicate["duplicate"])
         self.assertEqual(duplicate["document_id"], first["document_id"])
