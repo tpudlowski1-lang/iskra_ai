@@ -12,6 +12,9 @@ from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
 from iskra.security.rate_limit import create_rate_limiter
 from iskra.storage.tenant import TenantGraphStoreFactory
+from iskra.documents.factory import DocumentRepositoryFactory
+from iskra.documents.service import DocumentService
+from iskra.assistant.chat import KnowledgeChatService
 
 settings = load_settings()
 PORT = settings.port
@@ -44,6 +47,11 @@ from iskra.workers.autonomous import IskraAutonomiczna
 # Inicjalizacja obiektów globalnych
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
+
+document_repository = DocumentRepositoryFactory.from_settings(settings).build()
+document_service = DocumentService(document_repository)
+chat_service = KnowledgeChatService(document_service, bot.router)
+DOCUMENT_INGESTION_ENABLED = os.environ.get("ISKRA_ENABLE_DOCUMENT_INGESTION", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # =========================
 # DASHBOARD WEB
@@ -150,7 +158,13 @@ tenant_store_factory = TenantGraphStoreFactory(
     postgres_dsn=settings.postgres_dsn,
 )
 app.register_blueprint(
-    create_api_blueprint(siec, tenant_store_factory=tenant_store_factory)
+    create_api_blueprint(
+        siec,
+        tenant_store_factory=tenant_store_factory,
+        document_service=document_service,
+        chat_service=chat_service,
+        document_ingestion_enabled=DOCUMENT_INGESTION_ENABLED,
+    )
 )
 
 def create_development_wsgi_app(environ=None):
