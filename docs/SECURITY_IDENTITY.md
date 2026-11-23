@@ -24,7 +24,7 @@ When the SQLite store is configured:
 - supports optional expiry and immediate revocation;
 - rejects malformed and oversized tokens;
 - uses parameterized SQL and transactional writes;
-- sets database file permissions to owner-only (0600);
+- requires the parent directory to be owned by the service user and inaccessible to group/other users (0700); opens the directory and database with `O_NOFOLLOW`, checks regular-file ownership/link count, and applies database permissions through the file descriptor (0600);
 - closes database connections deterministically.
 
 Issuance, revocation and rotation are recorded in a separate audit table in the same SQLite transaction as the credential change. Rotation atomically revokes the old token and issues a replacement; it preserves subject/tenant and may only retain or reduce roles. Audit records contain no raw token or token digest. This is a local SQLite operator audit trail, not an immutable centralized audit service; file access, encrypted backups, retention and external monitoring still require operational controls.
