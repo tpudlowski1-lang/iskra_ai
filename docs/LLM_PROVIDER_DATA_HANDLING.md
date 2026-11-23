@@ -84,3 +84,40 @@ For an environment that has not passed provider/privacy review:
 - Do not run a process with `ISKRA_PROCESS_ROLE=worker`.
 - Do not configure provider credentials unless a tested feature requires them and the data-flow has been approved.
 - If external inference is not approved, do not rely on an empty fallback list as the only control. The current router has no enforced local-only policy; a local-only guarantee requires a code-level deny-external policy and negative network-call tests.
+
+
+## Official provider terms reviewed on 2026-11-23
+
+This is a point-in-time reading of public provider documentation. It is not a substitute for the exact account-specific API agreement, Data Processing Addendum, organization settings, region configuration or legal advice. The Iskra code does not currently verify any of these contractual settings at runtime.
+
+### OpenAI API
+
+The official API data-controls documentation states that API data is not used to train or improve OpenAI models unless the customer explicitly opts in. It also states that abuse-monitoring logs may include prompts/responses and are retained for up to 30 days by default, subject to legal/safety exceptions. Zero Data Retention (ZDR) and Modified Abuse Monitoring are eligibility-based controls requiring prior approval. The documented `/v1/chat/completions` endpoint is listed as ZDR-eligible, with endpoint-specific limitations.
+
+Implication for Iskra: the current router uses `/v1/chat/completions`, but does not establish that the Iskra operator has ZDR/MAM approval or has configured organization/project controls. Treat default abuse-monitoring retention as applicable until the operator verifies otherwise.
+
+Official source: [OpenAI — Data controls in the OpenAI platform](https://developers.openai.com/api/docs/guides/your-data).
+
+### Google Gemini API
+
+The Gemini API Additional Terms distinguish paid and unpaid services. The terms define Gemini API access as a Paid Service when the API is accessed through a Cloud Project associated with an active billing account. For Paid Services, Google states that prompts and responses are not used to improve its products and are processed under the applicable Data Processing Addendum. It also states that prompts/responses may be logged for a limited period for abuse prevention, service safety and required legal/regulatory disclosures, and may be stored transiently or cached in countries where Google or its agents operate facilities.
+
+For Unpaid Services, the terms state that submitted content and generated responses may be used to provide, improve and develop Google products and machine-learning technologies, and that human reviewers may read, annotate and process API input/output. The terms warn not to submit sensitive, confidential or personal information to Unpaid Services. The same terms include a jurisdiction-specific note for EEA, Switzerland and UK users; confirm the applicable terms for the actual project/account rather than assuming the general unpaid rule applies unchanged.
+
+Implication for Iskra: the current code does not inspect billing status or enforce a paid-only project. If Gemini is enabled as fallback, the operator must verify the Cloud Project's billing status and applicable regional terms before any non-public data is sent.
+
+Official sources: [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms) and [Gemini API data logging and sharing](https://ai.google.dev/gemini-api/docs/logs-policy).
+
+### DeepSeek Open Platform API
+
+The official DeepSeek Open Platform Terms of Service state that, for downstream systems/applications built by the developer, processing of end-user personal information is not covered by DeepSeek's own privacy policy; the developer is described as the controller for that processing scenario and is required to disclose the relevant privacy policy to end users. The terms also place responsibility on the API user for having the rights, licenses and permissions needed to submit Inputs and for complying with applicable laws. The published terms specify mainland China law as governing law.
+
+The general DeepSeek consumer Privacy Policy is not automatically treated here as a definitive API retention schedule. The reviewed Open Platform materials do not provide a sufficiently clear, API-specific retention/deletion commitment for Iskra's use case to record a concrete retention period. Obtain the exact API agreement, data-processing terms, subprocessors, processing locations, retention/deletion commitments and transfer mechanism directly from DeepSeek before transmitting personal or customer data.
+
+Implication for Iskra: DeepSeek is the router's default primary provider in code. That default is not an approval for customer-data processing. Keep DeepSeek disabled for customer/confidential data until the API-specific contractual and transfer review is complete.
+
+Official sources: [DeepSeek Open Platform Terms of Service](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html) and [DeepSeek Privacy Policy](https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html). The latter must not be mistaken for an API-specific retention schedule.
+
+### Required operator record
+
+Before enabling any provider for a commercial tenant, record the legal entity/account, API product, paid/free status, service region, applicable agreement version/date, DPA status, subprocessors, abuse-monitoring retention, training-use setting, deletion process, transfer mechanism and the person who approved the configuration. The application currently has no mechanism to collect or enforce this record.
