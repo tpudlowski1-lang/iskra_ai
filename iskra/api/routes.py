@@ -1,12 +1,13 @@
 """HTTP API blueprint factory with injected graph and tenant storage dependencies."""
 import sqlite3
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from iskra.security.policy import require_roles, require_system_admin
 from iskra.security.principal import principal_from_environ
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
+from iskra.security.sqlite_credentials import CredentialStoreUnavailable
 
 
 MAX_DOCUMENT_UPLOAD_BYTES = 1024 * 1024
@@ -119,6 +120,107 @@ def create_api_blueprint(
             return jsonify({"error": "invalid_model_response"}), 502
         except (DocumentStorageError, OSError, sqlite3.Error):
             return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.get("/api/tenant/credentials")
+    @require_roles("admin")
+    def list_tenant_credentials():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            return jsonify({"credentials": store.list_for_tenant(principal)})
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.post("/api/tenant/credentials")
+    @require_roles("admin")
+    def issue_tenant_credential():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if not request.is_json:
+            return jsonify({"error": "application_json_required"}), 415
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or set(payload) - {"subject", "roles", "expires_at"}:
+            return jsonify({"error": "invalid_credential_payload"}), 400
+        principal = principal_from_environ(request.environ)
+        try:
+            issued = store.issue_for_tenant(
+                principal,
+                payload.get("subject"),
+                roles=payload.get("roles"),
+                expires_at=payload.get("expires_at"),
+            )
+            return jsonify({
+                "credential_id": issued.credential_id,
+                "token": issued.token,
+                "subject": payload.get("subject"),
+                "tenant_id": principal.tenant_id,
+                "roles": sorted({"member"} if payload.get("roles") is None else set(payload.get("roles"))),
+                "expires_at": issued.expires_at,
+                "warning": "Token jest wyświetlany tylko raz. Zapisz go w bezpiecznym menedżerze sekretów.",
+            }), 201
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid_credential_payload"}), 400
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.post("/api/tenant/credentials/<credential_id>/rotate")
+    @require_roles("admin")
+    def rotate_tenant_credential(credential_id):
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if request.is_json:
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict) or set(payload) - {"roles", "expires_at"}:
+                return jsonify({"error": "invalid_credential_payload"}), 400
+        elif request.data:
+            return jsonify({"error": "application_json_required"}), 415
+        else:
+            payload = {}
+        principal = principal_from_environ(request.environ)
+        try:
+            issued = store.rotate_for_tenant(
+                principal,
+                credential_id,
+                expires_at=payload.get("expires_at"),
+                roles=payload.get("roles"),
+            )
+            return jsonify({
+                "credential_id": issued.credential_id,
+                "token": issued.token,
+                "tenant_id": principal.tenant_id,
+                "expires_at": issued.expires_at,
+                "warning": "Nowy token jest wyświetlany tylko raz; poprzedni token został unieważniony.",
+            }), 200
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except ValueError:
+            return jsonify({"error": "credential_not_rotatable"}), 404
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.delete("/api/tenant/credentials/<credential_id>")
+    @require_roles("admin")
+    def revoke_tenant_credential(credential_id):
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            if not store.revoke_for_tenant(principal, credential_id):
+                return jsonify({"error": "credential_not_found"}), 404
+            return jsonify({"status": "revoked", "credential_id": credential_id})
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
 
     @api.get("/api/tenant/documents")
     @require_roles("member", "admin")
