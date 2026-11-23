@@ -6,6 +6,7 @@ request passes through the authentication middleware.
 import os
 
 from security import ApiTokenMiddleware
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 
 def create_wsgi_app(application=None, environ=None):
@@ -26,6 +27,14 @@ def create_wsgi_app(application=None, environ=None):
         credential_store = SQLiteCredentialStore(database_path)
 
     application.config["ISKRA_CREDENTIAL_STORE"] = credential_store
+
+    # Trust exactly one reverse proxy only when the deployment explicitly opts in.
+    # Render terminates public TLS at its load balancer and forwards HTTP to Gunicorn.
+    trust_proxy_headers = str(env.get("ISKRA_TRUST_PROXY_HEADERS", "")).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    if trust_proxy_headers:
+        application.wsgi_app = ProxyFix(application.wsgi_app, x_proto=1)
 
     return ApiTokenMiddleware(
         application.wsgi_app,
