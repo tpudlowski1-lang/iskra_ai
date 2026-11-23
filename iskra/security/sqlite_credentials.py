@@ -292,11 +292,6 @@ class SQLiteCredentialStore:
                 new_roles = old_roles if roles is None else frozenset(roles)
                 if not self._roles_are_non_escalating(old_roles, new_roles):
                     raise ValueError("Rotacja może zachować uprawnienia lub je ograniczyć, nie może ich zwiększać")
-                if ("admin" in old_roles and "admin" not in new_roles
-                        and not self._has_other_active_admin(
-                            connection, old["tenant_id"], credential_id, now
-                        )):
-                    raise LastTenantAdminError("Nie można zdegradować ostatniego aktywnego administratora")
                 principal = Principal(old["subject"], old["tenant_id"], new_roles)
                 expiry = expiry_override if expiry_override is not None else old["expires_at"]
                 if expiry is not None and expiry <= now:
