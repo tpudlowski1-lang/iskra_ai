@@ -26,6 +26,7 @@ The /assistant browser UI exchanges a persistent tenant API credential for a sho
 ## Operational requirements and limitations
 
 - Serve the browser UI over HTTPS. The __Host- cookie is intentionally Secure-only.
+- If TLS terminates at a reverse proxy (as on Render), enable `ISKRA_TRUST_PROXY_HEADERS=true` only when exactly one trusted proxy strips/replaces client-supplied forwarded headers. The WSGI entry point then trusts only one `X-Forwarded-Proto` hop; leave this disabled for direct deployments.
 - Configure ISKRA_CREDENTIAL_DB_PATH on durable private storage with the existing owner-only directory/file protections. Ephemeral filesystems are not suitable for production sessions.
 - SQLite credential/session storage is single-instance. Multi-instance production requires the reviewed shared PostgreSQL session/credential backend and concurrency testing.
 - This is not a complete identity product: no public signup, password login, MFA, email verification, recovery, invitation workflow or billing is included.
