@@ -198,6 +198,28 @@ class TenantApiIntegrationTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/search", json=["query"], headers=headers).status_code, 400)
         self.assertEqual(self.client.post("/api/chat", json=["question"], headers=headers).status_code, 400)
 
+
+    def test_chat_rate_limit_is_applied_per_tenant(self):
+        admin = {"Authorization": "Bearer integration-admin-secret"}
+        tenant_a = self.client.post("/admin/tenants", json={"name": "Limit A"}, headers=admin).get_json()
+        tenant_b = self.client.post("/admin/tenants", json={"name": "Limit B"}, headers=admin).get_json()
+        headers_a = {"X-Iskra-Tenant-Key": tenant_a["api_key"]}
+        headers_b = {"X-Iskra-Tenant-Key": tenant_b["api_key"]}
+        statuses = [
+            self.client.post("/api/chat", json={"question": "brak dokumentów"}, headers=headers_a).status_code
+            for _ in range(16)
+        ]
+        self.assertEqual(statuses[:15], [200] * 15)
+        self.assertEqual(statuses[15], 429)
+        self.assertEqual(
+            self.client.post("/api/chat", json={"question": "brak dokumentów"}, headers=headers_b).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post("/api/chat", json={"question": "brak dokumentów"}, headers=headers_a).get_json()["error"],
+            "rate_limit_exceeded",
+        )
+
     def test_grounded_chat_returns_only_valid_citations(self):
         admin = {"Authorization": "Bearer integration-admin-secret"}
         created = self.client.post("/admin/tenants", json={"name": "Firma RAG"}, headers=admin)
