@@ -19,3 +19,26 @@ SQLite is appropriate for local development and isolated tests. PostgreSQL is th
 
 ## Rollback
 If any validation, import, or staging smoke test fails, keep the previous deployment and restore the original JSON snapshot. Never overwrite the source file during migration.
+
+
+## Restore verified SQLite backup
+
+A restore must target a **new file path**. The restore helper verifies the supplied SHA-256 checksum, opens the backup read-only, runs SQLite integrity and foreign-key checks, and confirms the tenant graph schema before publishing the restored file. It writes a private temporary file in the destination directory, flushes it, then publishes it atomically without replacing an existing path. Existing targets are rejected; operators must choose a new destination and handle any application cutover separately.
+
+Example from Python:
+
+```python
+from scripts.migrate_tenant_sqlite_to_postgres import (
+    restore_private_backup,
+    sha256_file,
+)
+
+backup = "/secure/backups/iskra-tenant-snapshot.sqlite3"
+target = "/secure/restore/iskra-tenants-restored.sqlite3"
+expected_sha256 = "copy-the-64-character-checksum-from-the-reviewed-manifest"
+
+result = restore_private_backup(backup, target, expected_sha256)
+print(result)
+```
+
+A successful file restore is not the same as a production recovery test. Before changing application configuration, validate tenant counts and graph snapshots, confirm the restored file is on durable storage, and test application access in an isolated staging environment. This helper restores only the tenant graph SQLite database; it does not restore legacy JSON state, credentials, uploaded source documents outside this database, or PostgreSQL.

@@ -12,7 +12,9 @@ from scripts.migrate_tenant_sqlite_to_postgres import (
     create_private_backup,
     migrate_snapshots,
     read_tenant_snapshots,
+    restore_private_backup,
     sha256_file,
+    verify_private_backup,
 )
 
 
@@ -52,6 +54,58 @@ class TenantMigrationUtilityTests(unittest.TestCase):
         snapshots = read_tenant_snapshots(backup)
         self.assertEqual(set(snapshots), {"tenant-alpha", "tenant-beta"})
         self.assertEqual(snapshots["tenant-alpha"]["neurons"]["node-1"]["label"], "alpha")
+
+    def test_backup_restore_is_atomic_private_and_preserves_tenant_data(self):
+        backup = create_private_backup(self.source, self.backup_dir)
+        digest = sha256_file(backup)
+        restored = os.path.join(self.tmp.name, "restored", "tenant-store.sqlite3")
+        report = restore_private_backup(backup, restored, digest)
+        self.assertEqual(report["status"], "restored_verified")
+        self.assertEqual(os.stat(restored).st_mode & 0o777, 0o600)
+        self.assertEqual(sha256_file(restored), digest)
+        snapshots = read_tenant_snapshots(restored)
+        self.assertEqual(set(snapshots), {"tenant-alpha", "tenant-beta"})
+        self.assertEqual(
+            snapshots["tenant-alpha"]["neurons"]["node-1"]["label"], "alpha"
+        )
+
+    def test_restore_rejects_checksum_mismatch_without_creating_target(self):
+        backup = create_private_backup(self.source, self.backup_dir)
+        restored = os.path.join(self.tmp.name, "restored.sqlite3")
+        with self.assertRaisesRegex(MigrationError, "SHA-256"):
+            restore_private_backup(backup, restored, "0" * 64)
+        self.assertFalse(os.path.exists(restored))
+
+    def test_restore_never_overwrites_existing_target(self):
+        backup = create_private_backup(self.source, self.backup_dir)
+        restored = os.path.join(self.tmp.name, "existing.sqlite3")
+        with open(restored, "wb") as handle:
+            handle.write(b"keep-existing-content")
+        with self.assertRaisesRegex(MigrationError, "już istnieje"):
+            restore_private_backup(backup, restored, sha256_file(backup))
+        with open(restored, "rb") as handle:
+            self.assertEqual(handle.read(), b"keep-existing-content")
+        leftovers = [
+            name for name in os.listdir(self.tmp.name)
+            if name.startswith(".iskra-restore-")
+        ]
+        self.assertEqual(leftovers, [])
+
+    def test_restore_rejects_symlink_backup(self):
+        backup = create_private_backup(self.source, self.backup_dir)
+        link = os.path.join(self.tmp.name, "backup-link.sqlite3")
+        os.symlink(backup, link)
+        restored = os.path.join(self.tmp.name, "restored-from-link.sqlite3")
+        with self.assertRaises(MigrationError):
+            restore_private_backup(link, restored, sha256_file(backup))
+        self.assertFalse(os.path.exists(restored))
+
+    def test_backup_verification_rejects_non_sqlite_file(self):
+        corrupt = os.path.join(self.tmp.name, "corrupt.sqlite3")
+        with open(corrupt, "wb") as handle:
+            handle.write(b"not-a-sqlite-database")
+        with self.assertRaisesRegex(MigrationError, "SQLite"):
+            verify_private_backup(corrupt, sha256_file(corrupt))
 
     def test_dry_run_is_default_and_does_not_require_postgres(self):
         backup = create_private_backup(self.source, self.backup_dir)
