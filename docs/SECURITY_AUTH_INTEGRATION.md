@@ -10,7 +10,7 @@ This branch combines the WSGI authentication integration, the fail-closed direct
 4. An exception from the persistent registry returns 503 and never falls through to another identity source.
 5. Unconfigured or malformed server-side credentials fail closed.
 
-The development entrypoint and public production WSGI entrypoint use the same authentication middleware. The global graph API accepts only the exact `SYSTEM_ADMIN` object. Tenant-scoped static or SQLite credentials cannot claim the reserved `system` tenant.
+The development entrypoint and public production WSGI entrypoint use the same authentication middleware. The global graph API accepts only the exact `SYSTEM_ADMIN` object. Tenant-scoped static or SQLite credentials cannot claim the reserved `system` tenant. Authentication rejects legacy persistent rows already stored with `tenant_id=system`, so an old row cannot retain system-like access after upgrade.
 
 ## Integrated tests required
 
