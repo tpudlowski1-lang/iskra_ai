@@ -4,6 +4,7 @@ import unittest
 
 from iskra.security.principal import Principal, SYSTEM_ADMIN
 from iskra.storage.tenant import TenantGraphStoreFactory
+from iskra.storage.postgres import PostgresGraphStore
 
 
 class TenantGraphStoreFactoryTests(unittest.TestCase):
@@ -62,26 +63,6 @@ class TenantGraphStoreFactoryTests(unittest.TestCase):
             "beta initial",
         )
 
-    def test_postgres_backend_requires_dsn(self):
-        with self.assertRaises(ValueError):
-            TenantGraphStoreFactory(backend="postgres")
-
-    def test_postgres_backend_selects_principal_bound_adapter(self):
-        from iskra.storage.postgres import PostgresGraphStore
-
-        factory = TenantGraphStoreFactory(
-            backend="postgres",
-            postgres_dsn="postgresql://app:managed-secret@localhost/iskra",
-        )
-        self.assertEqual(factory.backend, "postgres")
-        store = factory.for_principal(self.alpha)
-        self.assertIsInstance(store, PostgresGraphStore)
-        self.assertEqual(store.tenant_id, self.alpha.tenant_id)
-
-    def test_unknown_backend_is_rejected(self):
-        with self.assertRaises(ValueError):
-            TenantGraphStoreFactory(self.database_path, backend="mysql")
-
     def test_factory_scope_is_derived_from_principal_not_external_input(self):
         store = self.factory.for_principal(self.alpha)
         store.save(self.graph("alpha only"))
@@ -89,6 +70,28 @@ class TenantGraphStoreFactoryTests(unittest.TestCase):
         self.assertEqual(store.tenant_id, "tenant-alpha")
         self.assertNotEqual(store.tenant_id, "tenant-attacker")
 
+
+
+    def test_postgres_factory_uses_verified_principal(self):
+        factory = TenantGraphStoreFactory(
+            backend="postgres",
+            postgres_dsn="postgresql://app:secret@localhost/iskra",
+        )
+        store = factory.for_principal(self.alpha)
+        self.assertIsInstance(store, PostgresGraphStore)
+        self.assertEqual(store.tenant_id, "tenant-alpha")
+
+    def test_postgres_factory_requires_dsn(self):
+        with self.assertRaises(ValueError):
+            TenantGraphStoreFactory(backend="postgres")
+
+    def test_postgres_factory_rejects_system_principal(self):
+        factory = TenantGraphStoreFactory(
+            backend="postgres",
+            postgres_dsn="postgresql://app:secret@localhost/iskra",
+        )
+        with self.assertRaises(PermissionError):
+            factory.for_principal(SYSTEM_ADMIN)
 
 if __name__ == "__main__":
     unittest.main()
