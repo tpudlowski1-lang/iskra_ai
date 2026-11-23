@@ -2,6 +2,7 @@
   "use strict";
 
   let apiToken = "";
+  let sessionGeneration = 0;
   const connectForm = document.getElementById("connect-form");
   const tokenInput = document.getElementById("api-token");
   const connectButton = document.getElementById("connect-button");
@@ -89,9 +90,12 @@
     if (!candidate) return;
     connectButton.disabled = true;
     setStatus("Sprawdzam dostęp…");
+    sessionGeneration += 1;
+    const generation = sessionGeneration;
     apiToken = candidate;
     try {
       await loadDocuments();
+      if (generation !== sessionGeneration) return;
       tokenInput.value = "";
       workspace.hidden = false;
       logoutButton.hidden = false;
@@ -99,6 +103,7 @@
       setStatus("Połączono. Token jest przechowywany tylko w pamięci karty.");
       questionInput.focus();
     } catch (error) {
+      if (generation !== sessionGeneration) return;
       apiToken = "";
       setStatus(error.message || "Nie udało się połączyć.", true);
     } finally {
@@ -107,6 +112,7 @@
   });
 
   logoutButton.addEventListener("click", () => {
+    sessionGeneration += 1;
     apiToken = "";
     workspace.hidden = true;
     logoutButton.hidden = true;
@@ -121,6 +127,7 @@
     event.preventDefault();
     const question = questionInput.value.trim();
     if (!apiToken || !question) return;
+    const generation = sessionGeneration;
     sendButton.disabled = true;
     addMessage("user", question);
     questionInput.value = "";
@@ -130,16 +137,21 @@
         body: JSON.stringify({ question }),
       });
       const data = await response.json().catch(() => ({}));
+      if (generation !== sessionGeneration) return;
       if (response.status === 401) throw new Error("Sesja wygasła lub token jest nieprawidłowy. Połącz się ponownie.");
       if (response.status === 503) throw new Error("Usługa wnioskowania lub dokumentów jest niedostępna. Sprawdź konfigurację dostawcy i bazę wiedzy.");
       if (response.status === 502) throw new Error("Model zwrócił odpowiedź bez poprawnych cytowań. Spróbuj sformułować pytanie inaczej.");
       if (!response.ok) throw new Error("Nie udało się uzyskać odpowiedzi (" + response.status + ").");
       addMessage("assistant", data.answer || "Brak odpowiedzi.", data.citations || []);
     } catch (error) {
-      addMessage("assistant", error.message || "Wystąpił błąd połączenia.");
+      if (generation === sessionGeneration) {
+        addMessage("assistant", error.message || "Wystąpił błąd połączenia.");
+      }
     } finally {
-      sendButton.disabled = false;
-      questionInput.focus();
+      if (generation === sessionGeneration) {
+        sendButton.disabled = false;
+        questionInput.focus();
+      }
     }
   });
 })();
