@@ -5,6 +5,7 @@ import unittest
 from iskra.documents.factory import DocumentRepositoryFactory
 from iskra.documents.repository import SQLiteDocumentRepository
 from iskra.documents.postgres_repository import PostgresDocumentRepository
+from iskra.config import Settings
 
 
 class DocumentRepositoryFactoryTests(unittest.TestCase):
@@ -29,6 +30,26 @@ class DocumentRepositoryFactoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DocumentRepositoryFactory(backend="mysql", sqlite_path="/tmp/docs.sqlite3")
 
+
+
+    def test_factory_uses_validated_runtime_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            sqlite_settings = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="sqlite",
+            )
+            sqlite_repository = DocumentRepositoryFactory.from_settings(sqlite_settings).build()
+            self.assertIsInstance(sqlite_repository, SQLiteDocumentRepository)
+
+            postgres_settings = Settings(
+                port=10000,
+                data_dir=directory,
+                tenant_storage_backend="postgres",
+                postgres_dsn="postgresql://app:secret@localhost/iskra",
+            )
+            postgres_repository = DocumentRepositoryFactory.from_settings(postgres_settings).build()
+            self.assertIsInstance(postgres_repository, PostgresDocumentRepository)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
