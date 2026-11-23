@@ -9,12 +9,13 @@ from iskra.security.credentials import (
     load_api_credentials,
     principal_for_token,
 )
-from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY
+from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY, Principal
 
 
 class ApiTokenMiddleware:
-    def __init__(self, application, token=None, credentials_json=None):
+    def __init__(self, application, token=None, credentials_json=None, credential_store=None):
         self.application = application
+        self.credential_store = credential_store
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
         raw_credentials = (
             credentials_json
@@ -78,7 +79,23 @@ class ApiTokenMiddleware:
 
         supplied = self._provided_token(environ)
         principal = None
-        if supplied and self.token and hmac.compare_digest(supplied, self.token):
+        if supplied and self.credential_store is not None:
+            try:
+                candidate = self.credential_store.authenticate(supplied)
+            except Exception:
+                return self._response(
+                    start_response,
+                    "503 Service Unavailable",
+                    {"error": "authentication_unavailable", "message": "Credential verification is temporarily unavailable."},
+                )
+            if isinstance(candidate, Principal):
+                principal = candidate
+            elif candidate is not None:
+                # Never trust a backend that returns an untyped identity object.
+                principal = None
+            elif self.token and hmac.compare_digest(supplied, self.token):
+                principal = SYSTEM_ADMIN
+        elif supplied and self.token and hmac.compare_digest(supplied, self.token):
             principal = SYSTEM_ADMIN
         elif supplied:
             principal = principal_for_token(supplied, self.credentials)
