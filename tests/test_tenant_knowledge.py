@@ -187,7 +187,7 @@ class TenantApiIntegrationTests(unittest.TestCase):
         tenant_headers = {"X-Iskra-Tenant-Key": key}
         self.client.post(
             "/api/documents",
-            data={"file": (io.BytesIO(b"Zwrot towaru jest mozliwy w terminie 30 dni od zakupu."), "zwroty.txt")},
+            data={"file": (io.BytesIO(b"Termin zwrotu wynosi 30 dni od zakupu."), "zwroty.txt")},
             headers=tenant_headers, content_type="multipart/form-data"
         )
         captured = {}
@@ -229,7 +229,7 @@ class TenantApiIntegrationTests(unittest.TestCase):
         tenant_headers = {"X-Iskra-Tenant-Key": key}
         self.client.post(
             "/api/documents",
-            data={"file": (io.BytesIO(b"Regulamin przewiduje gwarancje dwa lata."), "gwarancja.txt")},
+            data={"file": (io.BytesIO(b"Okres gwarancji wynosi dwa lata."), "gwarancja.txt")},
             headers=tenant_headers, content_type="multipart/form-data"
         )
         self.iskra.bot.router.generate = lambda *args, **kwargs: json.dumps({
