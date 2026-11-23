@@ -124,6 +124,43 @@ class SQLiteDocumentRepository:
         except (OSError, sqlite3.Error) as exc:
             raise DocumentStorageError("Nie można zainicjalizować prywatnej bazy dokumentów") from exc
 
+
+    @staticmethod
+    def _tenant_id(principal):
+        if not isinstance(principal, Principal):
+            raise PermissionError("Wymagana jest zweryfikowana tożsamość")
+        if principal.tenant_id == "system":
+            raise PermissionError("System administrator nie jest tenantem klienta")
+        if not principal.roles.intersection({"member", "admin"}):
+            raise PermissionError("Brak uprawnień do dokumentów")
+        return principal.tenant_id
+
+    @staticmethod
+    def _validate_parsed_document(parsed_document):
+        if not isinstance(parsed_document, ParsedDocument):
+            raise ValueError("Nieprawidłowy wynik parsera")
+        if (
+            not isinstance(parsed_document.filename, str)
+            or not parsed_document.filename
+            or len(parsed_document.filename) > 255
+            or os.path.basename(parsed_document.filename) != parsed_document.filename
+            or "/" in parsed_document.filename
+            or "\\" in parsed_document.filename
+            or not isinstance(parsed_document.extension, str)
+            or parsed_document.extension not in ALLOWED_EXTENSIONS
+            or not parsed_document.filename.lower().endswith(parsed_document.extension)
+            or not isinstance(parsed_document.sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", parsed_document.sha256)
+            or not isinstance(parsed_document.chunks, tuple)
+            or not parsed_document.chunks
+            or len(parsed_document.chunks) > MAX_CHUNKS
+            or any(not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
+                   for chunk in parsed_document.chunks)
+            or sum(len(chunk) for chunk in parsed_document.chunks)
+                > MAX_EXTRACTED_CHARS + MAX_CHUNKS * CHUNK_OVERLAP
+        ):
+            raise ValueError("Wynik parsera przekracza dozwolony schemat")
+
     def add(self, principal, parsed_document):
         tenant_id = self._tenant_id(principal)
         self._validate_parsed_document(parsed_document)
