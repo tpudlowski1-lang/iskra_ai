@@ -27,7 +27,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 
 The shared system `API_TOKEN` protects the legacy application routes. The security modules also implement hashed tenant credential storage, expiry/revocation and operator issue/rotate/revoke commands. Verified tenant principals are derived from credentials on the server; tenant scope must never come from request input.
 
-This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. Draft PR #89 carries the tenant-scoped chat/API, provider policy, outbound minimization and minimal tenant-admin console, but these features are not yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
+This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. The integrated branch `integration/full-release-candidate-v1` now contains tenant-scoped chat/API, provider policy, outbound minimization and a minimal tenant-admin console. It is not yet merged into the canonical `refactor/modular-core` branch or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ This is **not yet a complete customer account product**: public signup, account 
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
 - `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
-- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. Draft PR #89 carries tenant-scoped credential lifecycle endpoints, provider policy and a minimal `/assistant` admin console on the rebased release-candidate stack.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. The integrated release-candidate branch contains tenant-scoped credential lifecycle endpoints, provider policy and a minimal `/assistant` admin console; canonical integration and production approval remain pending.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
 - `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
 - `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
@@ -98,7 +98,7 @@ The repository quality, security, adversarial, and license workflows also target
 
 The stacked pull-request triggers are configured separately from push triggers; quality-engine and adversarial-corpus workflows retain their original push branches and include the tenant/privacy branches under pull_request.
 
-Draft PR #89 combines the tenant chat UI/API, per-tenant provider policy, best-effort outbound minimization and tenant credential admin console. It remains a draft release candidate; its exact-head CI status is recorded in the PR description. Workflow-filter-only commits do not change application behavior.
+The integrated release-candidate branch combines tenant chat UI/API, per-tenant provider policy, best-effort outbound minimization and tenant credential administration. Its merged SHA passed the full CI suite; canonical integration and production gates remain open. Workflow-filter-only commits do not change application behavior.
 
 ## Tenant knowledge chat API (draft feature)
 
