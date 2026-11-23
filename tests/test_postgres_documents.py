@@ -128,7 +128,7 @@ class PostgresDocumentRepositoryTests(unittest.TestCase):
                     cursor.execute(
                         """
                         INSERT INTO iskra_tenant_documents
-                            (tenant_id, document_id, filename, extension, sha256, created_at)
+                            (tenant_id, document_id, filename, extension, sha256)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
                         (
