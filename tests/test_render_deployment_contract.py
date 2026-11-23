@@ -30,15 +30,16 @@ class RenderDeploymentContractTests(unittest.TestCase):
 
 
 
-    def test_render_explicitly_allows_only_configured_llm_providers_and_declares_secrets(self):
+    def test_render_keeps_external_providers_disabled_until_approved_and_declares_secrets(self):
         manifest = (Path(__file__).resolve().parents[1] / "render.yaml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("key: LLM_ALLOWED_PROVIDERS\n        value: openai,deepseek", manifest)
+        self.assertIn('key: LLM_ALLOWED_PROVIDERS\n        value: ""', manifest)
         self.assertIn("key: LLM_FALLBACK_PROVIDERS\n        value: deepseek", manifest)
         self.assertIn("key: OPENAI_API_KEY\n        sync: false", manifest)
         self.assertIn("key: DEEPSEEK_API_KEY\n        sync: false", manifest)
         self.assertNotIn("GEMINI_API_KEY", manifest)
+        self.assertIn("autoDeploy: false", manifest)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
