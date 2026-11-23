@@ -22,6 +22,11 @@ class RouterProvider:
             "deepseek": self._deepseek,
             "gemini": self._gemini,
         }
+        # External network providers are deny-by-default. A deployment must
+        # explicitly approve each provider through LLM_ALLOWED_PROVIDERS.
+        allowed = os.environ.get("LLM_ALLOWED_PROVIDERS", "")
+        configured = {item.strip().lower() for item in allowed.split(",") if item.strip()}
+        self.allowed_providers = configured.intersection(self.providers)
 
     def clean_json(self, text):
         """Extract the first complete JSON object; reject arrays and malformed text."""
@@ -151,6 +156,9 @@ class RouterProvider:
         deadline = time.monotonic() + MAX_GENERATION_SECONDS
         context_token = _ACTIVE_DEADLINE.set(deadline)
         try:
+            if not self.allowed_providers:
+                print("LLM: zewnętrzne providery wyłączone — ustaw LLM_ALLOWED_PROVIDERS, aby jawnie je dopuścić.")
+                return None
             order = [self.primary] + [p for p in self.fallbacks if p != self.primary]
             for name in order:
                 if self._request_timeout(deadline) is None:
@@ -159,6 +167,9 @@ class RouterProvider:
                 provider = self.providers.get(name)
                 if provider is None:
                     print(f"LLM: nieznany provider '{name}' — pomijam.")
+                    continue
+                if name not in self.allowed_providers:
+                    print(f"LLM {name}: provider nie znajduje się na LLM_ALLOWED_PROVIDERS — pomijam.")
                     continue
                 try:
                     # Keep the long-standing provider(prompt) extension contract.
