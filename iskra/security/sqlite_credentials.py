@@ -32,6 +32,9 @@ class LastTenantAdminError(ValueError):
 
 
 class SQLiteCredentialStore:
+    TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS = 90 * 24 * 60 * 60
+    TENANT_MAX_CREDENTIAL_TTL_SECONDS = 365 * 24 * 60 * 60
+
     def __init__(self, database_path):
         if not isinstance(database_path, str) or not database_path.strip():
             raise ValueError("database_path musi być niepustą ścieżką")
@@ -134,6 +137,17 @@ class SQLiteCredentialStore:
                 or len(actor) > 255 or any(ord(char) < 32 for char in actor)):
             raise ValueError("Nieprawidłowy identyfikator operatora")
         return actor.strip()
+
+    @classmethod
+    def _tenant_expiry(cls, expires_at, now):
+        if expires_at is None:
+            return now + cls.TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS
+        expiry = cls._timestamp(expires_at, "expires_at")
+        if expiry is None or expiry <= now:
+            raise ValueError("Token musi wygasać w przyszłości")
+        if expiry > now + cls.TENANT_MAX_CREDENTIAL_TTL_SECONDS:
+            raise ValueError("Tenant token nie może być ważny dłużej niż 365 dni")
+        return expiry
 
     @staticmethod
     def _require_tenant_admin(principal):
@@ -293,8 +307,16 @@ class SQLiteCredentialStore:
                 if not self._roles_are_non_escalating(old_roles, new_roles):
                     raise ValueError("Rotacja może zachować uprawnienia lub je ograniczyć, nie może ich zwiększać")
                 principal = Principal(old["subject"], old["tenant_id"], new_roles)
-                expiry = expiry_override if expiry_override is not None else old["expires_at"]
-                if expiry is not None and expiry <= now:
+                if expiry_override is not None:
+                    expiry = expiry_override
+                elif old["expires_at"] is not None:
+                    expiry = min(
+                        old["expires_at"],
+                        now + self.TENANT_MAX_CREDENTIAL_TTL_SECONDS,
+                    )
+                else:
+                    expiry = now + self.TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS
+                if expiry <= now:
                     raise ValueError("Nowy token musi mieć datę ważności w przyszłości")
 
                 connection.execute(
@@ -389,7 +411,8 @@ class SQLiteCredentialStore:
         self._require_tenant_admin(principal)
         selected_roles = frozenset({"member"} if roles is None else roles)
         new_principal = Principal(subject, principal.tenant_id, selected_roles)
-        return self.issue(new_principal, expires_at=expires_at, actor=principal.subject)
+        expiry = self._tenant_expiry(expires_at, time.time())
+        return self.issue(new_principal, expires_at=expiry, actor=principal.subject)
 
     def revoke_for_tenant(self, principal, credential_id):
         """Revoke only a credential belonging to the authenticated tenant."""
@@ -440,7 +463,7 @@ class SQLiteCredentialStore:
         if not isinstance(credential_id, str) or not credential_id:
             raise ValueError("Wymagany jest credential_id")
         now = time.time()
-        expiry_override = self._timestamp(expires_at, "expires_at")
+        expiry_override = None if expires_at is None else self._tenant_expiry(expires_at, now)
         new_id = "cred_" + secrets.token_urlsafe(18)
         new_token = secrets.token_urlsafe(48)
 
