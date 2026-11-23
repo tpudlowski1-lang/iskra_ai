@@ -123,6 +123,7 @@ class RouterProvider:
             return None
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         payload = {
+            "systemInstruction": {"parts": [{"text": _ACTIVE_SYSTEM_PROMPT.get()}]},
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.3,
