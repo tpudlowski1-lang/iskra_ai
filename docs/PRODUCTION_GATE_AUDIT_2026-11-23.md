@@ -45,7 +45,8 @@ All runs below were observed as completed/success on their specific PR heads:
 - PR #53 Render single-worker contract: [45112296368](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112296368)
 - PR #54 verified SQLite restore: [45113522451](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113522451)
 - PR #55 independent document backend selection: [45113445185](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113445185)
-- PR #56 repository hygiene: [45113770942](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113770942)
+- PR #57 full backup/recovery inventory documentation: [45113854647](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113854647)
+- PR #56 repository hygiene, final reviewed HEAD `7e63019cc5ab7cc95f99b1346d6553b745580fd0`: [45113990484](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113990484)
 
 A green CI run proves only the tests executed for that commit. It does not prove production hosting, real secret configuration, persistent storage, staging recovery, live LLM safety or deployment readiness.
 
