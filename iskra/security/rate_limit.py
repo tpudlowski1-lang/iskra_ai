@@ -23,6 +23,11 @@ def rate_limit_key():
 def create_rate_limiter(app, environ=None, default_limits=None):
     """Attach a bounded default limiter, configurable for shared storage."""
     env = os.environ if environ is None else environ
+    enabled = str(env.get("ISKRA_RATE_LIMIT_ENABLED", "true")).strip().lower()
+    if enabled in {"0", "false", "no", "off"}:
+        return None
+    if enabled not in {"1", "true", "yes", "on"}:
+        raise ValueError("ISKRA_RATE_LIMIT_ENABLED musi być wartością logiczną")
     storage_uri = str(env.get("RATELIMIT_STORAGE_URI", "memory://")).strip()
     if not storage_uri:
         raise ValueError("RATELIMIT_STORAGE_URI nie może być puste")
