@@ -7,6 +7,16 @@ import stat
 import time
 import uuid
 
+from iskra.security.principal import Principal
+from iskra.documents.parsers import (
+    ALLOWED_EXTENSIONS,
+    CHUNK_OVERLAP,
+    CHUNK_SIZE,
+    MAX_CHUNKS,
+    MAX_EXTRACTED_CHARS,
+    ParsedDocument,
+)
+
 
 class DocumentStorageError(OSError):
     """Document repository is unavailable or failed closed."""
@@ -114,9 +124,46 @@ class SQLiteDocumentRepository:
         except (OSError, sqlite3.Error) as exc:
             raise DocumentStorageError("Nie można zainicjalizować prywatnej bazy dokumentów") from exc
 
-    def add(self, tenant_id, parsed_document):
-        if not isinstance(tenant_id, str) or not tenant_id or len(tenant_id) > 255:
-            raise ValueError("Nieprawidłowy tenant scope")
+
+    @staticmethod
+    def _tenant_id(principal):
+        if not isinstance(principal, Principal):
+            raise PermissionError("Wymagana jest zweryfikowana tożsamość")
+        if principal.tenant_id == "system":
+            raise PermissionError("System administrator nie jest tenantem klienta")
+        if not principal.roles.intersection({"member", "admin"}):
+            raise PermissionError("Brak uprawnień do dokumentów")
+        return principal.tenant_id
+
+    @staticmethod
+    def _validate_parsed_document(parsed_document):
+        if not isinstance(parsed_document, ParsedDocument):
+            raise ValueError("Nieprawidłowy wynik parsera")
+        if (
+            not isinstance(parsed_document.filename, str)
+            or not parsed_document.filename
+            or len(parsed_document.filename) > 255
+            or os.path.basename(parsed_document.filename) != parsed_document.filename
+            or "/" in parsed_document.filename
+            or "\\" in parsed_document.filename
+            or not isinstance(parsed_document.extension, str)
+            or parsed_document.extension not in ALLOWED_EXTENSIONS
+            or not parsed_document.filename.lower().endswith(parsed_document.extension)
+            or not isinstance(parsed_document.sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", parsed_document.sha256)
+            or not isinstance(parsed_document.chunks, tuple)
+            or not parsed_document.chunks
+            or len(parsed_document.chunks) > MAX_CHUNKS
+            or any(not isinstance(chunk, str) or not chunk or len(chunk) > CHUNK_SIZE
+                   for chunk in parsed_document.chunks)
+            or sum(len(chunk) for chunk in parsed_document.chunks)
+                > MAX_EXTRACTED_CHARS + MAX_CHUNKS * CHUNK_OVERLAP
+        ):
+            raise ValueError("Wynik parsera przekracza dozwolony schemat")
+
+    def add(self, principal, parsed_document):
+        tenant_id = self._tenant_id(principal)
+        self._validate_parsed_document(parsed_document)
         document_id = str(uuid.uuid4())
         try:
             with self._connection() as connection:
@@ -180,7 +227,8 @@ class SQLiteDocumentRepository:
         except sqlite3.Error as exc:
             raise DocumentStorageError("Nie można zapisać dokumentu") from exc
 
-    def list(self, tenant_id):
+    def list(self, principal):
+        tenant_id = self._tenant_id(principal)
         try:
             with self._connection() as connection:
                 rows = connection.execute(
@@ -196,7 +244,8 @@ class SQLiteDocumentRepository:
         except sqlite3.Error as exc:
             raise DocumentStorageError("Nie można odczytać listy dokumentów") from exc
 
-    def search(self, tenant_id, query, limit=5):
+    def search(self, principal, query, limit=5):
+        tenant_id = self._tenant_id(principal)
         query = str(query or "").strip()
         if not query or len(query) > 1000:
             raise ValueError("Zapytanie musi mieć od 1 do 1000 znaków")
@@ -240,7 +289,8 @@ class SQLiteDocumentRepository:
                 raise
             raise DocumentStorageError("Nie można przeszukać dokumentów") from exc
 
-    def delete(self, tenant_id, document_id):
+    def delete(self, principal, document_id):
+        tenant_id = self._tenant_id(principal)
         try:
             with self._connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")
