@@ -1,4 +1,7 @@
+import os
 import unittest
+
+os.environ["ISKRA_TESTING"] = "true"
 
 from app import app
 
