@@ -99,3 +99,15 @@ Do not publish a price until:
 Proceed with this segment only if interviews show a frequent, expensive problem and at least one buyer is willing to fund a constrained pilot. Otherwise revise the segment or problem before expanding engineering scope.
 
 No market-fit, pricing, legal-compliance or sale-readiness claim is made by this document.
+
+
+## 9. Critical current product gap — verified in code audit
+
+The current Flask application is not yet a usable conversational assistant:
+- The web UI is a knowledge-graph dashboard, not a chat interface.
+- The HTTP API exposes graph/health endpoints; there is no authenticated chat endpoint.
+- RouterProvider is used by the optional autonomous worker, but there is no end-user request path that calls it.
+- DocumentService has tenant-scoped add/list/search/delete methods, but those methods are not wired into authenticated HTTP document routes or a retrieval-to-answer pipeline.
+- There is no source-grounded answer endpoint or end-user chat history.
+
+Therefore the product MVP described above is a future target, not the current build. The next feature milestone must implement an authenticated tenant-scoped chat API and UI, connect document search to answer generation with citations and an explicit no-answer path, and add end-to-end tests for cross-tenant isolation and provider policy. Keep customer document ingestion disabled until parser sandboxing, file validation, authorization and operational controls are complete.
