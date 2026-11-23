@@ -8,6 +8,7 @@ from flask import Blueprint, current_app, jsonify, request
 from iskra.security.policy import require_roles, require_system_admin
 from iskra.security.principal import (
     BROWSER_SESSION_COOKIE_NAME,
+    BROWSER_SESSION_CSRF_TOKEN_ENV_KEY,
     BROWSER_SESSION_TOKEN_ENV_KEY,
     PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
     principal_from_environ,
