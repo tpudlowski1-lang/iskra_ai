@@ -85,6 +85,11 @@ class TenantMigrationUtilityTests(unittest.TestCase):
             restore_private_backup(backup, restored, sha256_file(backup))
         with open(restored, "rb") as handle:
             self.assertEqual(handle.read(), b"keep-existing-content")
+        leftovers = [
+            name for name in os.listdir(self.tmp.name)
+            if name.startswith(".iskra-restore-")
+        ]
+        self.assertEqual(leftovers, [])
 
     def test_restore_rejects_symlink_backup(self):
         backup = create_private_backup(self.source, self.backup_dir)
