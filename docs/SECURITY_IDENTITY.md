@@ -31,14 +31,14 @@ Existing routes retain their compatibility behavior. The role decorator is a fou
 - fails closed for unknown, expired, revoked, malformed or corrupt records;
 - creates the database file with owner-only permissions (`0600`).
 
-The WSGI middleware now accepts an injected credential store and resolves a registry token to its server-bound principal. Store failures return 503 (fail closed); revoked/unknown tokens return 401. The production `wsgi.py` entry point does not yet instantiate or inject the store, so the current shared `API_TOKEN` remains the only active credential. There is no public token-issuance endpoint and no user provisioning workflow. SQLite is a single-instance prototype, not a high-availability credential service; PostgreSQL and operational key management remain future work. The registry and middleware integration must not be treated as production-ready until migration, concurrency, backup/restore, permission, key lifecycle and security review gates pass.
+The middleware supports an injected credential store and resolves registry tokens to server-bound principals when one is supplied. Store failures return 503 (fail closed); revoked/unknown tokens return 401. The production `wsgi.py` entry point does not instantiate or inject the store, so the shared `API_TOKEN` remains the only active production credential. There is no public token-issuance endpoint or user provisioning workflow. SQLite is a single-instance prototype, not a high-availability credential service; PostgreSQL and operational key management remain future work. The registry and middleware integration must not be treated as production-ready until migration, concurrency, backup/restore, permission, key lifecycle and security review gates pass.
 
 ## Explicit limitations
 
 This is not yet named-user authentication or tenant isolation:
 
 - one shared administrator token is still the only credential accepted by the live WSGI application;
-- the credential registry is not connected to request authentication;
+- the credential registry is not yet configured by the production WSGI entry point;
 - there is no account lifecycle, password authentication, self-service provisioning, rotation workflow or administrator recovery process;
 - the live graph remains a shared JSON file and has no tenant partition;
 - the tenant-scoped SQLite graph adapter is disconnected from the live application;
