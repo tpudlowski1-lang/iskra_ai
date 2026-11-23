@@ -12,11 +12,12 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Tenant graph API uses a principal-bound SQLite store by default; tenant IDs cannot be reassigned by request input.
 - [x] SQLite tenant graph first-read initialization is atomic and concurrency-tested.
 - [x] PostgreSQL graph adapter and migration with RLS ENABLE + FORCE are implemented and integration-tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
+- [x] Dry-run-first SQLite tenant migration utility creates private backups, checksums, validates snapshots, refuses overwrites by default, migrates all tenants in one transaction and verifies semantic read-back before commit.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 
 ## Not yet production-ready
 - [ ] Public account/credential provisioning, account recovery, self-service rotation, expiry policy and auditable credential lifecycle.
-- [ ] PostgreSQL staging cutover, repeatable JSON/SQLite migration, rollback procedure and restore drill.
+- [ ] Run the migration utility against a production-like tenant backup; complete PostgreSQL staging cutover, rollback procedure and restore drill.
 - [ ] Independent adversarial review of tenant authorization and database RLS assumptions. The custom transaction-local PostgreSQL tenant setting is defense-in-depth, not a defense against SQL injection or arbitrary code execution under the application DB role.
 - [ ] Production backup/restore, monitoring, alerting, secret rotation and incident response procedures.
 - [ ] Private document upload, malware/type/size validation and secure object storage.
