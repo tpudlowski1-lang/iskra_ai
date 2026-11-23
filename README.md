@@ -13,6 +13,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 - [Data migration policy](docs/DATA_MIGRATION.md)
 - [Tenant knowledge chat API](docs/KNOWLEDGE_CHAT_API.md)
 - [LLM provider allowlist policy](docs/LLM_PROVIDER_ALLOWLIST.md)
+- [Tenant account lifecycle API](docs/TENANT_ACCOUNT_LIFECYCLE.md)
 - [LLM provider data handling](docs/LLM_PROVIDER_DATA_HANDLING.md)
 - [Autonomous worker data minimization](docs/AUTONOMOUS_WORKER_DATA_MINIMIZATION.md)
 - [Dependency/license inventory](docs/DEPENDENCY_LICENSE_AUDIT.md)
@@ -36,7 +37,7 @@ This is **not yet a complete customer account product**: self-service signup, ac
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
 - `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
-- `iskra/security/` — principal, policy, credential and SQLite credential registry modules.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. Draft PR #82 adds tenant-admin credential lifecycle endpoints; Draft PR #84 is the rebased candidate for a minimal admin console in /assistant.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
 - `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
 - `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
