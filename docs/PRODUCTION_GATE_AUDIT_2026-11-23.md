@@ -82,3 +82,8 @@ A green CI run proves only the tests executed for that commit. It does not prove
 ## Follow-up reliability review — 2026-11-23
 
 A code review found that the prior router allowed up to two 45-second attempts per provider plus retry sleep, so the fallback chain could exceed the Render/Gunicorn 120-second worker timeout. PR #67 now caps the complete generation chain at 100 seconds using a context-local deadline, per-attempt connect/read budgets and a one-second maximum retry delay. The established `provider(prompt)` extension contract remains unchanged. This is bounded-request behavior under the HTTP client's connect/read timeout semantics; it is not a hard cancellation guarantee against a peer that continuously streams bytes. The full CI suite now passes 264 tests on Python 3.11 and 3.12, and the specialized reliability, Quality Engine, corpus and dependency-audit workflows pass on the same code HEAD.
+
+
+## Render safe-default follow-up — 2026-11-23
+
+The current Render manifest uses `autoDeploy: false` to prevent an unreviewed branch merge from triggering a live rollout. `LLM_ALLOWED_PROVIDERS` is intentionally empty by default, so external model traffic remains disabled until an operator explicitly allowlists approved providers in the Render dashboard. Provider keys are declared as `sync: false` and are not stored in Git. This is a safe configuration template, not a completed live deployment.
