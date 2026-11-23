@@ -33,6 +33,9 @@ services:
       - key: DEEPSEEK_API_KEY
         sync: false
 
+      - key: ISKRA_RATE_LIMIT_ENABLED
+        value: true
+
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
 
