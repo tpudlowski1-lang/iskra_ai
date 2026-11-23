@@ -130,6 +130,7 @@ class IskraProviderTests(unittest.TestCase):
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         router.providers = {
             "deepseek": lambda _: calls.append("deepseek") or None,
             "openai": lambda _: calls.append("openai") or '{"source":"openai"}',
@@ -143,6 +144,7 @@ class IskraProviderTests(unittest.TestCase):
         calls = []
         router.primary = "not-a-provider"
         router.fallbacks = ["deepseek"]
+        router.allowed_providers = {"deepseek"}
         router.providers = {"deepseek": lambda _: calls.append("deepseek") or '{"ok":true}'}
         self.assertEqual(json.loads(router.generate("test")), {"ok": True})
         self.assertEqual(calls, ["deepseek"])
