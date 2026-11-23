@@ -3,14 +3,20 @@ import base64
 import hmac
 import json
 import os
+import sqlite3
 
-from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY
+from iskra.security.credentials import SQLiteCredentialStore
+from iskra.security.principal import SYSTEM_ADMIN, PRINCIPAL_ENV_KEY, Principal
 
 
 class ApiTokenMiddleware:
-    def __init__(self, application, token=None):
+    def __init__(self, application, token=None, credential_store=None):
         self.application = application
         self.token = token if token is not None else os.environ.get("API_TOKEN", "")
+        self.credential_store = credential_store
+        database_path = os.environ.get("CREDENTIAL_DB_PATH", "")
+        if self.credential_store is None and database_path:
+            self.credential_store = SQLiteCredentialStore(database_path)
         self.principal = SYSTEM_ADMIN
 
     @staticmethod
@@ -46,13 +52,31 @@ class ApiTokenMiddleware:
     def __call__(self, environ, start_response):
         if environ.get("PATH_INFO", "/") == "/health":
             return self.application(environ, start_response)
-        if not self.token:
+
+        if not self.token and self.credential_store is None:
             return self._response(
                 start_response, "503 Service Unavailable",
-                {"error": "service_not_configured", "message": "Administrator must configure API_TOKEN."},
+                {"error": "service_not_configured", "message": "Configure API_TOKEN or CREDENTIAL_DB_PATH."},
             )
+
         supplied = self._provided_token(environ)
-        if not supplied or not hmac.compare_digest(supplied, self.token):
+        principal = None
+        if supplied and self.credential_store is not None:
+            try:
+                principal = self.credential_store.authenticate(supplied)
+            except (OSError, sqlite3.Error):
+                # Credential storage failures must never fall back to anonymous access.
+                return self._response(
+                    start_response, "503 Service Unavailable",
+                    {"error": "authentication_unavailable"},
+                )
+
+        if principal is None and supplied and self.token and hmac.compare_digest(supplied, self.token):
+            # Backward compatibility: the legacy shared token maps to the
+            # system administrator until it is explicitly retired.
+            principal = self.principal
+
+        if not isinstance(principal, Principal):
             return self._response(
                 start_response, "401 Unauthorized",
                 {"error": "unauthorized", "message": "Valid API token required."},
@@ -72,7 +96,7 @@ class ApiTokenMiddleware:
                     headers.append((name, value))
             return start_response(status, headers, exc_info)
 
-        # Identity is attached only after successful credential verification.
-        # Request parameters and headers can never override this server-side value.
-        environ[PRINCIPAL_ENV_KEY] = self.principal
+        # Principal and tenant scope come exclusively from the credential store.
+        # Client-provided identity fields are never read or trusted.
+        environ[PRINCIPAL_ENV_KEY] = principal
         return self.application(environ, secured_start_response)
