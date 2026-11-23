@@ -280,7 +280,6 @@
       }
       csrfToken = String(loginData.csrf_token || "");
       if (!csrfToken) throw new Error("Serwer nie zwrócił tokenu CSRF.");
-      tokenInput.value = "";
       await loadSession();
       if (generation !== sessionGeneration) return;
       await loadDocuments();
