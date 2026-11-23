@@ -1,6 +1,6 @@
 # External LLM provider allowlist
 
-**Status:** dual-gate policy is implemented on `integration/full-release-candidate-v1`; it is not yet in the canonical `refactor/modular-core` branch or deployed.  
+**Status:** dual-gate policy is implemented on the canonical `refactor/modular-core` branch; it is not yet deployed.  
 **Default:** deny outbound provider calls.
 
 ## Policy
