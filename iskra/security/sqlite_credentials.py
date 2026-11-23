@@ -307,16 +307,8 @@ class SQLiteCredentialStore:
                 if not self._roles_are_non_escalating(old_roles, new_roles):
                     raise ValueError("Rotacja może zachować uprawnienia lub je ograniczyć, nie może ich zwiększać")
                 principal = Principal(old["subject"], old["tenant_id"], new_roles)
-                if expiry_override is not None:
-                    expiry = expiry_override
-                elif old["expires_at"] is not None:
-                    expiry = min(
-                        old["expires_at"],
-                        now + self.TENANT_MAX_CREDENTIAL_TTL_SECONDS,
-                    )
-                else:
-                    expiry = now + self.TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS
-                if expiry <= now:
+                expiry = expiry_override if expiry_override is not None else old["expires_at"]
+                if expiry is not None and expiry <= now:
                     raise ValueError("Nowy token musi mieć datę ważności w przyszłości")
 
                 connection.execute(
