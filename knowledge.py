@@ -5,6 +5,8 @@ Every document/chunk query is constrained by the authenticated tenant ID.
 """
 import hashlib
 import io
+import json
+import math
 import os
 import re
 import secrets
@@ -77,6 +79,7 @@ def initialize(db_path):
                     document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
                     chunk_index INTEGER NOT NULL,
                     content TEXT NOT NULL,
+                    embedding_json TEXT,
                     UNIQUE(document_id, chunk_index)
                 )
             """)
@@ -86,6 +89,9 @@ def initialize(db_path):
                            document_id UNINDEXED, filename UNINDEXED,
                            content, tokenize='unicode61')
             """)
+            chunk_columns = {row[1] for row in connection.execute("PRAGMA table_info(document_chunks)")}
+            if "embedding_json" not in chunk_columns:
+                connection.execute("ALTER TABLE document_chunks ADD COLUMN embedding_json TEXT")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_documents_tenant ON documents(tenant_id)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_chunks_tenant ON document_chunks(tenant_id)")
             connection.commit()
@@ -194,7 +200,7 @@ def _chunk_text(text):
     return chunks
 
 
-def add_document(db_path, tenant_id, filename, data):
+def add_document(db_path, tenant_id, filename, data, embedding_fn=None):
     if not isinstance(data, bytes) or not data:
         raise ValueError("Plik jest pusty.")
     if len(data) > MAX_UPLOAD_BYTES:
@@ -205,6 +211,27 @@ def add_document(db_path, tenant_id, filename, data):
         raise ValueError("Dozwolone formaty: PDF, DOCX i TXT.")
     extracted = _extract_text(safe_name, data)
     chunks = _chunk_text(extracted)
+    embeddings = None
+    if embedding_fn:
+        try:
+            candidate = embedding_fn(chunks)
+            if isinstance(candidate, list) and len(candidate) == len(chunks):
+                normalized = []
+                dimension = None
+                for vector in candidate:
+                    if not isinstance(vector, (list, tuple)) or not vector:
+                        raise ValueError("Invalid embedding vector")
+                    values = [float(value) for value in vector]
+                    if not all(math.isfinite(value) for value in values):
+                        raise ValueError("Non-finite embedding value")
+                    if dimension is None:
+                        dimension = len(values)
+                    if len(values) != dimension:
+                        raise ValueError("Embedding dimensions do not match")
+                    normalized.append(values)
+                embeddings = normalized
+        except Exception as exc:
+            print(f"Embedding: indeksowanie semantyczne pominięte ({type(exc).__name__}).")
     digest = hashlib.sha256(data).hexdigest()
     document_id = str(uuid.uuid4())
     initialize(db_path)
@@ -228,9 +255,12 @@ def add_document(db_path, tenant_id, filename, data):
         for index, content in enumerate(chunks):
             chunk_id = str(uuid.uuid4())
             connection.execute("""
-                INSERT INTO document_chunks(id, tenant_id, document_id, chunk_index, content)
-                VALUES (?, ?, ?, ?, ?)
-            """, (chunk_id, tenant_id, document_id, index, content))
+                INSERT INTO document_chunks(id, tenant_id, document_id, chunk_index, content, embedding_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                chunk_id, tenant_id, document_id, index, content,
+                json.dumps(embeddings[index], separators=(",", ":")) if embeddings else None,
+            ))
             connection.execute("""
                 INSERT INTO document_chunks_fts(chunk_id, tenant_id, document_id, filename, content)
                 VALUES (?, ?, ?, ?, ?)
@@ -240,31 +270,85 @@ def add_document(db_path, tenant_id, filename, data):
             "chunks": len(chunks), "duplicate": False}
 
 
-def search_documents(db_path, tenant_id, query, limit=5):
+def _cosine_similarity(left, right):
+    if not isinstance(left, (list, tuple)) or not isinstance(right, (list, tuple)) or len(left) != len(right) or not left:
+        return None
+    try:
+        a = [float(value) for value in left]
+        b = [float(value) for value in right]
+        if not all(math.isfinite(value) for value in a + b):
+            return None
+        dot = sum(x * y for x, y in zip(a, b))
+        norm_a = math.sqrt(sum(x * x for x in a))
+        norm_b = math.sqrt(sum(y * y for y in b))
+        if not norm_a or not norm_b:
+            return None
+        return dot / (norm_a * norm_b)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def search_documents(db_path, tenant_id, query, limit=5, embedding_fn=None):
     query = str(query or "").strip()
     if not query or len(query) > 1000:
         raise ValueError("Zapytanie musi mieć od 1 do 1000 znaków.")
     terms = re.findall(r"[\w]{2,}", query, flags=re.UNICODE)[:20]
-    if not terms:
-        return []
     match_query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
+    max_results = max(1, min(int(limit), 10))
     initialize(db_path)
+    lexical_rows = []
+    semantic_rows = []
     with closing(_connect(db_path)) as connection:
-        rows = connection.execute("""
-            SELECT f.document_id, f.filename, f.content, c.chunk_index,
-                   bm25(document_chunks_fts) AS score
-            FROM document_chunks_fts AS f
-            JOIN document_chunks AS c ON c.id = f.chunk_id
-            WHERE document_chunks_fts MATCH ? AND f.tenant_id = ?
-            ORDER BY score
-            LIMIT ?
-        """, (match_query, tenant_id, max(1, min(int(limit), 10)))).fetchall()
+        if match_query:
+            lexical_rows = connection.execute("""
+                SELECT c.id AS chunk_id, f.document_id, f.filename, f.content,
+                       c.chunk_index, bm25(document_chunks_fts) AS score
+                FROM document_chunks_fts AS f
+                JOIN document_chunks AS c ON c.id = f.chunk_id
+                WHERE document_chunks_fts MATCH ? AND f.tenant_id = ?
+                ORDER BY score
+                LIMIT ?
+            """, (match_query, tenant_id, max_results * 4)).fetchall()
+        query_vector = None
+        if embedding_fn:
+            try:
+                query_vector = embedding_fn(query)
+            except Exception as exc:
+                print(f"Embedding: wyszukiwanie semantyczne pominięte ({type(exc).__name__}).")
+        if isinstance(query_vector, (list, tuple)) and query_vector:
+            rows = connection.execute("""
+                SELECT c.id AS chunk_id, c.document_id, d.filename, c.content,
+                       c.chunk_index, c.embedding_json
+                FROM document_chunks AS c
+                JOIN documents AS d ON d.id = c.document_id
+                WHERE c.tenant_id = ? AND c.embedding_json IS NOT NULL
+                ORDER BY d.created_at DESC
+                LIMIT 5000
+            """, (tenant_id,)).fetchall()
+            for row in rows:
+                try:
+                    vector = json.loads(row["embedding_json"])
+                except (TypeError, ValueError):
+                    continue
+                score = _cosine_similarity(query_vector, vector)
+                if score is not None:
+                    semantic_rows.append((score, row))
+    fused = {}
+    metadata = {}
+    for rank, row in enumerate(lexical_rows, start=1):
+        fused[row["chunk_id"]] = fused.get(row["chunk_id"], 0.0) + 1.0 / (60 + rank)
+        metadata[row["chunk_id"]] = row
+    semantic_rows.sort(key=lambda item: item[0], reverse=True)
+    for rank, (_, row) in enumerate(semantic_rows[:max_results * 4], start=1):
+        fused[row["chunk_id"]] = fused.get(row["chunk_id"], 0.0) + 1.0 / (60 + rank)
+        metadata[row["chunk_id"]] = row
+    ranked = sorted(fused, key=fused.get, reverse=True)[:max_results]
     return [{
-        "document_id": row["document_id"],
-        "filename": row["filename"],
-        "chunk_index": row["chunk_index"],
-        "excerpt": row["content"][:1200],
-    } for row in rows]
+        "document_id": metadata[chunk_id]["document_id"],
+        "filename": metadata[chunk_id]["filename"],
+        "chunk_index": metadata[chunk_id]["chunk_index"],
+        "excerpt": metadata[chunk_id]["content"][:1200],
+    } for chunk_id in ranked]
 
 
 def delete_document(db_path, tenant_id, document_id):

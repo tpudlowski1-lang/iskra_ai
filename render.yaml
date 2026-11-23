@@ -28,6 +28,13 @@ services:
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
 
+      # Semantic retrieval is opt-in and uses OPENAI_API_KEY when enabled.
+      - key: ENABLE_SEMANTIC_SEARCH
+        value: false
+
+      - key: OPENAI_EMBEDDING_MODEL
+        value: text-embedding-3-small
+
       - key: OPENAI_MODEL
         value: gpt-4o-mini
 

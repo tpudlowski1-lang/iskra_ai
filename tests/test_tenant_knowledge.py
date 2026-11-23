@@ -273,3 +273,57 @@ class TenantSchemaRecoveryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+
+class SemanticRetrievalTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = os.path.join(self.tmp.name, "iskra_knowledge.sqlite3")
+        self.tenant = knowledge.create_tenant(self.db, "Firma semantyczna")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @staticmethod
+    def fake_embed_many(texts):
+        return [[1.0, 0.0] if "umowa" in text.lower() else [0.0, 1.0] for text in texts]
+
+    @staticmethod
+    def fake_embed_one(_query):
+        return [1.0, 0.0]
+
+    def test_semantic_search_finds_synonym_without_lexical_overlap(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "kontrakt.txt",
+            "Umowa określa zasady współpracy oraz obowiązki stron.".encode(),
+            embedding_fn=self.fake_embed_many,
+        )
+        hits = knowledge.search_documents(
+            self.db, self.tenant["tenant_id"], "kontrakt",
+            embedding_fn=self.fake_embed_one,
+        )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["filename"], "kontrakt.txt")
+
+    def test_semantic_results_remain_tenant_isolated(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "prywatne.txt",
+            "Umowa Alfa 123.".encode(), embedding_fn=self.fake_embed_many,
+        )
+        other = knowledge.create_tenant(self.db, "Druga firma")
+        hits = knowledge.search_documents(
+            self.db, other["tenant_id"], "kontrakt",
+            embedding_fn=self.fake_embed_one,
+        )
+        self.assertEqual(hits, [])
+
+    def test_invalid_embedding_falls_back_to_lexical_search(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "faktura.txt",
+            "Faktura VAT płatna w terminie 14 dni.".encode(),
+            embedding_fn=lambda texts: [[float("nan")] for _ in texts],
+        )
+        hits = knowledge.search_documents(self.db, self.tenant["tenant_id"], "faktura")
+        self.assertTrue(hits)
+        self.assertEqual(hits[0]["filename"], "faktura.txt")
