@@ -25,6 +25,8 @@ def create_wsgi_app(application=None, environ=None):
 
         credential_store = SQLiteCredentialStore(database_path)
 
+    application.config["ISKRA_CREDENTIAL_STORE"] = credential_store
+
     return ApiTokenMiddleware(
         application.wsgi_app,
         token=env.get("API_TOKEN", ""),

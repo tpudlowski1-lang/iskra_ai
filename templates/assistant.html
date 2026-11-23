@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Iskra AI — Asystent wiedzy</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='assistant.css') }}">
+  <script src="{{ url_for('static', filename='assistant.js') }}" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/">ISKRA<span>AI</span></a>
+      <span class="top-label">ASYSTENT WIEDZY</span>
+    </header>
+
+    <section class="intro">
+      <p class="eyebrow">POLSKI ASYSTENT ORGANIZACYJNY</p>
+      <h1>Wiedza Twojego zespołu.<br><span>Odpowiedzi ze źródłami.</span></h1>
+      <p class="lead">Iskra odpowiada na podstawie dokumentów przypisanych do Twojej organizacji. Jeśli nie znajdzie potwierdzenia, powie wprost.</p>
+    </section>
+
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <div>
+        <h2 id="auth-title">Połącz bezpieczną sesję</h2>
+        <p>Wprowadź token API. Token pozostaje wyłącznie w pamięci tej karty i nie jest zapisywany w pamięci przeglądarki.</p>
+      </div>
+      <form id="connect-form" class="connect-form">
+        <label for="api-token">Token API</label>
+        <div class="token-row">
+          <input id="api-token" type="password" autocomplete="off" spellcheck="false" required placeholder="Wklej token dostępu">
+          <button id="connect-button" type="submit">Połącz</button>
+        </div>
+        <div class="status-row">
+          <span id="connection-status" role="status" aria-live="polite">Brak aktywnej sesji</span>
+          <button id="logout-button" class="quiet-button" type="button" hidden>Rozłącz</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="workspace" class="workspace" hidden>
+      <aside class="sources-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">BAZA WIEDZY</p>
+            <h2>Dokumenty</h2>
+          </div>
+          <span id="document-count" class="count">0</span>
+        </div>
+        <ul id="document-list" class="document-list"></ul>
+        <section id="account-panel" class="account-panel" hidden aria-labelledby="account-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">ADMINISTRACJA</p>
+              <h2 id="account-title">Dostępy organizacji</h2>
+            </div>
+          </div>
+          <form id="credential-form" class="credential-form">
+            <label for="credential-subject">Identyfikator użytkownika</label>
+            <input id="credential-subject" maxlength="255" required placeholder="np. anna@firma.pl">
+            <label for="credential-role">Rola</label>
+            <select id="credential-role">
+              <option value="member">Użytkownik</option>
+              <option value="admin">Administrator</option>
+            </select>
+            <button id="issue-credential" type="submit">Utwórz dostęp</button>
+          </form>
+          <div id="issued-token-panel" class="issued-token-panel" hidden>
+            <p class="small-note">Token wyświetlany jest tylko raz. Skopiuj go do bezpiecznego menedżera sekretów.</p>
+            <textarea id="issued-token" rows="3" readonly aria-label="Nowy token API"></textarea>
+            <button id="copy-token" class="quiet-button" type="button">Kopiuj token</button>
+          </div>
+          <ul id="credential-list" class="credential-list"></ul>
+        </section>
+        <p class="small-note">Wgrywanie dokumentów jest domyślnie wyłączone. Administrator może je włączyć dopiero po zatwierdzeniu zabezpieczeń parsera.</p>
+      </aside>
+
+      <section class="chat-panel" aria-label="Rozmowa z Iskrą">
+        <div class="chat-heading">
+          <div class="avatar" aria-hidden="true">I</div>
+          <div>
+            <h2>Rozmowa z Iskrą</h2>
+            <p>Odpowiedzi oparte na znalezionych fragmentach</p>
+          </div>
+          <span class="live-dot" aria-label="Interfejs gotowy"></span>
+        </div>
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions">
+          <article class="message assistant-message">
+            <div class="message-label">ISKRA</div>
+            <p>Witaj. Zadaj pytanie dotyczące dokumentów Twojej organizacji. Wskażę źródła albo poinformuję, że brakuje danych.</p>
+          </article>
+        </div>
+        <form id="chat-form" class="composer">
+          <label class="sr-only" for="question">Twoje pytanie</label>
+          <textarea id="question" rows="2" maxlength="1000" placeholder="Zapytaj o procedurę, projekt lub informację w dokumentach…" required></textarea>
+          <div class="composer-footer">
+            <span>Do 1000 znaków · bez historii rozmów po stronie serwera</span>
+            <button id="send-button" type="submit" disabled>Wyślij <span aria-hidden="true">↗</span></button>
+          </div>
+        </form>
+      </section>
+    </section>
+
+    <footer class="footer">
+      <span>Iskra AI · Wersja demonstracyjna</span>
+      <span>Token tylko w pamięci karty · Brak lokalnego zapisu</span>
+    </footer>
+  </main>
+</body>
+</html>

@@ -132,28 +132,30 @@ A release can be considered **commercial-candidate** only when every item below 
 
 ## 10. Current known blockers — verified 2026-11-23
 
-Product/market direction is now recorded as an unvalidated hypothesis in [PRODUCT_MARKET_HYPOTHESIS.md](PRODUCT_MARKET_HYPOTHESIS.md). It is not customer validation or approval of a price/segment.
+The current rebased release candidate is Draft PR #89, branch `integration/assistant-release-rebased-v1`, based directly on `integration/full-release-candidate-v1`. It combines the tenant chat UI/API, source-grounded retrieval, dual-gate tenant provider allowlists, best-effort outbound minimization, tenant credential lifecycle/admin console, WSGI credential-store wiring and SQLite path hardening.
 
-The integrated Draft candidate is PR #67, current code HEAD 2bf12429c7c61501a4022a15531358b0f943a140. It includes the storage path hardening, parser worker resource/environment controls, provider default-deny allowlist, bounded autonomous-worker context, dependency/license inventory, PostgreSQL staging runbook and LLM data-flow disclosure.
+The branch compare is 53 commits ahead / 0 behind the current integration base, with 37 changed files.
 
-Verified evidence on that exact HEAD:
-- Unified CI [45122332921](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122332921): SUCCESS — 271 tests on Python 3.11 and 271 tests on Python 3.12, plus dependency vulnerability audit.
-- Security/reliability [45122333016](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122333016): SUCCESS on Python 3.11/3.12.
-- Quality Engine [45122333109](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122333109): SUCCESS on Python 3.11/3.12.
-- Adversarial corpus [45122333072](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122333072): SUCCESS on Python 3.11/3.12.
-- Dependency/license inventory [45122332992](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45122332992): SUCCESS.
+On code HEAD `713490dd59b72eaf5eb5f53b9ef82661407e09d5`, all five GitHub workflows passed:
+- Unified quality gates [45226746886](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746886): SUCCESS — 337 tests on Python 3.11 and 337 tests on Python 3.12, plus dependency vulnerability audit.
+- Security/reliability [45226746853](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746853): SUCCESS.
+- Quality Engine [45226746902](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746902): SUCCESS.
+- Adversarial corpus [45226747025](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226747025): SUCCESS.
+- Dependency/license inventory [45226746765](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45226746765): SUCCESS.
 
-The repository still does **not** have evidence of a production deployment or sale readiness. The current application is a graph dashboard/API, not yet an end-user chat assistant: there is no authenticated chat route or chat UI, and the tenant-scoped DocumentService is not wired into HTTP routes or a retrieval-to-answer pipeline. See PRODUCT_MARKET_HYPOTHESIS.md.
+A subsequent documentation-only update records this evidence; CI must be reconfirmed on the resulting PR #89 head before integration.
 
+The repository still has **no verified production deployment and is NOT READY FOR SALE**. No live customer data, real provider calls, paid infrastructure or production secrets were used. The current feature remains a controlled-pilot foundation.
 
-- No production-like staging PostgreSQL migration, durable hosting volume, backup restore/rollback rehearsal or production smoke test.
+Remaining blockers:
+- No production-like staging PostgreSQL cutover, durable hosting volume, backup/restore/rollback rehearsal or production smoke test.
 - The license inventory reports 28 Python distributions; psycopg and psycopg-binary are LGPL-3.0-only and require qualified legal/distribution review. No full IP/license clearance has been completed.
-- External LLM processing is default-deny at deployment level; Render leaves LLM_ALLOWED_PROVIDERS empty and autoDeploy false. There is no per-tenant provider policy, consent UI, ordinary-prompt PII/secret redaction or network egress firewall. Customer-data processing by external LLMs remains NOT APPROVED pending provider-specific terms, DPA, region, retention, deletion and transfer review.
-- The autonomous worker uses a fixed public taxonomy, not the mutable graph, but remains opt-in and still needs singleton/lease coordination and operational supervision.
-- Parser child has environment/resource hardening but is not a full OS/container sandbox. Customer uploads and RAG remain disabled.
-- Tenant SQLite paths have symlink/permission hardening, but TOCTOU and OS ownership limits remain.
-- No public signup/account recovery, customer-managed account lifecycle, billing/quotas, validated pricing/cost model, customer onboarding, support/SLA, incident response or sales acceptance evidence.
-- No real secrets were provisioned, no live LLM calls were made, and no paid infrastructure was purchased.
+- The tenant provider allowlist is a technical deny-by-default control, not a consent record or lawful-basis assessment. No consent UI, provider-specific DPA/region/retention verification or network egress firewall exists. External customer-data processing remains NOT APPROVED pending provider-specific contractual/privacy review.
+- Outbound minimization is best-effort regex coverage for tenant-chat questions/excerpts; it is not complete DLP, anonymization or coverage of every prompt path.
+- The parser worker has environment/resource hardening but is not a full OS/container sandbox. Customer uploads remain disabled pending sandboxing, malware quarantine, audit, quotas, retention and restore controls.
+- SQLite credential storage is single-instance; production horizontal scaling requires a reviewed PostgreSQL credential backend. Parent-directory protection trusts processes running as the same service UID.
+- No public signup, MFA, account recovery, email verification, billing/quotas, validated pricing/cost model, customer onboarding, support/SLA, incident response or sales acceptance evidence.
+- No product-market validation interviews have been completed and no target segment or pricing has been approved.
 
 Recheck these findings against current evidence before each release decision; this list is a verified snapshot, not a permanent assertion.
 

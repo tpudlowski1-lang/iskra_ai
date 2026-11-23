@@ -1,6 +1,6 @@
 # External LLM provider allowlist
 
-**Status:** implemented in the integrated draft candidate; not deployed.  
+**Status:** dual-gate policy is included in rebased Draft PR #89; not yet integrated into the canonical release or deployed.  
 **Default:** deny outbound provider calls.
 
 ## Policy
@@ -13,7 +13,7 @@ The router accepts a provider only when its name is explicitly present in `LLM_A
 
 If the variable is unset or empty, all external providers are disabled and `RouterProvider.generate()` returns `None` without invoking a provider. Unknown names are ignored; a misspelled value therefore does not enable a provider.
 
-The primary provider (`LLM_PROVIDER`) and fallback order (`LLM_FALLBACK_PROVIDERS`) are preferences, not permissions. Every candidate is checked against the allowlist immediately before its provider function is called. A fallback not present in the allowlist never receives the prompt.
+The primary provider (`LLM_PROVIDER`) and fallback order (`LLM_FALLBACK_PROVIDERS`) are preferences, not permissions. Every candidate is checked against the deployment allowlist immediately before its provider function is called. In the draft per-tenant policy, a candidate must also be approved for the exact authenticated tenant. The effective list is the intersection of both allowlists; a fallback not present in both never receives the prompt.
 
 ## Configuration examples
 
@@ -41,9 +41,20 @@ LLM_FALLBACK_PROVIDERS=openai
 
 Do not enable a provider solely because its API key exists. The operator must first approve its data-handling terms, data classes, account/project settings, region, retention and contractual requirements. API keys remain in the host secret manager.
 
+## Per-tenant gate (draft feature candidate)
+
+`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON` is a JSON object keyed by exact tenant ID. Example:
+
+```dotenv
+LLM_ALLOWED_PROVIDERS=deepseek,openai
+ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON={"tenant-acme":["deepseek"]}
+```
+
+The example permits DeepSeek for `tenant-acme` only. Another tenant has no provider approval unless it has its own entry. Missing/empty map denies every tenant. Invalid JSON or unsupported provider names fail application startup rather than silently broadening access. The setting is operator-controlled; it is not an end-user consent UI or a legal consent record.
+
 ## Limitations
 
-- This allowlist is a deployment-level gate, not a per-tenant policy.
+- Per-tenant approval is currently static environment configuration, not a managed tenant-admin control plane.
 - It does not redact sensitive prompt content or minimize context.
 - It does not verify the provider account's Paid/Unpaid status, DPA, region or retention settings.
 - It does not prevent other application code from making direct HTTP requests outside this router.
