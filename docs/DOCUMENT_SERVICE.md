@@ -15,7 +15,7 @@ The service is intentionally kept behind the application boundary. The default s
 - Chunks: 1,000 characters with 150-character overlap; maximum 2,000 chunks.
 - Supported formats: PDF, DOCX, TXT.
 - PDF parsing uses pypdf 7.1.1; DOCX XML parsing uses defusedxml 0.7.1.
-- Search is tenant-filtered lexical FTS5 and returns excerpts with source IDs. No embedding, reranker or generated answer is implemented.
+- SQLite search is tenant-filtered lexical FTS5; PostgreSQL search uses parameterized `plainto_tsquery('simple', ...)` and a GIN index. Both return excerpts with source IDs. No embedding, reranker or generated answer is implemented.
 
 ## Security properties
 
@@ -34,15 +34,16 @@ The service is intentionally kept behind the application boundary. The default s
 - This is process/resource isolation, not a full OS sandbox: the child still runs under the same OS user and has no seccomp/network namespace policy. Do not expose public upload routes until a dedicated low-privilege worker/container boundary is reviewed.
 - PDF parsing is bounded by file, page and text limits and uses a current pypdf release, but those limits do not replace process isolation.
 - There is no malware scanning/quarantine, private object storage, encryption-at-rest key management, retention scheduler, audit event pipeline or backup/restore procedure.
-- SQLite is single-instance only; PostgreSQL document tables and RLS migration do not exist yet.
+- SQLite is single-instance only. PostgreSQL document/chunk tables, composite tenant keys, FORCE RLS and GIN full-text index are implemented in migration `0002_tenant_documents.sql` and tested with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
+- `ISKRA_DOCUMENT_STORAGE_BACKEND=postgres` selects the PostgreSQL repository through the internal factory; SQLite remains the default. The shared `ISKRA_POSTGRES_DSN` is required and migrations are never applied automatically.
 - FTS5 is lexical retrieval only. Retrieved content must be treated as untrusted data; no model prompt or answer generation is connected.
-- The service is not wired into `app.py` or WSGI and has no public routes.
+- The service and repository factory are not wired into `app.py` or WSGI and have no public routes.
 
 ## Required next gates
 
 1. Add a dedicated low-privilege OS/container worker with no network access and enforce CPU/RAM/time quotas.
 2. Extend adversarial PDF/ZIP/XML fixtures with process-kill, decompression and memory exhaustion cases.
-3. Add PostgreSQL document/chunk schema, composite tenant keys and RLS.
+3. Rehearse the PostgreSQL document migration, backup/restore and staging cutover.
 4. Add malware scanning/quarantine strategy, audit events, quotas, retention and secure backup/restore.
 5. Add route-level authorization and end-to-end cross-tenant read/search/delete tests.
 6. Add retrieval evaluation, prompt-injection tests and citations before any generated answer.
