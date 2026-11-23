@@ -10,7 +10,9 @@ class DevelopmentEntrypointSecurityTests(unittest.TestCase):
     def test_direct_development_wsgi_is_fail_closed_without_mutating_flask_app(self):
         original_wsgi = iskra_app.app.wsgi_app
         secured_wsgi = iskra_app.create_development_wsgi_app(environ={})
-        self.assertIs(iskra_app.app.wsgi_app, original_wsgi)
+        current_wsgi = iskra_app.app.wsgi_app
+        self.assertIs(current_wsgi.__self__, original_wsgi.__self__)
+        self.assertIs(current_wsgi.__func__, original_wsgi.__func__)
 
         client = Client(secured_wsgi, Response)
         health = client.get("/health")
