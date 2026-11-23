@@ -10,6 +10,7 @@ All restructuring streams are coordinated in one source of truth:
 - [Modular core design](docs/superpowers/specs/2026-11-23-modular-core-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-11-23-modular-core.md)
 - [Production readiness checklist](docs/PRODUCTION_READINESS.md)
+- [LLM provider data flow and privacy assessment](docs/PROVIDER_DATA_FLOW_AND_PRIVACY.md)
 - [Data migration policy](docs/DATA_MIGRATION.md)
 
 The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; their code is ported selectively after review, not merged wholesale.
