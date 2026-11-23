@@ -27,12 +27,9 @@ def create_api_blueprint(graph, tenant_store_factory=None):
         principal = principal_from_environ(request.environ)
         try:
             store = tenant_store_factory(principal.tenant_id)
-            snapshot = store.load()
-            if not snapshot["neurons"]:
-                # Each tenant starts with the same twelve foundational pillars,
-                # but all subsequent graph data is stored in its own tenant scope.
-                store.save(graph.fundament)
-                snapshot = store.load()
+            # Initialization is serialized in SQLite so a first-read request
+            # cannot overwrite a concurrent tenant write.
+            snapshot = store.load_or_initialize(graph.fundament)
             return jsonify(snapshot)
         except (OSError, sqlite3.Error):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
