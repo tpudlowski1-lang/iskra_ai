@@ -27,7 +27,7 @@ The canonical integration branch is `refactor/modular-core`. Historical branches
 
 The shared system `API_TOKEN` protects the legacy application routes. The security modules also implement hashed tenant credential storage, expiry/revocation and operator issue/rotate/revoke commands. Verified tenant principals are derived from credentials on the server; tenant scope must never come from request input.
 
-This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. A minimal tenant-admin console exists on the stacked tenant-account feature branch, but it is not yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
+This is **not yet a complete customer account product**: public signup, account recovery, MFA, verification, billing and full customer onboarding are absent. Draft PR #86 carries the tenant-scoped credential API and minimal tenant-admin console, but neither is yet part of the canonical release or production-approved. Use `wsgi:app` for public WSGI deployment; do not expose `app:app` directly because that bypasses the WSGI authentication wrapper on the canonical base branch.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ This is **not yet a complete customer account product**: public signup, account 
 - `iskra/llm/tenant_policy.py` — draft per-tenant provider allowlist, intersected with the deployment-wide allowlist.
 - `iskra/llm/data_minimization.py` — draft best-effort outbound redaction for common secrets and identifiers; not a full DLP solution.
 - `iskra/api/routes.py` — protected API blueprint and tenant graph operations.
-- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. The tenant-account feature branch (PR #82, including the squash-merged admin-console work from PR #84) contains tenant-scoped credential lifecycle endpoints and a minimal `/assistant` admin console; it remains a draft feature stack.
+- `iskra/security/` — principal, policy, credential and SQLite credential registry modules. Draft PR #86 carries tenant-scoped credential lifecycle endpoints and a minimal `/assistant` admin console on a rebased feature stack.
 - `iskra/storage/sqlite.py` — tenant-scoped transactional SQLite graph adapter.
 - `iskra/storage/postgres.py` — optional PostgreSQL tenant graph adapter with row-level security.
 - `iskra/documents/` — internal tenant document service, bounded PDF/DOCX/TXT parsers, SQLite/FTS5 and optional PostgreSQL repository.
@@ -70,7 +70,7 @@ Configure credentials only in hosting secrets/environment settings; never commit
 - `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL` (default `deepseek-chat`).
 - `GEMINI_API_KEY`, `GEMINI_MODEL` (both required to enable Gemini).
 
-Live provider calls require customer-owned API credentials and separate cost, privacy and provider-terms review. The Render manifest leaves the allowlist empty and autoDeploy disabled until an operator explicitly approves provider processing and deployment. The optional autonomous worker uses only a fixed public taxonomy rather than the mutable global graph, but ordinary user prompts are not automatically redacted. CI tests validate deterministic routing behavior; they do not prove live provider availability or legal compliance.
+Live provider calls require customer-owned API credentials and separate cost, privacy and provider-terms review. The Render manifest leaves the allowlist empty and autoDeploy disabled until an operator explicitly approves provider processing and deployment. The optional autonomous worker uses only a fixed public taxonomy rather than the mutable global graph, but only tenant-chat prompts/excerpts receive best-effort redaction; other user-prompt paths are not automatically redacted. CI tests validate deterministic routing behavior; they do not prove live provider availability or legal compliance.
 
 ## Deployment and operations
 
