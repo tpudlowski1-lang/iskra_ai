@@ -180,6 +180,17 @@ class TenantApiIntegrationTests(unittest.TestCase):
         ).status_code, 404)
 
 
+
+    def test_api_rejects_non_object_json_payloads(self):
+        admin = {"Authorization": "Bearer integration-admin-secret"}
+        self.assertEqual(self.client.post("/admin/tenants", json=["not", "object"],
+                                          headers=admin).status_code, 400)
+        created = self.client.post("/admin/tenants", json={"name": "Walidacja"}, headers=admin)
+        key = created.get_json()["api_key"]
+        headers = {"X-Iskra-Tenant-Key": key}
+        self.assertEqual(self.client.post("/api/search", json=["query"], headers=headers).status_code, 400)
+        self.assertEqual(self.client.post("/api/chat", json=["question"], headers=headers).status_code, 400)
+
     def test_grounded_chat_returns_only_valid_citations(self):
         admin = {"Authorization": "Bearer integration-admin-secret"}
         created = self.client.post("/admin/tenants", json={"name": "Firma RAG"}, headers=admin)

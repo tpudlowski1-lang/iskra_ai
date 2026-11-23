@@ -645,7 +645,9 @@ def admin_tenants():
     db_path = _knowledge_db_path()
     if request.method == "GET":
         return jsonify({"tenants": knowledge.list_tenants(db_path)})
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid_payload"}), 400
     try:
         tenant = knowledge.create_tenant(db_path, payload.get("name"))
     except ValueError as exc:
@@ -710,7 +712,9 @@ def grounded_chat():
     tenant_id = _tenant_id()
     if not tenant_id:
         return jsonify({"error": "tenant_key_required"}), 403
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid_payload"}), 400
     question = str(payload.get("question", "")).strip()
     if not question or len(question) > 2000:
         return jsonify({"error": "invalid_question", "message": "Pytanie musi mieć od 1 do 2000 znaków."}), 400
@@ -786,7 +790,9 @@ def search_documents():
     tenant_id = _tenant_id()
     if not tenant_id:
         return jsonify({"error": "tenant_key_required"}), 403
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "invalid_payload"}), 400
     try:
         results = knowledge.search_documents(
             _knowledge_db_path(), tenant_id, payload.get("query", ""),
