@@ -21,6 +21,10 @@ The `Iskra Python dependency license inventory` workflow creates a machine-reada
 - The artifact is temporary CI output retained for 30 days. Before a commercial release, preserve the reviewed inventory and required license/NOTICE texts with the release package and record reviewer/date.
 - No dependency is automatically accepted, removed or blocked solely based on a license label. Legal review must consider the exact package, version, use, distribution model and applicable terms.
 
+## Product asset inventory
+
+The repository snapshot audit is recorded in [PRODUCT_ASSET_INVENTORY_2026-11-23.md](PRODUCT_ASSET_INVENTORY_2026-11-23.md). The inspected recursive Git tree contained 99 tracked entries and no bundled model weights, tokenizer files, embedding model files, fonts, icons or common image assets. This is limited to the inspected commit; it does not cover deployment images, OS packages, runtime downloads, other branches or external provider infrastructure.
+
 ## Release gate
 
 The commercial-readiness checklist remains blocked until a reviewer has reconciled the generated report with the complete product asset/model/data inventory and documented commercial-use rights and attribution obligations. This workflow is an evidence-gathering control only.
