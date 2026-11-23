@@ -15,6 +15,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] PostgreSQL graph adapter and migration with RLS ENABLE + FORCE are implemented and integration-tested against PostgreSQL 16 using a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - [x] Dry-run-first SQLite tenant migration utility creates private backups, checksums, validates snapshots, refuses overwrites by default, migrates all tenants in one transaction and verifies semantic read-back before commit.
 - [x] Internal tenant document service with bounded PDF/DOCX/TXT parsing, private SQLite/FTS5 repository and resource-limited parser process; no HTTP routes or customer uploads are enabled.
+- [x] Optional PostgreSQL document repository, composite tenant keys/FK, generated FTS vector, GIN index and RLS ENABLE + FORCE; CI verifies with a separate NOSUPERUSER/NOBYPASSRLS role.
 - [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 
