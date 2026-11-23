@@ -27,6 +27,10 @@ class CredentialStoreUnavailable(RuntimeError):
     """Raised when the credential database cannot be safely accessed."""
 
 
+class LastTenantAdminError(ValueError):
+    """Raised when an operation would leave a tenant without an active admin."""
+
+
 class SQLiteCredentialStore:
     def __init__(self, database_path):
         if not isinstance(database_path, str) or not database_path.strip():
@@ -320,6 +324,26 @@ class SQLiteCredentialStore:
                 )
         return IssuedCredential(new_id, new_token, expiry)
 
+    @staticmethod
+    def _has_other_active_admin(connection, tenant_id, exclude_credential_id, now):
+        rows = connection.execute(
+            """
+            SELECT credential_id, roles_json
+            FROM api_credentials
+            WHERE tenant_id = ? AND credential_id != ? AND revoked_at IS NULL
+              AND (expires_at IS NULL OR expires_at > ?)
+            """,
+            (tenant_id, exclude_credential_id, now),
+        ).fetchall()
+        for row in rows:
+            try:
+                roles = json.loads(row["roles_json"])
+            except (TypeError, ValueError, json.JSONDecodeError) as exc:
+                raise CredentialStoreUnavailable("Credential role metadata is invalid") from exc
+            if isinstance(roles, list) and "admin" in roles:
+                return True
+        return False
+
     def list_for_tenant(self, principal):
         """List tenant credential metadata without token digests or plaintext tokens."""
         self._require_tenant_admin(principal)
@@ -375,6 +399,12 @@ class SQLiteCredentialStore:
                 ).fetchone()
                 if row is None or row["revoked_at"] is not None:
                     return False
+                target_roles = frozenset(json.loads(row["roles_json"]))
+                if ("admin" in target_roles
+                        and not self._has_other_active_admin(
+                            connection, principal.tenant_id, credential_id, now
+                        )):
+                    raise LastTenantAdminError("Tenant musi zachować co najmniej jednego aktywnego administratora")
                 cursor = connection.execute(
                     """
                     UPDATE api_credentials SET revoked_at = ?
@@ -423,6 +453,11 @@ class SQLiteCredentialStore:
                 new_roles = old_roles if roles is None else frozenset(roles)
                 if not new_roles or not new_roles.issubset(old_roles) or not new_roles.issubset(ALLOWED_ROLES):
                     raise ValueError("Rotacja może zachować role lub je ograniczyć")
+                if ("admin" in old_roles and "admin" not in new_roles
+                        and not self._has_other_active_admin(
+                            connection, principal.tenant_id, credential_id, now
+                        )):
+                    raise LastTenantAdminError("Nie można zdegradować ostatniego aktywnego administratora")
                 target = Principal(old["subject"], old["tenant_id"], new_roles)
                 expiry = expiry_override if expiry_override is not None else old["expires_at"]
                 if expiry is not None and expiry <= now:
