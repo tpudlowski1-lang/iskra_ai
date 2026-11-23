@@ -1,0 +1,69 @@
+# Iskra AI — production gate audit (2026-11-23)
+
+## Executive decision
+
+**Overall status: NOT PRODUCTION READY.** The modular core has a strong automated test foundation and useful security/storage controls, but the production gate is not closed. No production environment, persistent volume, real credentials, external backup/restore, staging cutover or operational monitoring was verified in this audit.
+
+This report is a snapshot of repository evidence, not a penetration test, deployment attestation or certification.
+
+## Source of truth and change control
+
+- GitHub repository is the sole source of truth for code, architecture, branches, tests, PRs and releases.
+- Audit baseline: `refactor/modular-core` at `6b49760a2274464c1b0f787b850f60c8c4e014f8`.
+- `main` was observed at `7f34c5a22a0b781039d026f145307418280b8369` and was not changed.
+- Draft PRs are not part of the baseline until reviewed and merged. No PR was merged and no deployment was performed.
+- Linear, Notion and PostHog are supporting tools only; they do not replace GitHub.
+
+## Gate results
+
+| Gate | Status | Evidence and remaining work |
+|---|---|---|
+| Automated CI and dependency audit | PARTIAL | Draft PRs #47–#56 have targeted/full CI successes on their respective heads. There is not yet one integrated final SHA with all changes. |
+| WSGI authentication | PARTIAL | PR #50 and #51 add fail-closed production and direct-development WSGI tests. Live host secrets, persistent credential DB, TLS and operator provisioning have not been verified. |
+| Identity, roles and tenant boundaries | PARTIAL | Principal-bound APIs and PostgreSQL FORCE RLS are integration-tested in CI using a separate NOSUPERUSER/NOBYPASSRLS role. Independent security review is outstanding. The transaction-local custom tenant setting is defense-in-depth, not protection against SQL injection or arbitrary code execution under the DB role. |
+| PostgreSQL migrations | PARTIAL | PR #52 adds SQLite integrity/foreign-key preflight and strict migration validation. PR #54 adds checksum-verified SQLite backup restore. Neither proves production-like cutover, semantic verification of a live tenant dataset, or a completed rollback drill. PR #52 and #54 both touch the migration script and must be reviewed/tested together on one combined head. |
+| Backup and recovery | PARTIAL | PR #54 verifies and restores one tenant-graph SQLite file. It does not restore the legacy JSON graph, credential DB, document originals, PostgreSQL, hosting configuration or external secrets. No durable-volume restore drill was performed. |
+| Document ingestion and RAG | BLOCKED for public use | The document service has no HTTP routes and no generated RAG answers. The parser runs in a resource-limited child process but under the same OS user; there is no full OS/container sandbox, malware quarantine, object storage, encryption-key lifecycle, retention scheduler or full audit pipeline. Public uploads/RAG must remain disabled. |
+| Hosting and persistence | BLOCKED | The baseline `render.yaml` uses two Gunicorn workers while the legacy global graph has process-local constraints; PR #53 changes it to one worker and passes CI. The manifest does not provision a persistent disk or managed PostgreSQL. No live Render configuration, volume, secrets, TLS, restart persistence or deployment was inspected. |
+| Credentials lifecycle | PARTIAL | SQLite registry stores token digests and supports issue/rotate/revoke/expiry with audit events. Public account provisioning/recovery, managed lifecycle and a durable production credential store are not complete. Render's legacy `API_TOKEN` represents the system administrator; tenant credentials need a separately provisioned persistent registry. |
+| Secrets and repository hygiene | PARTIAL | Existing `.gitignore` rules are extended in PR #56 to cover credentials DBs, private documents, backups and local runtime artifacts. PR #56 CI passes, but it remains Draft and is not yet in the baseline. Hosting secret rotation has not been tested. |
+| LLM routing and provider reliability | PARTIAL | PR #48 tests provider exception fallback. Live provider credentials, quotas, cost controls, invalid-schema handling and real upstream availability have not been validated. The adversarial corpus in PR #49 is structural test data; it is not a semantic LLM safety pass. |
+| Observability and incident response | BLOCKED for production operations | PostHog is connected as a tool but has not been instrumented in Iskra. No verified central structured logs, metrics, traces, alert routing, secret/PII redaction or incident-response drill. Datadog is not connected; this is not a code blocker by itself. |
+| Autonomous worker | PARTIAL | Web startup keeps the autonomous loop disabled. Explicit worker role is required, but a dedicated single-owner worker with lease/coordination and operational monitoring is not verified. |
+| Web/API hardening | PARTIAL | Security headers and request-size limits exist. Rate limits/per-tenant budgets are not wired; CSP still permits inline script/style for the current dashboard, and HSTS/proxy configuration has not been verified. CSRF is a future gate for browser state-changing routes. |
+
+## CI evidence checked
+
+All runs below were observed as completed/success on their specific PR heads:
+
+- PR #47 Quality Engine: [45107678207](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45107678207)
+- PR #48 Security & Reliability: [45108077117](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45108077117)
+- PR #49 adversarial corpus integrity: [45109641744](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45109641744)
+- PR #50 production WSGI integration: [45111883568](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45111883568)
+- PR #51 secure development entrypoint: [45112011575](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112011575)
+- PR #52 strict migration validation: [45112445030](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112445030)
+- PR #53 Render single-worker contract: [45112296368](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45112296368)
+- PR #54 verified SQLite restore: [45113522451](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113522451)
+- PR #55 independent document backend selection: [45113445185](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113445185)
+- PR #56 repository hygiene: [45113770942](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45113770942)
+
+A green CI run proves only the tests executed for that commit. It does not prove production hosting, real secret configuration, persistent storage, staging recovery, live LLM safety or deployment readiness.
+
+## Required closure sequence
+
+1. Review and integrate PRs #47–#56 in a controlled order, resolving shared-file overlap between migration PRs #52 and #54. Keep all PRs Draft until review and explicit merge authorization.
+2. Run the complete suite and dependency audit on one final integrated SHA.
+3. Complete an independent tenant authorization/RLS review and negative tests against the production-like DB role.
+4. Configure a persistent volume or managed PostgreSQL and run staging migration, semantic read-back, backup, restore and rollback drills.
+5. Add a dedicated low-privilege parser container/OS sandbox, malware quarantine, private object storage, encryption, retention and audit before exposing documents.
+6. Keep customer uploads and RAG disabled until retrieval isolation, prompt-injection evaluation, evidence grounding and citations pass.
+7. Configure and verify host secrets, TLS/HSTS, durable storage, worker topology, quotas, structured observability, alerts and incident response.
+8. Run staging smoke, restart, concurrency, failure and recovery tests.
+9. Record the final SHA and evidence in GitHub. Only then can the product gate be considered for SUCCESS.
+
+## Non-negotiable safety boundaries
+
+- Do not modify `main` as part of this audit.
+- Do not merge PRs or deploy without a separate explicit release decision.
+- Do not enable public uploads or RAG before the document security gates pass.
+- Do not label a targeted test suite or a green isolated PR as full product SUCCESS.
