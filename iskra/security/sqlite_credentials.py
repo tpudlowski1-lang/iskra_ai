@@ -203,7 +203,9 @@ class SQLiteCredentialStore:
                 """,
                 (digest,),
             ).fetchone()
-        if row is None or row["revoked_at"] is not None:
+        # Legacy rows created before the reserved-system boundary must not
+        # continue authenticating as a tenant principal after the fix.
+        if row is None or row["tenant_id"] == "system" or row["revoked_at"] is not None:
             return None
         if row["expires_at"] is not None and current >= row["expires_at"]:
             return None
