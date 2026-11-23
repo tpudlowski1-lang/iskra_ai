@@ -21,17 +21,20 @@ class DocumentService:
         return principal.tenant_id
 
     def add_document(self, principal, filename, data):
-        tenant_id = self._tenant_id(principal)
+        self._tenant_id(principal)
         parsed = self.parser(filename, data)
-        return self.repository.add(tenant_id, parsed)
+        return self.repository.add(principal, parsed)
 
     def list_documents(self, principal):
-        return self.repository.list(self._tenant_id(principal))
+        self._tenant_id(principal)
+        return self.repository.list(principal)
 
     def search_documents(self, principal, query, limit=5):
-        return self.repository.search(self._tenant_id(principal), query, limit)
+        self._tenant_id(principal)
+        return self.repository.search(principal, query, limit)
 
     def delete_document(self, principal, document_id):
         if not isinstance(document_id, str) or not document_id or len(document_id) > 64:
             raise ValueError("Nieprawidłowy identyfikator dokumentu")
-        return self.repository.delete(self._tenant_id(principal), document_id)
+        self._tenant_id(principal)
+        return self.repository.delete(principal, document_id)
