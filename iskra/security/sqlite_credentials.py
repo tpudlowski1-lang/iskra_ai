@@ -492,8 +492,16 @@ class SQLiteCredentialStore:
                         )):
                     raise LastTenantAdminError("Nie można zdegradować ostatniego aktywnego administratora")
                 target = Principal(old["subject"], old["tenant_id"], new_roles)
-                expiry = expiry_override if expiry_override is not None else old["expires_at"]
-                if expiry is not None and expiry <= now:
+                if expiry_override is not None:
+                    expiry = expiry_override
+                elif old["expires_at"] is not None:
+                    expiry = min(
+                        old["expires_at"],
+                        now + self.TENANT_MAX_CREDENTIAL_TTL_SECONDS,
+                    )
+                else:
+                    expiry = now + self.TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS
+                if expiry <= now:
                     raise ValueError("Nowy token musi mieć datę ważności w przyszłości")
 
                 connection.execute(
