@@ -7,10 +7,12 @@ import argparse
 from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -61,6 +63,77 @@ def create_private_backup(source_path, backup_dir):
         except OSError:
             pass
         raise
+
+
+def verify_private_backup(backup_path, expected_sha256):
+    """Verify checksum, SQLite integrity, foreign keys and tenant graph schema."""
+    path = os.path.abspath(backup_path)
+    if os.path.islink(path) or not os.path.isfile(path):
+        raise MigrationError("Kopia musi być istniejącym zwykłym plikiem")
+    if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        raise MigrationError("Wymagana jest poprawna suma SHA-256 kopii")
+    actual = sha256_file(path)
+    if not hmac.compare_digest(actual, expected_sha256.lower()):
+        raise MigrationError("Suma SHA-256 kopii nie zgadza się")
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True)) as connection:
+            integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
+            if integrity != "ok":
+                raise MigrationError("Kontrola integralności kopii SQLite nie powiodła się")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise MigrationError("Kopia SQLite zawiera naruszenia kluczy obcych")
+            tables = {
+                row[0] for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if not {"graph_neurons", "graph_synapses"}.issubset(tables):
+                raise MigrationError("Kopia nie zawiera schematu grafu tenantów")
+    except sqlite3.DatabaseError as exc:
+        raise MigrationError("Plik kopii nie jest poprawną bazą SQLite") from exc
+    return {"path": path, "sha256": actual, "integrity": "ok"}
+
+
+def restore_private_backup(backup_path, target_path, expected_sha256):
+    """Atomically restore a verified backup to a NEW path; never overwrite."""
+    verified = verify_private_backup(backup_path, expected_sha256)
+    target = os.path.abspath(target_path)
+    if target == verified["path"]:
+        raise MigrationError("Ścieżka docelowa nie może wskazywać pliku kopii")
+    directory = os.path.dirname(target)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=".iskra-restore-", dir=directory)
+    try:
+        with os.fdopen(descriptor, "wb") as output, open(verified["path"], "rb") as source:
+            shutil.copyfileobj(source, output, length=1024 * 1024)
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(temporary, 0o600)
+        # A hard-link publish is atomic and fails if target already exists.
+        os.link(temporary, target)
+        os.unlink(temporary)
+        try:
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError:
+            pass
+    except FileExistsError:
+        raise MigrationError("Plik docelowy już istnieje; odtwarzanie przerwane bez nadpisania") from None
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+    return {
+        "restored_path": target,
+        "sha256": verified["sha256"],
+        "bytes": os.path.getsize(target),
+        "status": "restored_verified",
+    }
 
 
 def read_tenant_snapshots(sqlite_path):
