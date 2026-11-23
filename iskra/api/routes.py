@@ -7,7 +7,7 @@ from iskra.security.policy import require_roles, require_system_admin
 from iskra.security.principal import principal_from_environ
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
-from iskra.security.sqlite_credentials import CredentialStoreUnavailable
+from iskra.security.sqlite_credentials import CredentialStoreUnavailable, LastTenantAdminError
 
 
 MAX_DOCUMENT_UPLOAD_BYTES = 1024 * 1024
@@ -205,6 +205,8 @@ def create_api_blueprint(
             }), 200
         except PermissionError:
             return jsonify({"error": "forbidden"}), 403
+        except LastTenantAdminError:
+            return jsonify({"error": "last_tenant_admin_required"}), 409
         except (TypeError, ValueError):
             return jsonify({"error": "credential_not_rotatable"}), 404
         except CredentialStoreUnavailable:
@@ -221,6 +223,8 @@ def create_api_blueprint(
             if not store.revoke_for_tenant(principal, credential_id):
                 return jsonify({"error": "credential_not_found"}), 404
             return jsonify({"status": "revoked", "credential_id": credential_id})
+        except LastTenantAdminError:
+            return jsonify({"error": "last_tenant_admin_required"}), 409
         except PermissionError:
             return jsonify({"error": "forbidden"}), 403
         except CredentialStoreUnavailable:
