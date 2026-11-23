@@ -33,7 +33,8 @@ If `API_TOKEN` is missing, the middleware fails closed with HTTP 503 on all non-
 ## Storage and migration
 
 The graph store uses SQLite as its durable source of truth:
-- database: `$DATA_DIR/iskra.sqlite3`;
+- graph database: `$DATA_DIR/iskra.sqlite3`;
+- tenant document database: `$DATA_DIR/iskra_knowledge.sqlite3`;
 - compatibility/export snapshot: `$DATA_DIR/wiedza.json`;
 - SQLite uses WAL journaling, a 30-second busy timeout and transactional writes;
 - on first start, an existing valid `wiedza.json` is imported automatically;
@@ -62,7 +63,7 @@ The autonomous graph-learning loop is disabled by default. Set `ENABLE_AUTONOMOU
 
 ## Important limitations
 
-This branch is not yet a multi-tenant SaaS. It does not yet provide customer accounts, document upload, tenant-isolated retrieval, billing, or production-grade document storage. Do not upload customer confidential documents or expose it as a paid customer service until those controls are implemented and tested.
+This branch now contains a tenant-isolated document pilot API with per-company API keys, PDF/DOCX/TXT ingestion and tenant-filtered SQLite FTS5 search. It is not yet a complete multi-tenant SaaS: named user accounts, roles, semantic vector retrieval, generated grounded answers, billing, private object storage, formal retention controls and production operations are still missing. Do not upload highly sensitive customer documents or sell the service until those remaining controls are implemented and independently reviewed.
 
 
 ## Tenant document knowledge (pilot API)
