@@ -19,6 +19,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
 - [x] LLM router external providers are deny-by-default; each primary/fallback must be listed in `LLM_ALLOWED_PROVIDERS`.
+- [ ] Draft branch adds a second per-tenant allowlist (`ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`) intersected with deployment approval; requires review/integration and an operator workflow for documented processing instructions before production use.
 - [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
