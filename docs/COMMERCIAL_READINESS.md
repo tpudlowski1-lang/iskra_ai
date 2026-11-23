@@ -133,7 +133,7 @@ A release can be considered **commercial-candidate** only when every item below 
 ## 10. Current known blockers (initial baseline)
 
 The repository audit dated 2026-11-23 records:
-- Draft PR #67 provides one integrated candidate: 250 tests pass on Python 3.11 and 3.12, with dependency audit, Quality Engine, Security/Reliability and Adversarial Corpus workflows successful. The LLM fallback chain now has a shared 100-second deadline while preserving the provider callback API. It remains Draft and is not a reviewed or approved release.
+- Draft PR #67 provides one integrated candidate: 263 tests pass on Python 3.11 and 3.12, with dependency audit, Quality Engine, Security/Reliability and Adversarial Corpus workflows successful. The LLM fallback chain now has a shared 100-second deadline while preserving the provider callback API. Tenant-aware 60/minute request limiting is wired with process-local storage for the current single-worker topology. It remains Draft and is not a reviewed or approved release.
 - No verified production deployment, persistent hosting volume or live secret configuration.
 - No production-like migration, restore and rollback drill.
 - Public document uploads and RAG must remain disabled; parser is not yet a full OS/container sandbox.
