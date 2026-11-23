@@ -33,12 +33,12 @@ The custom transaction-local setting is a defense against accidental unscoped qu
 
 ## Deployment and migration status
 
-This is a tested adapter and schema prototype, not a live migration of Iskra's current JSON graph. The Flask API still uses the existing graph service. Do not set a production PostgreSQL DSN or route customer traffic to this adapter until:
+The Flask tenant API can select SQLite (default) or PostgreSQL through validated server-side settings. PostgreSQL remains opt-in and is not the default. Set `ISKRA_TENANT_STORAGE_BACKEND=postgres` and `ISKRA_POSTGRES_DSN` only after applying the migration with a separate operator role and completing staging checks. The legacy global graph remains JSON. Do not route production customer traffic to PostgreSQL until:
 - a backup and repeatable migration/rollback procedure exists;
 - a staging database has been migrated and restore-tested;
 - runtime credentials are stored outside source control;
 - the runtime role is verified as non-superuser and non-BYPASSRLS;
 - cross-tenant read/write/delete and missing-context tests pass against the production-like database;
-- application services are wired to derive tenant scope only from the authenticated Principal.
+- application services are wired to derive tenant scope only from the authenticated Principal; the runtime factory now enforces this selection.
 
 CI starts an ephemeral PostgreSQL 16 service, applies the migration as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real database RLS integration tests using that runtime role.
