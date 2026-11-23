@@ -3,7 +3,7 @@ on:
   push:
     branches: [quality/redteam-corpus-v1]
   pull_request:
-    branches: [quality/security-reliability-v1]
+    branches: [refactor/modular-core, quality/security-reliability-v1]
   workflow_dispatch:
 permissions:
   contents: read
