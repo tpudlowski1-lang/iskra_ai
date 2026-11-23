@@ -223,5 +223,51 @@ class AuthorizationPolicyTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+
+class GlobalGraphBoundaryTests(unittest.TestCase):
+    class FakeGraph:
+        def __init__(self):
+            from threading import RLock
+            self.lock = RLock()
+            self.dane = {"neurons": {"secret": {"label": "private"}}, "synapses": []}
+
+        def laduj(self):
+            return None
+
+    def client_for(self, principal):
+        from flask import Flask, request
+        from iskra.api.routes import create_api_blueprint
+
+        app = Flask(__name__)
+        app.register_blueprint(create_api_blueprint(self.FakeGraph()))
+
+        @app.before_request
+        def attach_principal():
+            if principal is not None:
+                request.environ[PRINCIPAL_ENV_KEY] = principal
+
+        return app.test_client()
+
+    def test_member_cannot_read_global_graph(self):
+        member = Principal("member-1", "tenant-a", frozenset({"member"}))
+        response = self.client_for(member).get("/api/network")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(b"private", response.data)
+
+    def test_tenant_admin_cannot_read_global_graph(self):
+        tenant_admin = Principal("admin-1", "tenant-a", frozenset({"admin"}))
+        response = self.client_for(tenant_admin).get("/api/network")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(b"private", response.data)
+
+    def test_system_admin_can_read_global_graph(self):
+        response = self.client_for(SYSTEM_ADMIN).get("/api/network")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"private", response.data)
+
+    def test_health_is_public_without_principal(self):
+        response = self.client_for(None).get("/health")
+        self.assertEqual(response.status_code, 200)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
