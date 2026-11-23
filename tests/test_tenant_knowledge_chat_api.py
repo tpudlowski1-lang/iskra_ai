@@ -24,10 +24,13 @@ class FakeRouter:
     def __init__(self):
         self.calls = []
         self.response_override = None
+        self.return_none = False
 
     def generate(self, prompt, system_prompt=None):
         payload = json.loads(prompt)
         self.calls.append((payload, system_prompt))
+        if self.return_none:
+            return None
         if self.response_override is not None:
             return self.response_override
         source = payload["sources"][0]
@@ -162,6 +165,16 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 502)
         self.assertEqual(response.get_json()["error"], "invalid_model_response")
+
+    def test_chat_returns_503_when_no_provider_is_allowlisted(self):
+        self.router.return_none = True
+        response = self.client.post(
+            "/api/tenant/chat",
+            headers=self.auth("alpha-member-token"),
+            json={"question": "ALPHA-SECRET"},
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["error"], "inference_unavailable")
 
     def test_chat_validates_question_payload(self):
         response = self.client.post(
