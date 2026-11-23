@@ -1,8 +1,11 @@
 import base64
 import json
+import os
+import tempfile
 import unittest
 
-from iskra.security.policy import require_roles
+from iskra.security.policy import require_roles, require_system_admin
+from iskra.security.credentials import SQLiteCredentialStore
 from iskra.security.principal import (
     PRINCIPAL_ENV_KEY,
     Principal,
@@ -97,6 +100,30 @@ class ApiTokenMiddlewareTests(unittest.TestCase):
         self.assertEqual(response["status"], "200 OK")
         self.assertIsNone(principal_from_environ(response["environ"]))
 
+    def test_sqlite_credential_authentication_attaches_tenant_principal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteCredentialStore(os.path.join(directory, "credentials.sqlite3"))
+            member = Principal("member-1", "tenant-a", frozenset({"member"}))
+            issued = store.issue(member)
+            response = self.request(
+                ApiTokenMiddleware(self.application, token="", credential_store=store),
+                headers={"HTTP_AUTHORIZATION": "Bearer " + issued.token},
+            )
+            self.assertEqual(response["status"], "200 OK")
+            self.assertEqual(principal_from_environ(response["environ"]), member)
+
+    def test_revoked_credential_is_rejected_by_middleware(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SQLiteCredentialStore(os.path.join(directory, "credentials.sqlite3"))
+            issued = store.issue(Principal("member-1", "tenant-a", frozenset({"member"})))
+            store.revoke(issued.credential_id)
+            response = self.request(
+                ApiTokenMiddleware(self.application, token="", credential_store=store),
+                headers={"HTTP_AUTHORIZATION": "Bearer " + issued.token},
+            )
+            self.assertEqual(response["status"], "401 Unauthorized")
+            self.assertEqual(self.calls, [])
+
 
 class PrincipalTests(unittest.TestCase):
     def test_principal_is_immutable_and_normalizes_roles(self):
@@ -174,6 +201,26 @@ class AuthorizationPolicyTests(unittest.TestCase):
 
         response = app.test_client().get("/admin")
         self.assertEqual(response.status_code, 200)
+
+    def test_system_admin_policy_rejects_tenant_admin(self):
+        from flask import Flask
+
+        app = Flask(__name__)
+
+        @app.get("/global")
+        @require_system_admin
+        def global_data():
+            return "secret"
+
+        @app.before_request
+        def attach_tenant_admin():
+            from flask import request
+            request.environ[PRINCIPAL_ENV_KEY] = Principal(
+                "admin-1", "tenant-a", frozenset({"admin"})
+            )
+
+        response = app.test_client().get("/global")
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":
