@@ -1,0 +1,42 @@
+name: Iskra Python dependency license inventory
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [iskra-unified-core, refactor/modular-core]
+  push:
+    branches: [refactor/modular-core]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-license-inventory:
+    name: Generate Python dependency license inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install application dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Install pinned license inventory tool
+        run: pip install pip-licenses==5.5.1
+      - name: Generate machine-readable license and notice inventory
+        run: |
+          pip-licenses --from=all --format=json --with-urls \
+            --with-license-file --with-notice-file \
+            --output-file=python-dependency-licenses.json
+      - name: Upload license inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dependency-license-inventory
+          path: python-dependency-licenses.json
+          if-no-files-found: error
+          retention-days: 30
