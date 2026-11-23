@@ -95,6 +95,11 @@ class ApiTokenMiddleware:
                 principal = None
             elif self.token and hmac.compare_digest(supplied, self.token):
                 principal = SYSTEM_ADMIN
+            else:
+                # A miss in the persistent registry may still match the
+                # separately configured static digest registry. Database
+                # outages above fail closed and never reach this fallback.
+                principal = principal_for_token(supplied, self.credentials)
         elif supplied and self.token and hmac.compare_digest(supplied, self.token):
             principal = SYSTEM_ADMIN
         elif supplied:
