@@ -23,7 +23,7 @@
   async function apiRequest(path, options = {}) {
     const headers = new Headers(options.headers || {});
     headers.set("Authorization", "Bearer " + apiToken);
-    if (options.body && !(options.body instanceof FormData)) {
+    if (options.body) {
       headers.set("Content-Type", "application/json");
     }
     return fetch(path, { ...options, headers, credentials: "same-origin" });
@@ -69,9 +69,9 @@
     const data = await response.json();
     const documents = Array.isArray(data.documents) ? data.documents : [];
     documentList.replaceChildren();
-    documents.forEach((document) => {
+    documents.forEach((doc) => {
       const item = document.createElement("li");
-      item.textContent = String(document.filename || "Dokument");
+      item.textContent = String(doc.filename || "Dokument");
       documentList.append(item);
     });
     documentCount.textContent = String(documents.length);
