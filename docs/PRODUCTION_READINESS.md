@@ -9,7 +9,8 @@ This checklist is intentionally conservative. The modular refactor does not by i
 - [x] Runtime port and data directory validated.
 - [x] Dashboard graph labels are rendered with DOM `textContent`, not `innerHTML`.
 - [x] Baseline security headers added.
-- [x] Shared fail-closed `API_TOKEN` middleware protects non-health routes when the application is served through `wsgi:app`; it is not a user/tenant identity system.
+- [x] Fail-closed WSGI middleware supports an injected credential-store backend and preserves legacy `API_TOKEN` compatibility; production `wsgi.py` still uses only the shared token.
+- [x] Global `/api/network` is restricted to the system-admin principal; member and tenant-admin principals receive 403.
 - [x] Tenant-scoped transactional SQLite graph adapter added and tested; it is not yet wired into the live Flask application.
 - [x] Existing deterministic tests run on Python 3.11 and 3.12 in GitHub Actions.
 - [x] Existing multi-thread/process stress suite run in GitHub Actions.
@@ -27,7 +28,8 @@ This checklist is intentionally conservative. The modular refactor does not by i
 - [ ] Staging deployment, backup/restore drill, and production smoke tests.
 
 ## Operational rules
-- Use `wsgi:app` for public deployment; direct `app:app` does not install the shared-token middleware.
+- Use `wsgi:app` for public deployment; direct `app:app` does not install authentication middleware.
+- The credential-store backend is injectable but not yet configured by `wsgi.py`; live deployment remains on legacy `API_TOKEN`.
 - Keep `ENABLE_AUTONOMOUS_LOOP=false` on web deployments.
 - Do not run multiple Gunicorn workers against JSON storage and assume process-local locks are sufficient. The current POSIX file lock is a compatibility safeguard, not a substitute for database transactions.
 - Never store API keys in Git. Configure them as hosting secrets.
