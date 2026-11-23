@@ -18,7 +18,7 @@ Implemented:
 - The worker prompt is restricted to a fixed public taxonomy; arbitrary mutable graph content is excluded.
 
 Not implemented:
-- Per-tenant provider routing or per-tenant provider allowlists. A deployment-level `LLM_ALLOWED_PROVIDERS` allowlist now blocks every provider not explicitly named; an empty/unset list blocks all router calls.
+- Draft implementation in `privacy/tenant-provider-policy-v1`: per-tenant provider allowlists configured by the operator through `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant list is intersected with deployment-wide `LLM_ALLOWED_PROVIDERS`; either missing approval blocks the provider. Missing tenant entries deny by default. This is server-side configuration only, not a consent UI or proof that the operator has obtained lawful consent.
 - User-facing notice/consent and controls for external processing.
 - Prompt-level PII/secret detection, redaction or data minimization.
 - Provider-specific retention, region, training-use or deletion configuration.
@@ -30,7 +30,8 @@ Not implemented:
 
 1. Define data classes (public, internal, confidential, personal/special-category) and prohibit secrets/credentials in prompts.
 2. Decide which data classes may be sent to each provider; default-deny confidential and personal data until contract, region, retention and transfer reviews are complete.
-3. Maintain the server-side `LLM_ALLOWED_PROVIDERS` allowlist as default-deny. Do not rely on user-supplied prompt text to choose a provider; provider approval still requires contractual and data-classification review.
+3. Maintain both server-side allowlists as default-deny: `LLM_ALLOWED_PROVIDERS` and `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON`. The tenant map is JSON object keyed by exact tenant ID, for example `{"tenant-acme":["deepseek"]}`. A provider is eligible only when present in both lists. Do not rely on user-supplied prompt text to choose a provider.
+4. Keep the tenant map empty or omit a tenant until the operator has independently documented the customer's processing instructions, legal basis and provider review. This environment variable is a technical gate, not a consent record.; provider approval still requires contractual and data-classification review.
 4. Add tenant-scoped context construction and strict data minimization; never serialize the global graph into a tenant request.
 5. Add deterministic redaction for credentials and high-confidence sensitive identifiers before any network call; treat this as defense in depth, not a guarantee.
 6. Provide a local-only mode whose policy rejects all external network providers, not merely a UI preference.
