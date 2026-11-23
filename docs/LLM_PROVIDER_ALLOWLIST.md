@@ -1,6 +1,6 @@
 # External LLM provider allowlist
 
-**Status:** dual-gate policy implemented in draft branch `privacy/tenant-provider-policy-v1`; not yet integrated or deployed.  
+**Status:** dual-gate policy is included in rebased Draft PR #88; not yet integrated into the canonical release or deployed.  
 **Default:** deny outbound provider calls.
 
 ## Policy
@@ -41,7 +41,7 @@ LLM_FALLBACK_PROVIDERS=openai
 
 Do not enable a provider solely because its API key exists. The operator must first approve its data-handling terms, data classes, account/project settings, region, retention and contractual requirements. API keys remain in the host secret manager.
 
-## Per-tenant gate (draft branch)
+## Per-tenant gate (draft feature candidate)
 
 `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON` is a JSON object keyed by exact tenant ID. Example:
 
