@@ -70,7 +70,7 @@ class ApiTokenMiddleware:
                 {"error": "service_not_configured", "message": "Invalid server-side credential configuration."},
             )
 
-        if not self.token and not self.credentials:
+        if not self.token and not self.credentials and self.credential_store is None:
             return self._response(
                 start_response,
                 "503 Service Unavailable",
