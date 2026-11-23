@@ -15,6 +15,7 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 - If no sources are found, the service returns a no_sources response without calling an LLM.
 - The model receives at most five excerpts, each truncated to 1,200 characters. It receives no tenant identifier or conversation history. Retrieval currently uses tenant-filtered SQLite FTS5 lexical search, not semantic/vector embeddings.
 - The system prompt tells the model to treat excerpts as untrusted data and ignore embedded instructions.
+- Draft outbound minimization redacts common secret/token patterns, PEM private keys, email addresses and IBANs from questions and excerpts; document filenames are excluded from the model prompt. This is best-effort only, not complete DLP/anonymization.
 - An answer must cite at least one exact document ID returned by tenant-scoped search. Unknown or cross-tenant citation IDs are rejected.
 - If the model cannot support an answer, it must return an empty answer and empty citation list; the service returns no_answer.
 - If no provider is explicitly allowlisted, inference is unavailable and the API returns 503.
@@ -25,7 +26,7 @@ All endpoints require a trusted API-token Principal. Tenant ID is derived from t
 - Upload is disabled by default in code and in Render. Do not enable it for customer data until parser sandboxing, malware scanning, retention, audit, backup and incident-response controls are completed.
 - The parser worker has resource/environment hardening but is not a full OS/container sandbox.
 - Prompt-injection instructions in retrieved excerpts are mitigated by a separate system prompt and untrusted-data framing, but no deterministic test can prove universal resistance to model-based prompt injection.
-- The /assistant browser UI is a minimal controlled-pilot interface only; there is no signup, account recovery, HTTP-only browser session, server-side conversation history, semantic/vector retrieval, consent UI or ordinary-prompt PII/secret redaction yet.
+- The /assistant browser UI is a minimal controlled-pilot interface only; there is no signup, account recovery, HTTP-only browser session, server-side conversation history, semantic/vector retrieval, consent UI or complete PII/secret DLP or reliable anonymization yet.
 - No live provider calls, customer documents or production deployment were used in CI.
 
 This API is a technical foundation for an MVP, not evidence of production or commercial readiness.
