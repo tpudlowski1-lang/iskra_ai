@@ -56,6 +56,10 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.store.issue({"subject": "member", "tenant_id": "tenant-blue"})
 
+    def test_credential_ids_have_cli_safe_prefix(self):
+        issued = self.store.issue(self.principal)
+        self.assertTrue(issued.credential_id.startswith("cred_"))
+
     def test_issue_writes_audit_event_without_token_material(self):
         issued = self.store.issue(self.principal, actor="operator-7")
         events = self.store.list_audit_events()
