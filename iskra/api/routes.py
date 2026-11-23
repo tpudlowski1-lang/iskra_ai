@@ -1,13 +1,25 @@
 """HTTP API blueprint factory with injected graph and tenant storage dependencies."""
 import sqlite3
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from iskra.security.policy import require_roles, require_system_admin
 from iskra.security.principal import principal_from_environ
+from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
+from iskra.documents.repository import DocumentStorageError
+from iskra.security.sqlite_credentials import CredentialStoreUnavailable, LastTenantAdminError
 
 
-def create_api_blueprint(graph, tenant_store_factory=None):
+MAX_DOCUMENT_UPLOAD_BYTES = 1024 * 1024
+
+
+def create_api_blueprint(
+    graph,
+    tenant_store_factory=None,
+    document_service=None,
+    chat_service=None,
+    document_ingestion_enabled=False,
+):
     """Build routes around explicit graph and tenant-store dependencies."""
     api = Blueprint("iskra_api", __name__)
 
@@ -80,6 +92,224 @@ def create_api_blueprint(graph, tenant_store_factory=None):
             return jsonify({"error": "invalid_graph_payload", "message": str(exc)}), 400
         except (OSError, sqlite3.Error):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
+
+    @api.post("/api/tenant/chat")
+    @require_roles("member", "admin")
+    def post_tenant_chat():
+        if chat_service is None:
+            return jsonify({"error": "chat_unavailable"}), 503
+        if not request.is_json:
+            return jsonify({"error": "application_json_required"}), 415
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "invalid_chat_payload"}), 400
+        question = payload.get("question")
+        if not isinstance(question, str) or not question.strip():
+            return jsonify({"error": "question_required"}), 400
+        principal = principal_from_environ(request.environ)
+        try:
+            result = chat_service.answer(principal, question)
+            return jsonify(result)
+        except ValueError:
+            return jsonify({"error": "invalid_question"}), 400
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except InferenceUnavailable:
+            return jsonify({"error": "inference_unavailable"}), 503
+        except InvalidModelResponse:
+            return jsonify({"error": "invalid_model_response"}), 502
+        except (DocumentStorageError, OSError, sqlite3.Error):
+            return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.get("/api/tenant/session")
+    @require_roles("member", "admin")
+    def tenant_session():
+        principal = principal_from_environ(request.environ)
+        return jsonify({
+            "subject": principal.subject,
+            "tenant_id": principal.tenant_id,
+            "roles": sorted(principal.roles),
+        })
+
+    @api.get("/api/tenant/credentials")
+    @require_roles("admin")
+    def list_tenant_credentials():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            return jsonify({"credentials": store.list_for_tenant(principal)})
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.post("/api/tenant/credentials")
+    @require_roles("admin")
+    def issue_tenant_credential():
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if not request.is_json:
+            return jsonify({"error": "application_json_required"}), 415
+        payload = request.get_json(silent=True)
+        if (not isinstance(payload, dict)
+                or set(payload) - {"subject", "roles", "expires_at"}
+                or ("roles" in payload and not isinstance(payload["roles"], list))):
+            return jsonify({"error": "invalid_credential_payload"}), 400
+        principal = principal_from_environ(request.environ)
+        try:
+            issued = store.issue_for_tenant(
+                principal,
+                payload.get("subject"),
+                roles=payload.get("roles"),
+                expires_at=payload.get("expires_at"),
+            )
+            return jsonify({
+                "credential_id": issued.credential_id,
+                "token": issued.token,
+                "subject": payload.get("subject"),
+                "tenant_id": principal.tenant_id,
+                "roles": sorted({"member"} if payload.get("roles") is None else set(payload.get("roles"))),
+                "expires_at": issued.expires_at,
+                "warning": "Token jest wyświetlany tylko raz. Zapisz go w bezpiecznym menedżerze sekretów.",
+            }), 201
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid_credential_payload"}), 400
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.post("/api/tenant/credentials/<credential_id>/rotate")
+    @require_roles("admin")
+    def rotate_tenant_credential(credential_id):
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        if request.is_json:
+            payload = request.get_json(silent=True)
+            if (not isinstance(payload, dict)
+                    or set(payload) - {"roles", "expires_at"}
+                    or ("roles" in payload and not isinstance(payload["roles"], list))):
+                return jsonify({"error": "invalid_credential_payload"}), 400
+        elif request.data:
+            return jsonify({"error": "application_json_required"}), 415
+        else:
+            payload = {}
+        principal = principal_from_environ(request.environ)
+        try:
+            issued = store.rotate_for_tenant(
+                principal,
+                credential_id,
+                expires_at=payload.get("expires_at"),
+                roles=payload.get("roles"),
+            )
+            return jsonify({
+                "credential_id": issued.credential_id,
+                "token": issued.token,
+                "tenant_id": principal.tenant_id,
+                "expires_at": issued.expires_at,
+                "warning": "Nowy token jest wyświetlany tylko raz; poprzedni token został unieważniony.",
+            }), 200
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except LastTenantAdminError:
+            return jsonify({"error": "last_tenant_admin_required"}), 409
+        except (TypeError, ValueError):
+            return jsonify({"error": "credential_not_rotatable"}), 404
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.delete("/api/tenant/credentials/<credential_id>")
+    @require_roles("admin")
+    def revoke_tenant_credential(credential_id):
+        store = current_app.config.get("ISKRA_CREDENTIAL_STORE")
+        if store is None:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            if not store.revoke_for_tenant(principal, credential_id):
+                return jsonify({"error": "credential_not_found"}), 404
+            return jsonify({"status": "revoked", "credential_id": credential_id})
+        except LastTenantAdminError:
+            return jsonify({"error": "last_tenant_admin_required"}), 409
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
+
+    @api.get("/api/tenant/documents")
+    @require_roles("member", "admin")
+    def list_tenant_documents():
+        if document_service is None:
+            return jsonify({"error": "document_storage_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            return jsonify({"documents": document_service.list_documents(principal)})
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (DocumentStorageError, OSError, sqlite3.Error):
+            return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.get("/api/tenant/documents/search")
+    @require_roles("member", "admin")
+    def search_tenant_documents():
+        if document_service is None:
+            return jsonify({"error": "document_storage_unavailable"}), 503
+        query = request.args.get("q", "")
+        principal = principal_from_environ(request.environ)
+        try:
+            return jsonify({"results": document_service.search_documents(principal, query, limit=5)})
+        except ValueError:
+            return jsonify({"error": "invalid_query"}), 400
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (DocumentStorageError, OSError, sqlite3.Error):
+            return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.post("/api/tenant/documents")
+    @require_roles("admin")
+    def add_tenant_document():
+        if not document_ingestion_enabled:
+            return jsonify({"error": "document_ingestion_disabled"}), 503
+        if document_service is None:
+            return jsonify({"error": "document_storage_unavailable"}), 503
+        uploaded = request.files.get("file")
+        if uploaded is None or not uploaded.filename:
+            return jsonify({"error": "file_required"}), 400
+        try:
+            data = uploaded.stream.read(MAX_DOCUMENT_UPLOAD_BYTES + 1)
+            if len(data) > MAX_DOCUMENT_UPLOAD_BYTES:
+                return jsonify({"error": "file_too_large"}), 413
+            principal = principal_from_environ(request.environ)
+            result = document_service.add_document(principal, uploaded.filename, data)
+            return jsonify(result), 201
+        except ValueError:
+            return jsonify({"error": "invalid_document"}), 400
+        except RuntimeError:
+            return jsonify({"error": "document_processing_failed"}), 422
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (DocumentStorageError, OSError, sqlite3.Error):
+            return jsonify({"error": "document_storage_unavailable"}), 503
+
+    @api.delete("/api/tenant/documents/<document_id>")
+    @require_roles("admin")
+    def delete_tenant_document(document_id):
+        if document_service is None:
+            return jsonify({"error": "document_storage_unavailable"}), 503
+        principal = principal_from_environ(request.environ)
+        try:
+            deleted = document_service.delete_document(principal, document_id)
+            return jsonify({"deleted": bool(deleted)})
+        except ValueError:
+            return jsonify({"error": "invalid_document_id"}), 400
+        except PermissionError:
+            return jsonify({"error": "forbidden"}), 403
+        except (DocumentStorageError, OSError, sqlite3.Error):
+            return jsonify({"error": "document_storage_unavailable"}), 503
 
     @api.get("/health")
     def health():

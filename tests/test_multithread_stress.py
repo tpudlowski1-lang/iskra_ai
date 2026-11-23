@@ -7,10 +7,12 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
+os.environ["ISKRA_TESTING"] = "true"
 os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
 
 import app as iskra
+
 from flask import request
 from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
 
@@ -144,6 +146,7 @@ class IskraConcurrencyTests(unittest.TestCase):
 
     def test_provider_fallback_order_without_network(self):
         router = iskra.RouterProvider()
+        router.allowed_providers = {"deepseek", "openai", "gemini"}
         calls = []
         router.primary = "deepseek"
         router.fallbacks = ["openai", "gemini"]

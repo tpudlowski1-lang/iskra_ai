@@ -7,7 +7,7 @@ services:
       pip install -r requirements.txt
 
     startCommand: |
-      gunicorn wsgi:app --workers 2 --threads 4 --timeout 120
+      gunicorn wsgi:app --workers 1 --threads 4 --timeout 120
 
     envVars:
       - key: PYTHON_VERSION
@@ -21,7 +21,25 @@ services:
         value: openai
 
       - key: LLM_FALLBACK_PROVIDERS
-        value: gemini,deepseek
+        value: deepseek
+
+      # Provider allowlist is deny-by-default in the runtime router.
+      - key: LLM_ALLOWED_PROVIDERS
+        value: ""
+      # Per-tenant approval is separately deny-by-default; configure only after review.
+      - key: ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON
+        value: "{}"
+      - key: ISKRA_ENABLE_DOCUMENT_INGESTION
+        value: "false"
+
+      # Add secret values in the Render dashboard; never commit API keys.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
+
+      - key: ISKRA_RATE_LIMIT_ENABLED
+        value: true
 
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
@@ -29,8 +47,6 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4o-mini
 
-      - key: GEMINI_MODEL
-        value: ""
 
     healthCheckPath: /health
-    autoDeploy: true
+    autoDeploy: false

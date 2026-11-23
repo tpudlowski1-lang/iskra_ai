@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template, render_template_string
 
 # =========================
 # KONFIGURACJA
@@ -10,7 +10,12 @@ from flask import Flask, jsonify, render_template_string
 from iskra.config import load_settings
 from iskra.api.routes import create_api_blueprint
 from iskra.security.headers import install_security_headers
+from iskra.security.rate_limit import create_rate_limiter
 from iskra.storage.tenant import TenantGraphStoreFactory
+from iskra.documents.factory import DocumentRepositoryFactory
+from iskra.documents.service import DocumentService
+from iskra.assistant.chat import KnowledgeChatService
+from iskra.llm.tenant_policy import TenantProviderPolicy
 
 settings = load_settings()
 PORT = settings.port
@@ -20,6 +25,7 @@ PLIK_SIECI = os.path.join(DATA_DIR, "wiedza.json")
 
 app = install_security_headers(Flask(__name__))
 app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+limiter = create_rate_limiter(app)
 
 # =========================
 # MODULAR DOMAIN IMPORTS
@@ -42,6 +48,12 @@ from iskra.workers.autonomous import IskraAutonomiczna
 # Inicjalizacja obiektów globalnych
 siec = SiecNeuronowa()
 bot = IskraAutonomiczna(siec)
+
+document_repository = DocumentRepositoryFactory.from_settings(settings).build()
+document_service = DocumentService(document_repository)
+tenant_provider_policy = TenantProviderPolicy.from_environment()
+chat_service = KnowledgeChatService(document_service, bot.router, tenant_provider_policy)
+DOCUMENT_INGESTION_ENABLED = os.environ.get("ISKRA_ENABLE_DOCUMENT_INGESTION", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 # =========================
 # DASHBOARD WEB
@@ -72,6 +84,7 @@ DASHBOARD_HTML = """
 <body>
     <div class="container">
         <h1>ISKRA AI — System Mapowania Wiedzy i Metapoznania</h1>
+        <p><a href="/assistant" style="color:#4de1c1">Otwórz asystenta wiedzy →</a></p>
         <div class="stats">
             <div class="card"><h3>Węzły (Kategorie)</h3><p id="count-n">-</p></div>
             <div class="card"><h3>Korelacje (Synapsy)</h3><p id="count-s">-</p></div>
@@ -133,6 +146,11 @@ DASHBOARD_HTML = """
 </html>
 """
 
+@app.get("/assistant")
+def assistant_page():
+    return render_template("assistant.html")
+
+
 @app.route('/')
 def index():
     return render_template_string(DASHBOARD_HTML)
@@ -148,8 +166,28 @@ tenant_store_factory = TenantGraphStoreFactory(
     postgres_dsn=settings.postgres_dsn,
 )
 app.register_blueprint(
-    create_api_blueprint(siec, tenant_store_factory=tenant_store_factory)
+    create_api_blueprint(
+        siec,
+        tenant_store_factory=tenant_store_factory,
+        document_service=document_service,
+        chat_service=chat_service,
+        document_ingestion_enabled=DOCUMENT_INGESTION_ENABLED,
+    )
 )
 
+def create_development_wsgi_app(environ=None):
+    """Build the same fail-closed WSGI boundary for direct development startup."""
+    from wsgi import create_wsgi_app
+
+    return create_wsgi_app(app, environ=environ)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    from werkzeug.serving import run_simple
+
+    run_simple(
+        "0.0.0.0",
+        PORT,
+        create_development_wsgi_app(),
+        threaded=True,
+    )

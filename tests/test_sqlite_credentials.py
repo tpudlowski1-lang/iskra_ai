@@ -144,6 +144,39 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             SQLiteCredentialStore(":memory:")
 
+    def test_credential_database_parent_must_be_private(self):
+        parent = os.path.join(self.temp_dir.name, "shared")
+        os.makedirs(parent, mode=0o755)
+        os.chmod(parent, 0o755)
+        with self.assertRaises(CredentialStoreUnavailable):
+            SQLiteCredentialStore(os.path.join(parent, "credentials.sqlite3"))
+
+    def test_symbolic_link_parent_directory_is_rejected(self):
+        real_parent = os.path.join(self.temp_dir.name, "real-private")
+        os.mkdir(real_parent, 0o700)
+        linked_parent = os.path.join(self.temp_dir.name, "linked-private")
+        try:
+            os.symlink(real_parent, linked_parent)
+        except (AttributeError, NotImplementedError, OSError):
+            self.skipTest("Symlinks are unavailable on this platform")
+        with self.assertRaises(CredentialStoreUnavailable):
+            SQLiteCredentialStore(os.path.join(linked_parent, "credentials.sqlite3"))
+
+    def test_hard_linked_database_file_is_rejected(self):
+        parent = os.path.join(self.temp_dir.name, "secrets")
+        os.makedirs(parent, mode=0o700, exist_ok=True)
+        target = os.path.join(self.temp_dir.name, "external.sqlite3")
+        with open(target, "wb") as handle:
+            handle.write(b"not a database")
+        os.chmod(target, 0o600)
+        linked = os.path.join(parent, "credentials.sqlite3")
+        try:
+            os.link(target, linked)
+        except (AttributeError, NotImplementedError, OSError):
+            self.skipTest("Hard links are unavailable on this platform")
+        with self.assertRaises(CredentialStoreUnavailable):
+            SQLiteCredentialStore(linked)
+
     def test_symbolic_link_database_path_is_rejected(self):
         target = os.path.join(self.temp_dir.name, "target.sqlite3")
         with open(target, "wb") as handle:
@@ -155,6 +188,24 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
             self.skipTest("Symlinks are unavailable on this platform")
         with self.assertRaises(CredentialStoreUnavailable):
             SQLiteCredentialStore(link)
+
+
+    def test_legacy_persistent_system_tenant_credential_is_rejected(self):
+        issued = self.store.issue(
+            Principal("legacy-system", "tenant-before-migration", frozenset({"admin"}))
+        )
+        with self.store._connection() as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE api_credentials SET tenant_id = ? WHERE credential_id = ?",
+                    ("system", issued.credential_id),
+                )
+        self.assertIsNone(self.store.authenticate(issued.token))
+
+    def test_reserved_system_tenant_cannot_receive_persistent_credential(self):
+        system_like = Principal("forged-admin", "system", frozenset({"admin"}))
+        with self.assertRaisesRegex(ValueError, "tenant system"):
+            self.store.issue(system_like)
 
 
 if __name__ == "__main__":

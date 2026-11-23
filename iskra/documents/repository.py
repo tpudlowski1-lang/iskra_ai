@@ -8,6 +8,7 @@ import time
 import uuid
 
 from iskra.security.principal import Principal
+from iskra.storage.private_path import ensure_private_parent
 from iskra.documents.parsers import (
     ALLOWED_EXTENSIONS,
     CHUNK_OVERLAP,
@@ -35,11 +36,10 @@ class SQLiteDocumentRepository:
         self._initialize()
 
     def _prepare_private_path(self):
-        parent = os.path.dirname(self.database_path)
-        os.makedirs(parent, mode=0o700, exist_ok=True)
-        if os.path.islink(parent) or not os.path.isdir(parent):
-            raise DocumentStorageError("Katalog dokumentów musi być zwykłym katalogiem")
-        os.chmod(parent, 0o700)
+        try:
+            ensure_private_parent(self.database_path)
+        except OSError as exc:
+            raise DocumentStorageError("Ścieżka bazy dokumentów nie jest prywatna") from exc
 
         flags = os.O_CREAT | os.O_RDWR
         if hasattr(os, "O_NOFOLLOW"):

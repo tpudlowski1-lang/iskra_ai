@@ -1,0 +1,35 @@
+name: Iskra security reliability pack
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [refactor/modular-core, integration/full-release-candidate-v1, feature/tenant-chat-ui-v1, privacy/tenant-provider-policy-v1, privacy/outbound-prompt-minimization-v1, feature/tenant-account-lifecycle-v1, feature/tenant-admin-console-v1]
+  push:
+    branches: [refactor/modular-core, integration/full-release-candidate-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Security and router reliability (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+      - name: Install application dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Compile changed modules
+        run: python -m compileall -q iskra tests
+      - name: Run focused regression tests
+        run: python -m unittest discover -s tests -p 'test_security_reliability_regressions.py' -v

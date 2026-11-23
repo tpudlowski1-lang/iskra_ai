@@ -66,3 +66,8 @@ The tenant graph and internal document repository can select SQLite (default) or
 - application services are wired to derive tenant scope only from the authenticated Principal; the graph and document factories enforce this selection.
 
 CI starts an ephemeral PostgreSQL 16 service, applies migrations 0001 and 0002 as an admin role, creates a separate non-superuser/non-BYPASSRLS runtime role, and runs real graph/document RLS integration tests using that runtime role.
+
+
+## Staging rehearsal
+
+Use [PostgreSQL staging runbook](POSTGRES_STAGING_RUNBOOK.md) for preflight, separate schema/migration/runtime roles, DSN selection, dry-run, apply, acceptance tests, backup restore and rollback. The migrator never infers its target from generic DATABASE_URL; prefer a dedicated ISKRA_POSTGRES_MIGRATION_DSN and a restricted NOSUPERUSER NOBYPASSRLS role. The runbook is an operator procedure, not evidence that a staging cutover or production migration has occurred.
