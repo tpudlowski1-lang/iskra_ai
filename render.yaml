@@ -21,7 +21,17 @@ services:
         value: openai
 
       - key: LLM_FALLBACK_PROVIDERS
-        value: gemini,deepseek
+        value: deepseek
+
+      # Provider allowlist is deny-by-default in the runtime router.
+      - key: LLM_ALLOWED_PROVIDERS
+        value: openai,deepseek
+
+      # Add secret values in the Render dashboard; never commit API keys.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DEEPSEEK_API_KEY
+        sync: false
 
       - key: ENABLE_AUTONOMOUS_LOOP
         value: false
@@ -29,8 +39,6 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4o-mini
 
-      - key: GEMINI_MODEL
-        value: ""
 
     healthCheckPath: /health
     autoDeploy: true
