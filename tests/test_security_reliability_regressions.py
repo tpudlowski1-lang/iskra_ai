@@ -49,14 +49,15 @@ class RouterResilienceTests(unittest.TestCase):
     def test_provider_exception_does_not_break_fallback(self):
         router = RouterProvider()
         calls = []
-        def broken(_, deadline=None):
-            calls.append(("primary", deadline))
+        from iskra.llm.router import _ACTIVE_DEADLINE
+        def broken(_):
+            calls.append(("primary", _ACTIVE_DEADLINE.get()))
             raise TimeoutError("simulated provider timeout")
         router.primary = "primary"
         router.fallbacks = ["fallback"]
         router.providers = {
             "primary": broken,
-            "fallback": lambda _, deadline=None: calls.append(("fallback", deadline)) or '{"answer": "ok"}',
+            "fallback": lambda _: calls.append(("fallback", _ACTIVE_DEADLINE.get())) or '{"answer": "ok"}',
         }
         self.assertEqual(router.generate("hello"), '{"answer": "ok"}')
         self.assertEqual([item[0] for item in calls], ["primary", "fallback"])
@@ -67,8 +68,8 @@ class RouterResilienceTests(unittest.TestCase):
         router.primary = "first"
         router.fallbacks = ["second"]
         router.providers = {
-            "first": lambda _, deadline=None: (_ for _ in ()).throw(ConnectionError()),
-            "second": lambda _, deadline=None: (_ for _ in ()).throw(RuntimeError()),
+            "first": lambda _: (_ for _ in ()).throw(ConnectionError()),
+            "second": lambda _: (_ for _ in ()).throw(RuntimeError()),
         }
         self.assertIsNone(router.generate("hello"))
 
@@ -79,7 +80,7 @@ class RouterResilienceTests(unittest.TestCase):
         router.primary = "primary"
         router.fallbacks = []
         router.providers = {
-            "primary": lambda prompt, deadline=None: calls.append(deadline) or '{"ok": true}',
+            "primary": lambda prompt: calls.append(prompt) or '{"ok": true}',
         }
         from unittest.mock import patch
         with patch("iskra.llm.router.time.monotonic", side_effect=[0.0, 101.0]):
