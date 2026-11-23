@@ -86,6 +86,21 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         )
         self.client = self.app.test_client()
 
+        self.enabled_app = Flask(__name__)
+        self.enabled_app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
+        self.enabled_app.register_blueprint(create_api_blueprint(
+            Graph(),
+            document_service=self.document_service,
+            chat_service=self.chat_service,
+            document_ingestion_enabled=True,
+        ))
+        self.enabled_app.wsgi_app = ApiTokenMiddleware(
+            self.enabled_app.wsgi_app,
+            token="system-admin-test-token",
+            credentials_json=credentials,
+        )
+        self.enabled_client = self.enabled_app.test_client()
+
     def tearDown(self):
         self.tmp.cleanup()
 
@@ -188,14 +203,22 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
         self.assertEqual(response.get_json()["error"], "document_ingestion_disabled")
 
     def test_document_ingestion_requires_admin_when_enabled(self):
-        self.app.view_functions  # ensure app is initialized
-        response = self.client.post(
+        denied = self.enabled_client.post(
             "/api/tenant/documents",
             headers=self.auth("alpha-member-token"),
-            data={"file": (io.BytesIO(b"new document"), "new.txt")},
+            data={"file": (io.BytesIO(b"new document"), "member.txt")},
             content_type="multipart/form-data",
         )
-        self.assertEqual(response.status_code, 503)  # default feature flag remains off
+        self.assertEqual(denied.status_code, 403)
+
+        created = self.enabled_client.post(
+            "/api/tenant/documents",
+            headers=self.auth("alpha-admin-token"),
+            data={"file": (io.BytesIO(b"admin uploaded document"), "admin.txt")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.get_json()["filename"], "admin.txt")
 
     def test_delete_is_tenant_scoped_and_admin_only(self):
         response = self.client.delete(
