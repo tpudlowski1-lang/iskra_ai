@@ -29,6 +29,7 @@ class BrowserSession:
     principal: Principal
     credential_id: str
     csrf_digest: str
+    csrf_token: str | None
     expires_at: float
 
 
@@ -158,6 +159,7 @@ class SQLiteCredentialStore:
                             session_digest TEXT PRIMARY KEY,
                             credential_id TEXT NOT NULL,
                             csrf_digest TEXT NOT NULL,
+                            csrf_token TEXT NOT NULL,
                             created_at REAL NOT NULL,
                             expires_at REAL NOT NULL,
                             revoked_at REAL,
@@ -165,6 +167,11 @@ class SQLiteCredentialStore:
                         )
                         """
                     )
+                    session_columns = {
+                        row["name"] for row in connection.execute("PRAGMA table_info(browser_sessions)")
+                    }
+                    if "csrf_token" not in session_columns:
+                        connection.execute("ALTER TABLE browser_sessions ADD COLUMN csrf_token TEXT")
                     connection.execute(
                         "CREATE INDEX IF NOT EXISTS idx_browser_sessions_credential "
                         "ON browser_sessions(credential_id, expires_at)"
@@ -356,11 +363,12 @@ class SQLiteCredentialStore:
                 connection.execute(
                     """
                     INSERT INTO browser_sessions
-                    (session_digest, credential_id, csrf_digest, created_at, expires_at, revoked_at)
-                    VALUES (?, ?, ?, ?, ?, NULL)
+                    (session_digest, credential_id, csrf_digest, csrf_token,
+                     created_at, expires_at, revoked_at)
+                    VALUES (?, ?, ?, ?, ?, ?, NULL)
                     """,
                     (self._digest(session_token), credential_id,
-                     self._digest(csrf_token), now, expiry),
+                     self._digest(csrf_token), csrf_token, now, expiry),
                 )
         return expiry
 
@@ -373,7 +381,7 @@ class SQLiteCredentialStore:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT s.credential_id, s.csrf_digest, s.expires_at AS session_expires_at,
+                SELECT s.credential_id, s.csrf_digest, s.csrf_token, s.expires_at AS session_expires_at,
                        s.revoked_at AS session_revoked_at,
                        c.subject, c.tenant_id, c.roles_json, c.expires_at AS credential_expires_at,
                        c.revoked_at AS credential_revoked_at
@@ -396,6 +404,7 @@ class SQLiteCredentialStore:
                 principal=principal,
                 credential_id=row["credential_id"],
                 csrf_digest=row["csrf_digest"],
+                csrf_token=row["csrf_token"],
                 expires_at=row["session_expires_at"],
             )
         except (TypeError, ValueError, json.JSONDecodeError):
@@ -413,7 +422,7 @@ class SQLiteCredentialStore:
                 cursor = connection.execute(
                     """
                     UPDATE browser_sessions
-                    SET csrf_digest = ?
+                    SET csrf_digest = ?, csrf_token = ?
                     WHERE session_digest = ? AND revoked_at IS NULL AND expires_at > ?
                       AND EXISTS (
                         SELECT 1 FROM api_credentials AS c
@@ -422,7 +431,7 @@ class SQLiteCredentialStore:
                           AND (c.expires_at IS NULL OR c.expires_at > ?)
                       )
                     """,
-                    (self._digest(csrf_token), self._digest(session_token), current, current),
+                    (self._digest(csrf_token), csrf_token, self._digest(session_token), current, current),
                 )
                 return cursor.rowcount == 1
 
