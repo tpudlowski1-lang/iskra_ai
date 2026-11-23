@@ -33,13 +33,13 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Parser child clears inherited environment, applies restrictive umask and file-descriptor soft limit; it remains same-user process isolation.
 - [x] Authenticated tenant-scoped document list/search/delete and source-grounded chat API with server-resolved citations; upload is admin-only and disabled by default.
 - [ ] Before enabling document upload: add a low-privilege OS/container sandbox with no network, malware quarantine, document audit events, quotas, retention, object storage and secure backup/restore. The current worker is not a full sandbox.
-- [x] Minimal responsive /assistant chat UI with token held in page memory only; route/assets/security headers tested in Draft PR #79.
+- [x] Minimal responsive `/assistant` chat UI with token held in page memory only; route/assets/security headers are included in Draft PR #89.
 - [ ] Production-grade account lifecycle/session management, chat history, mobile accessibility acceptance and end-to-end customer usability review.
 - [ ] Production rehearsal of PostgreSQL document migration, tenant-filtered retrieval, RAG evaluation, provenance and source citations.
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
-- [ ] Data classification, user notice/consent, ordinary-prompt PII/secret minimization, per-tenant provider policy, provider-specific retention/region controls and contractual/legal review. The router allowlist is deployment-level only.
+- [ ] Full data classification, user notice/consent, complete DLP across all prompt paths, provider-specific retention/region controls, network egress restrictions and contractual/legal review. Draft PR #89 adds a tenant-level provider allowlist and best-effort minimization for tenant-chat questions/excerpts only; this is not a consent record or complete DLP.
 - [ ] Dedicated single-owner autonomous worker with lease/coordination.
 - [ ] Staging deployment and production smoke tests.
 - [x] Python dependency license inventory and tracked-asset inventory generated; legal review of LGPL-3.0-only psycopg packages remains outstanding.
@@ -67,4 +67,4 @@ Do not enable PostgreSQL in production until staging migration, cross-tenant neg
 
 ## External LLM processing
 
-The router now denies all registered external providers unless they are explicitly listed in `LLM_ALLOWED_PROVIDERS`; the same policy applies to primary and fallback. The Render manifest leaves this allowlist empty and sets `autoDeploy: false`. The autonomous worker uses a fixed public taxonomy rather than serializing the mutable global graph. Ordinary user prompts are not automatically redacted, provider allowlists are not tenant-specific, and no consent UI or network egress firewall exists. Customer-data processing by external LLMs remains NOT APPROVED pending provider-specific contractual/privacy review. See `LLM_PROVIDER_ALLOWLIST.md` and `LLM_PROVIDER_DATA_HANDLING.md`.
+The router now denies all registered external providers unless they are explicitly listed in `LLM_ALLOWED_PROVIDERS`; the same policy applies to primary and fallback. The Render manifest leaves this allowlist empty and sets `autoDeploy: false`. The autonomous worker uses a fixed public taxonomy rather than serializing the mutable global graph. Tenant-chat questions/excerpts receive best-effort minimization; other prompt paths are not automatically redacted. Tenant provider allowlist code is present in Draft PR #89 but not yet canonical; there is no consent UI or network egress firewall. Customer-data processing by external LLMs remains NOT APPROVED pending provider-specific contractual/privacy review. See `LLM_PROVIDER_ALLOWLIST.md` and `LLM_PROVIDER_DATA_HANDLING.md`.
