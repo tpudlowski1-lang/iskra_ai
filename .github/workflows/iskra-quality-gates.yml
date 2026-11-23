@@ -3,7 +3,7 @@ name: Iskra unified quality gates
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [iskra-unified-core, refactor/modular-core]
+    branches: [iskra-unified-core, refactor/modular-core, security/request-principal, security/token-registry]
   push:
     branches: [refactor/modular-core]
   workflow_dispatch:
