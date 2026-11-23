@@ -7,10 +7,12 @@ import os
 class Settings:
     port: int
     data_dir: str
+    tenant_storage_backend: str = "sqlite"
+    postgres_dsn: str = ""
 
 
 def load_settings(environ=None, project_root=None):
-    """Load settings with safe bounds and a deterministic project-local default."""
+    """Load settings with safe bounds and explicit storage backend validation."""
     env = os.environ if environ is None else environ
     root = os.path.abspath(project_root or os.path.dirname(os.path.dirname(__file__)))
     raw_port = env.get("PORT", "10000")
@@ -21,4 +23,17 @@ def load_settings(environ=None, project_root=None):
     if not 1 <= port <= 65535:
         raise ValueError("PORT musi należeć do zakresu 1..65535")
     data_dir = os.path.abspath(env.get("DATA_DIR") or root)
-    return Settings(port=port, data_dir=data_dir)
+
+    backend = str(env.get("ISKRA_TENANT_STORAGE_BACKEND", "sqlite")).strip().lower()
+    if backend not in {"sqlite", "postgres"}:
+        raise ValueError("ISKRA_TENANT_STORAGE_BACKEND musi mieć wartość sqlite albo postgres")
+    postgres_dsn = str(env.get("ISKRA_POSTGRES_DSN", "")).strip()
+    if backend == "postgres" and not postgres_dsn:
+        raise ValueError("ISKRA_POSTGRES_DSN jest wymagany dla backendu postgres")
+
+    return Settings(
+        port=port,
+        data_dir=data_dir,
+        tenant_storage_backend=backend,
+        postgres_dsn=postgres_dsn,
+    )
