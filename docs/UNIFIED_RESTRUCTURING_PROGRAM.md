@@ -90,7 +90,8 @@ These streams can be investigated in parallel, but code is integrated in depende
 - PostgreSQL graph schema v1, composite tenant keys, foreign keys and RLS ENABLE + FORCE migration are implemented.
 - `PostgresGraphStore` derives scope from Principal and sets a transaction-local tenant context; CI verifies it against PostgreSQL 16 with a separate NOSUPERUSER/NOBYPASSRLS runtime role.
 - Live tenant API currently uses the tenant-scoped SQLite adapter; the legacy global graph remains JSON. PostgreSQL is not yet wired into the live app.
-- Remaining: production migration tooling, dry-run import, byte-for-byte backup, semantic graph comparison, JSON-to-PostgreSQL cutover, rollback and restore drills.
+- A dry-run-first SQLite tenant DB migration utility now creates a private online backup, SHA-256 manifest, validates source snapshots, refuses overwrites by default, and migrates all tenants in one transaction with semantic read-back before commit.
+- Remaining: run the migration against a production-like backup, rehearse restore, define cutover/rollback operations, and separately decide how the legacy global JSON graph is retained or migrated.
 - Exit gate: production migration, isolation, concurrency, restore and rollback tests pass in staging.
 
 ### Stream D — Documents and retrieval
@@ -154,7 +155,7 @@ The following is implemented in the current review chain (PR #28) and verified b
 - Request principal and role policy; server-side credential resolution.
 - Optional persistent SQLite credential registry with digest-only token storage, expiry and revocation.
 - Tenant API backed by principal-bound SQLite graph storage, with atomic initialization of the twelve foundational pillars.
-- PostgreSQL graph schema and adapter prototype with RLS policies, tested on PostgreSQL 16.
+- PostgreSQL graph schema and adapter prototype with RLS policies, tested on PostgreSQL 16; dry-run-first SQLite tenant migration utility is implemented and covered by integration tests.
 - Python 3.11 and 3.12: 104 tests each; compileall and pip-audit passed.
 
 This does not mean the PostgreSQL backend is live or the application is production-ready. The current live tenant API uses SQLite; the legacy global graph remains on JSON. PostgreSQL migration/cutover, backup/restore, account provisioning, audit events and staging operations remain outstanding.
