@@ -11,6 +11,10 @@ os.environ["LLM_PROVIDER"] = "deepseek"
 os.environ["LLM_FALLBACK_PROVIDERS"] = "openai,gemini"
 
 import app as iskra
+
+# Keep shared application limiter out of unrelated API/concurrency tests;
+# dedicated tests/test_rate_limit.py exercise the limiter explicitly.
+iskra.app.config["RATELIMIT_ENABLED"] = False
 from flask import request
 from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
 
