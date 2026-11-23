@@ -1,60 +1,43 @@
 # Iskra AI — identity and authorization baseline
 
-**Status:** trusted request-principal foundation implemented; credential registry prototype under review. Not a multi-user or multi-tenant release.
+**Status:** credential-store authentication is integrated behind explicit configuration; not a production multi-tenant release.
 
 ## Request identity
 
-The production entry point is `wsgi:app`. Its `ApiTokenMiddleware` validates the configured shared `API_TOKEN` and, only after successful validation, attaches an immutable `Principal` to the WSGI environment under the private application key.
+The production entry point is `wsgi:app`. WSGI middleware accepts:
 
-The current compatibility mapping is:
+- the legacy `API_TOKEN`, mapped to the single system administrator principal for compatibility;
+- credentials verified by `SQLiteCredentialStore` when `CREDENTIAL_DB_PATH` points to a persistent credential database.
 
-- subject: `api-token-admin`
-- tenant: `system`
-- roles: `admin`
+The credential store persists only SHA-256 digests of high-entropy random tokens. The raw token is returned only once by the internal issuance method. It supports server-owned subject/tenant/role mapping, optional expiry, and revocation. Authentication attaches the resulting immutable `Principal` to the WSGI environment only after verification.
 
-The public `/health` probe bypasses authentication and receives no principal. Every other path is protected by the WSGI middleware. Do not expose `app:app` directly in a public deployment because it bypasses that middleware.
+If `CREDENTIAL_DB_PATH` is unset, the SQLite credential store is not activated. If the database is configured but unavailable, authentication fails closed with HTTP 503. Unknown, expired and revoked credentials are rejected. The public `/health` probe remains unauthenticated and receives no principal.
 
-## Authorization primitives
+## Provisioning and operational limits
 
-`iskra.security.policy.require_roles` provides a deny-by-default decorator for routes that need role-specific checks. It reads only the trusted principal attached by the authentication layer. A query parameter, URL segment, JSON body, or ordinary request header cannot create or replace a principal.
+There is not yet a public endpoint, CLI or administrator UI for issuing credentials. Provisioning is an internal application operation using `SQLiteCredentialStore.issue(principal, expires_at=...)`; never add raw tokens to Git, logs, analytics or ordinary support tickets. Store the returned token once in an appropriate secret manager and securely deliver it to its owner.
 
-Existing routes retain their compatibility behavior. The role decorator is a foundation for new protected endpoints; it is not a claim that a complete account/role policy has already been applied to every domain operation.
+Revocation uses `SQLiteCredentialStore.revoke(credential_id)`. The credential ID is an identifier, not an authentication secret. Database backups contain token digests and principal metadata; protect them as sensitive security data.
 
-## Credential registry prototype
+SQLite is a single-instance prototype. Do not place it on an unreliable shared network filesystem or assume it provides multi-instance HA. PostgreSQL, transactional migration, backup/restore drills, audit events, expiry policy, key rotation workflow and operational provisioning are still required.
 
-`iskra.security.credentials.SQLiteCredentialStore` introduces a persistence contract and a single-instance SQLite prototype:
+## Authorization and global graph boundary
 
-- issues high-entropy random bearer tokens and returns plaintext only once;
-- stores SHA-256 token digests, never the raw bearer token;
-- binds subject, tenant ID and roles to the server-side credential record;
-- supports optional expiry and explicit revocation;
-- fails closed for unknown, expired, revoked, malformed or corrupt records;
-- creates the database file with owner-only permissions (`0600`).
+`iskra.security.policy.require_roles` provides role checks based only on the trusted principal. `require_system_admin` additionally requires the fixed `system` tenant.
 
-This component is not wired into `ApiTokenMiddleware`, has no public token-issuance endpoint, and does not provision user accounts. The current shared `API_TOKEN` remains the only active credential. SQLite is a single-instance prototype, not a high-availability credential service; PostgreSQL and operational key management remain future work. The registry must not be treated as production-ready until its migration, concurrency, backup/restore, permission and security review gates pass.
+The legacy `/api/network` endpoint returns one global JSON graph and is restricted to the system administrator. Tenant-scoped administrators and members receive HTTP 403. The endpoint is not a tenant API. Do not remove this restriction until the live graph service is tenant-aware and cross-tenant read/write/delete tests pass.
+
+Use `wsgi:app`; direct `app:app` bypasses the WSGI authentication middleware.
 
 ## Explicit limitations
 
-This is not yet named-user authentication or tenant isolation:
-
-- one shared administrator token is still the only credential accepted by the live WSGI application;
-- the credential registry is not connected to request authentication;
-- there is no account lifecycle, password authentication, self-service provisioning, rotation workflow or administrator recovery process;
-- the live graph remains a shared JSON file and has no tenant partition;
-- the tenant-scoped SQLite graph adapter is disconnected from the live application;
-- PostgreSQL, migrations, audit events, and per-tenant authorization are not implemented.
-
-The fixed `system` tenant value is a trusted server-side placeholder, not a customer tenant. Never accept tenant identity from request input. Do not enable customer uploads, tenant APIs, or RAG until credential-to-principal mapping, storage scoping, and adversarial cross-tenant tests are implemented.
+- No public account registration, token issuance, account recovery or administrator UI exists.
+- SQLite credentials are not a high-availability or production secret-management service.
+- The live knowledge graph remains a shared JSON file with no tenant partition.
+- The tenant-scoped SQLite graph adapter is not yet connected to the live API.
+- PostgreSQL, migrations, audit events, per-tenant graph authorization, private document ingestion and tenant-filtered RAG remain future work.
+- Do not enable customer uploads, tenant APIs or RAG for customer data.
 
 ## Verification
 
-The request-principal branch passed the unified GitHub Actions workflow on commit `4a269579449f4f2397db7bfeef1e8a51b749439c`:
-
-- Python 3.11: 58 tests passed;
-- Python 3.12: 58 tests passed;
-- Python compilation: passed;
-- pinned dependency audit: passed.
-
-Workflow: https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45086904528
-
-The credential registry branch adds focused unit tests; their status must be taken from CI on the exact branch HEAD. A green unit/CI run is not a production-readiness or tenant-isolation certification.
+The credential-store prototype passed its own GitHub Actions run on its then-tested merge HEAD: Python 3.11 and 3.12 each passed 67 tests, compilation passed, and the dependency audit passed. This follow-up integrates credential lookup into WSGI and adds system-only authorization; it must pass fresh CI on its exact HEAD before it can be considered verified.
