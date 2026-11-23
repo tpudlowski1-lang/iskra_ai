@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from iskra.llm.router import RouterProvider
+from iskra.llm.router import RouterProvider, _ACTIVE_SYSTEM_PROMPT, _DEFAULT_SYSTEM_PROMPT
 
 
 class RouterPayloadValidationTests(unittest.TestCase):
@@ -51,6 +51,20 @@ class RouterPayloadValidationTests(unittest.TestCase):
         }
         self.assertIsNone(router.generate("sensitive test prompt"))
         self.assertEqual(calls, ["deepseek"])
+
+    def test_custom_system_prompt_is_context_local_and_reset_after_generate(self):
+        with patch.dict(os.environ, {"LLM_ALLOWED_PROVIDERS": "deepseek", "LLM_PROVIDER": "deepseek"}):
+            router = RouterProvider()
+        seen = []
+        router.providers = {
+            "deepseek": lambda _: seen.append(_ACTIVE_SYSTEM_PROMPT.get()) or '{"answer": "ok"}'
+        }
+        self.assertEqual(
+            json.loads(router.generate("test", system_prompt="Use sources only.")),
+            {"answer": "ok"},
+        )
+        self.assertEqual(seen, ["Use sources only."])
+        self.assertEqual(_ACTIVE_SYSTEM_PROMPT.get(), _DEFAULT_SYSTEM_PROMPT)
 
     def test_invalid_json_provider_response_is_rejected(self):
         router = RouterProvider()
