@@ -132,7 +132,7 @@ A release can be considered **commercial-candidate** only when every item below 
 
 ## 10. Current known blockers — verified 2026-11-23
 
-The current canonical integration branch is `refactor/modular-core`. Full release candidate PR #67 was squash-merged into it at commit `c80446d94f492ba62bbb95a34c2222b773153bf8`. The default `main` branch remains untouched; no production deployment has been made.
+The current canonical integration branch is `refactor/modular-core`. Full release candidate PR #67 was squash-merged into it at commit `c80446d94f492ba62bbb95a34c2222b773153bf8`. Tenant-admin session/mutation hardening PR #91 was subsequently squash-merged at `b492b8cba47e0d600233c605bad38a207f3f415a`.
 
 The exact source tree for PR #67 (source HEAD `a157109a9cb005e302811c12220fe1e26bc1c685`) passed all five GitHub workflows:
 - Unified quality gates [45227924095](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227924095): SUCCESS — 337 tests on Python 3.11 and 337 tests on Python 3.12, plus dependency vulnerability audit.
@@ -141,7 +141,7 @@ The exact source tree for PR #67 (source HEAD `a157109a9cb005e302811c12220fe1e26
 - Adversarial corpus [45227924137](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227924137): SUCCESS.
 - Dependency/license inventory [45227923901](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45227923901): SUCCESS.
 
-The squash merge commit `c80446d94f492ba62bbb95a34c2222b773153bf8` contains the exact same 93-file patch as PR #67. Its push-triggered unified quality gates [45228450937](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228450937) and dependency/license inventory [45228451041](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228451041) also passed. Subsequent commits on `refactor/modular-core` update documentation only; recheck the push-triggered workflows on the latest branch head before the next promotion gate.
+The squash merge commit `c80446d94f492ba62bbb95a34c2222b773153bf8` contains the exact same 93-file patch as PR #67. Its push-triggered unified quality gates [45228450937](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228450937) and dependency/license inventory [45228451041](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45228451041) also passed. PR #91 then added tenant-admin mutation locking, stale-tenant UI cleanup and a deterministic regression test. Its source HEAD `1a515c0c913ae9ced121abc8ab1c95c7d32e2d4c` passed all five workflows: unified quality gates [45232187542](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45232187542), security/reliability [45232187547](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45232187547), Quality Engine [45232187682](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45232187682), adversarial corpus [45232187819](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45232187819), and dependency/license inventory [45232187725](https://github.com/tpudlowski1-lang/iskra_ai/actions/runs/45232187725). The PR was squash-merged to the canonical branch at `b492b8cba47e0d600233c605bad38a207f3f415a`. These CI results establish the tested source HEAD, not production readiness or a separate post-merge deployment test.
 
 The repository still has **no verified production deployment and is NOT READY FOR SALE**. No live customer data, real provider calls, paid infrastructure or production secrets were used. The current feature remains a controlled-pilot foundation.
 
