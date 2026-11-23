@@ -347,26 +347,119 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             shutil.rmtree(staging, ignore_errors=True)
 
 
+
+def configured_backup_plan(environ=None, project_root=None) -> dict:
+    """Resolve local stores from the same validated settings used by the app.
+
+    Remote PostgreSQL stores are reported as external requirements and are
+    never silently represented as backed up by this ZIP utility.
+    """
+    from iskra.config import load_settings
+
+    env = os.environ if environ is None else environ
+    settings = load_settings(environ=env, project_root=project_root)
+    data_dir = settings.data_dir
+    resources = [
+        {
+            "name": "legacy/wiedza.json",
+            "path": os.path.join(data_dir, "wiedza.json"),
+            "kind": "json",
+            "required": True,
+        }
+    ]
+    external = []
+    if settings.tenant_storage_backend == "sqlite":
+        resources.append({
+            "name": "sqlite/iskra_tenants.sqlite3",
+            "path": os.path.abspath(
+                env.get("ISKRA_TENANT_DB_PATH")
+                or os.path.join(data_dir, "iskra_tenants.sqlite3")
+            ),
+            "kind": "sqlite",
+            # The tenant store is initialized lazily by the first tenant request.
+            "required": False,
+        })
+    else:
+        external.append({
+            "name": "tenant_graph_postgresql",
+            "backend": "postgres",
+            "reason": "Wymaga osobnego backupu PostgreSQL (pg_dump + test restore).",
+        })
+
+    if settings.document_storage_backend == "sqlite":
+        resources.append({
+            "name": "sqlite/private_documents.sqlite3",
+            "path": os.path.join(data_dir, "private_documents", "documents.sqlite3"),
+            "kind": "sqlite",
+            # The internal document service is opt-in and may not have initialized its DB.
+            "required": False,
+        })
+    else:
+        external.append({
+            "name": "documents_postgresql",
+            "backend": "postgres",
+            "reason": "Wymaga osobnego backupu PostgreSQL (pg_dump + test restore).",
+        })
+
+    credential_path = str(env.get("ISKRA_CREDENTIAL_DB_PATH", "")).strip()
+    if credential_path:
+        resources.append({
+            "name": "sqlite/credential_registry.sqlite3",
+            "path": os.path.abspath(credential_path),
+            "kind": "sqlite",
+            "required": True,
+        })
+
+    return {
+        "format": "iskra-backup-plan-v1",
+        "data_dir": data_dir,
+        "resources": resources,
+        "external_backends": external,
+        "not_included": [
+            "Sekrety i zmienne środowiskowe (celowo wykluczone).",
+            "Oryginalne pliki uploadów/object storage — brak potwierdzonego adaptera i lokalizacji.",
+            "Dane PostgreSQL — wymagają osobnego, zweryfikowanego backupu natywnego.",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+    plan = sub.add_parser("plan", help="Pokaż zasoby lokalne i zewnętrzne wynikające z konfiguracji")
     create = sub.add_parser("create")
     create.add_argument("--archive", required=True)
     create.add_argument("--writes-paused", action="store_true", help="Potwierdź, że aplikacja i workery nie zapisują danych")
+    create.add_argument("--from-config", action="store_true", help="Użyj zasobów wykrytych z konfiguracji Iskry")
     create.add_argument("--json", action="append", default=[], metavar="NAME=PATH")
     create.add_argument("--sqlite", action="append", default=[], metavar="NAME=PATH")
     restore = sub.add_parser("restore")
     restore.add_argument("--archive", required=True)
     restore.add_argument("--target", required=True)
     args = parser.parse_args(argv)
-    if args.command == "create":
-        resources = []
-        for kind in ("json", "sqlite"):
-            for value in getattr(args, kind):
-                if "=" not in value:
-                    parser.error(f"--{kind} wymaga NAME=PATH")
-                name, path = value.split("=", 1)
-                resources.append({"name": name, "path": path, "kind": kind, "required": True})
+    if args.command == "plan":
+        result = configured_backup_plan()
+    elif args.command == "create":
+        if args.from_config and (args.json or args.sqlite):
+            parser.error("--from-config nie może być łączone z --json ani --sqlite")
+        if args.from_config:
+            result = configured_backup_plan()
+            if result["external_backends"]:
+                names = ", ".join(item["name"] for item in result["external_backends"])
+                raise BackupError(
+                    "Aktywne magazyny zewnętrzne nie są objęte archiwum: "
+                    + names
+                    + ". Wykonaj i zweryfikuj backup PostgreSQL przed utworzeniem pełnego zestawu."
+                )
+            resources = result["resources"]
+        else:
+            resources = []
+            for kind in ("json", "sqlite"):
+                for value in getattr(args, kind):
+                    if "=" not in value:
+                        parser.error(f"--{kind} wymaga NAME=PATH")
+                    name, path = value.split("=", 1)
+                    resources.append({"name": name, "path": path, "kind": kind, "required": True})
         result = create_archive(resources, args.archive, writes_paused=args.writes_paused)
     else:
         result = restore_archive(args.archive, args.target)
