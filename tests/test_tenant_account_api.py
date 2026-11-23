@@ -1,4 +1,5 @@
 import tempfile
+import time
 import unittest
 
 from flask import Flask
@@ -56,6 +57,29 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.assertEqual(body["roles"], ["member"])
         resolved = self.store.authenticate(body["token"])
         self.assertEqual(resolved, Principal("new-user", "tenant-alpha", frozenset({"member"})))
+
+    def test_tenant_issued_tokens_have_a_default_90_day_expiry(self):
+        before = time.time()
+        response = self.client.post(
+            "/api/tenant/credentials",
+            headers=self.auth(self.alpha_admin_token),
+            json={"subject": "expiring-user"},
+        )
+        self.assertEqual(response.status_code, 201)
+        expiry = response.get_json()["expires_at"]
+        self.assertGreaterEqual(expiry, before + 89 * 24 * 60 * 60)
+        self.assertLessEqual(expiry, before + 90 * 24 * 60 * 60 + 2)
+
+    def test_tenant_admin_cannot_issue_token_lasting_more_than_one_year(self):
+        response = self.client.post(
+            "/api/tenant/credentials",
+            headers=self.auth(self.alpha_admin_token),
+            json={
+                "subject": "long-lived-user",
+                "expires_at": time.time() + 366 * 24 * 60 * 60,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_tenant_id_cannot_be_supplied_by_request(self):
         response = self.client.post(
@@ -132,6 +156,7 @@ class TenantCredentialApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
         self.assertTrue(body["token"])
+        self.assertGreater(body["expires_at"], time.time())
         self.assertIsNone(self.store.authenticate(target.token))
         self.assertEqual(
             self.store.authenticate(body["token"]),
