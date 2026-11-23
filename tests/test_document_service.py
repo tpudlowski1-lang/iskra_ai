@@ -1,3 +1,4 @@
+import hashlib
 import os
 import stat
 import tempfile
@@ -7,7 +8,7 @@ from iskra.security.principal import Principal, SYSTEM_ADMIN
 from iskra.documents.repository import DocumentStorageError, SQLiteDocumentRepository
 from iskra.documents.service import DocumentService
 from iskra.documents.parsers import parse_document
-from iskra.documents.worker import parse_document_isolated
+from iskra.documents.worker import parse_document_isolated, _validate_worker_payload
 
 
 class TenantDocumentServiceTests(unittest.TestCase):
@@ -105,6 +106,36 @@ class TenantDocumentServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_document_isolated("bad.pdf", b"not a pdf")
 
+
+    def test_worker_payload_must_match_original_filename_and_digest(self):
+        data = b"trusted source bytes"
+        payload = {
+            "ok": True,
+            "filename": "trusted.txt",
+            "extension": ".txt",
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "chunks": ["trusted source bytes"],
+        }
+        parsed = _validate_worker_payload(
+            payload, "trusted.txt", ".txt", hashlib.sha256(data).hexdigest()
+        )
+        self.assertEqual(parsed.filename, "trusted.txt")
+        forged = dict(payload, sha256="0" * 64)
+        with self.assertRaises(RuntimeError):
+            _validate_worker_payload(
+                forged, "trusted.txt", ".txt", hashlib.sha256(data).hexdigest()
+            )
+        renamed = dict(payload, filename="other.txt")
+        with self.assertRaises(RuntimeError):
+            _validate_worker_payload(
+                renamed, "trusted.txt", ".txt", hashlib.sha256(data).hexdigest()
+            )
+
+    def test_worker_resource_limits_are_bounded_before_spawn(self):
+        with self.assertRaises(ValueError):
+            parse_document_isolated("x.txt", b"text", cpu_seconds=31)
+        with self.assertRaises(ValueError):
+            parse_document_isolated("x.txt", b"text", memory_limit_bytes=64 * 1024 * 1024)
 
     def test_isolated_parser_accepts_large_text_with_chunk_overlap(self):
         parsed = parse_document_isolated("long.txt", ("a" * 1_400_000).encode("utf-8"))
