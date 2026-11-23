@@ -4,6 +4,7 @@ import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import knowledge
 from security import ApiTokenMiddleware
@@ -269,6 +270,94 @@ class TenantSchemaRecoveryTests(unittest.TestCase):
                 )}
             self.assertIn("tenants", tables)
             self.assertIsNone(knowledge.authenticate_tenant_key(db_path, tenant["api_key"]))
+
+
+
+
+class SemanticRetrievalTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = os.path.join(self.tmp.name, "iskra_knowledge.sqlite3")
+        self.tenant = knowledge.create_tenant(self.db, "Firma semantyczna")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @staticmethod
+    def fake_embed_many(texts):
+        return [[1.0, 0.0] if "umowa" in text.lower() else [0.0, 1.0] for text in texts]
+
+    @staticmethod
+    def fake_embed_one(_query):
+        return [1.0, 0.0]
+
+    def test_semantic_search_finds_synonym_without_lexical_overlap(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "kontrakt.txt",
+            "Umowa określa zasady współpracy oraz obowiązki stron.".encode(),
+            embedding_fn=self.fake_embed_many,
+        )
+        hits = knowledge.search_documents(
+            self.db, self.tenant["tenant_id"], "kontrakt",
+            embedding_fn=self.fake_embed_one,
+        )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["filename"], "kontrakt.txt")
+
+    def test_semantic_results_remain_tenant_isolated(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "prywatne.txt",
+            "Umowa Alfa 123.".encode(), embedding_fn=self.fake_embed_many,
+        )
+        other = knowledge.create_tenant(self.db, "Druga firma")
+        hits = knowledge.search_documents(
+            self.db, other["tenant_id"], "kontrakt",
+            embedding_fn=self.fake_embed_one,
+        )
+        self.assertEqual(hits, [])
+
+    def test_invalid_embedding_falls_back_to_lexical_search(self):
+        knowledge.add_document(
+            self.db, self.tenant["tenant_id"], "faktura.txt",
+            "Faktura VAT płatna w terminie 14 dni.".encode(),
+            embedding_fn=lambda texts: [[float("nan")] for _ in texts],
+        )
+        hits = knowledge.search_documents(self.db, self.tenant["tenant_id"], "faktura")
+        self.assertTrue(hits)
+        self.assertEqual(hits[0]["filename"], "faktura.txt")
+
+class EmbeddingConfigurationTests(unittest.TestCase):
+    def test_semantic_search_is_disabled_without_explicit_opt_in(self):
+        from embeddings import EmbeddingProvider
+        with patch.dict(os.environ, {
+            "ENABLE_SEMANTIC_SEARCH": "false",
+            "OPENAI_API_KEY": "test-key",
+        }):
+            self.assertFalse(EmbeddingProvider().enabled)
+
+    def test_semantic_search_requires_an_api_key(self):
+        from embeddings import EmbeddingProvider
+        with patch.dict(os.environ, {
+            "ENABLE_SEMANTIC_SEARCH": "true",
+            "OPENAI_API_KEY": "",
+        }):
+            self.assertFalse(EmbeddingProvider().enabled)
+
+
+class EmbeddingSchemaMigrationTests(unittest.TestCase):
+    def test_existing_document_database_gets_embedding_column(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = os.path.join(tmp, "iskra_knowledge.sqlite3")
+            tenant = knowledge.create_tenant(db_path, "Migracja")
+            knowledge.add_document(db_path, tenant["tenant_id"], "stary.txt", b"Stary dokument.")
+            with sqlite3.connect(db_path) as connection:
+                connection.execute("ALTER TABLE document_chunks DROP COLUMN embedding_json")
+                connection.commit()
+            knowledge._INITIALIZED_PATHS.pop(os.path.abspath(db_path), None)
+            knowledge.initialize(db_path)
+            with sqlite3.connect(db_path) as connection:
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(document_chunks)")}
+            self.assertIn("embedding_json", columns)
 
 
 if __name__ == "__main__":

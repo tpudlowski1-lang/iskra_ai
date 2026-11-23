@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - non-POSIX development environments
 from flask import Flask, jsonify, render_template_string, request
 
 import knowledge
+from embeddings import EmbeddingProvider
 
 # =========================
 # KONFIGURACJA
@@ -33,6 +34,7 @@ REQUEST_RETRIES = 2
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = knowledge.MAX_UPLOAD_BYTES
+embedding_provider = EmbeddingProvider()
 
 
 # =========================
@@ -687,7 +689,8 @@ def documents():
         return jsonify({"error": "file_required"}), 400
     try:
         result = knowledge.add_document(
-            db_path, tenant_id, uploaded.filename, uploaded.read(knowledge.MAX_UPLOAD_BYTES + 1)
+            db_path, tenant_id, uploaded.filename, uploaded.read(knowledge.MAX_UPLOAD_BYTES + 1),
+            embedding_fn=embedding_provider.embed_many if embedding_provider.enabled else None,
         )
     except RuntimeError as exc:
         return jsonify({"error": "dependency_missing", "message": str(exc)}), 503
@@ -720,7 +723,10 @@ def grounded_chat():
         return jsonify({"error": "invalid_question", "message": "Pytanie musi mieć od 1 do 2000 znaków."}), 400
 
     try:
-        retrieved = knowledge.search_documents(_knowledge_db_path(), tenant_id, question, limit=5)
+        retrieved = knowledge.search_documents(
+            _knowledge_db_path(), tenant_id, question, limit=5,
+            embedding_fn=embedding_provider.embed_one if embedding_provider.enabled else None,
+        )
     except (ValueError, TypeError) as exc:
         return jsonify({"error": "invalid_question", "message": str(exc)}), 400
     if not retrieved:
@@ -797,6 +803,7 @@ def search_documents():
         results = knowledge.search_documents(
             _knowledge_db_path(), tenant_id, payload.get("query", ""),
             payload.get("limit", 5),
+            embedding_fn=embedding_provider.embed_one if embedding_provider.enabled else None,
         )
     except (ValueError, TypeError) as exc:
         return jsonify({"error": "invalid_query", "message": str(exc)}), 400
