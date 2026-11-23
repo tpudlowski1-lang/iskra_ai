@@ -18,6 +18,7 @@ const controls = {
   list: [{ disabled: false }],
 };
 const sandbox = {
+  credentialMutationPending: false,
   connectButton: controls.connect,
   tokenInput: controls.token,
   logoutButton: controls.logout,
