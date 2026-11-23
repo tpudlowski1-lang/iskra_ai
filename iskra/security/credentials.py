@@ -114,7 +114,7 @@ class SQLiteCredentialStore:
         credential_id = secrets.token_urlsafe(12)
         token = secrets.token_urlsafe(32)
         roles_json = json.dumps(sorted(principal.roles), separators=(",", ":"))
-        with self._connect() as connection:
+        with self._connection() as connection:
             with connection:
                 connection.execute(
                     """
