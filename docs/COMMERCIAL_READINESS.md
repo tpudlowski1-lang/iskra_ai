@@ -133,7 +133,7 @@ A release can be considered **commercial-candidate** only when every item below 
 ## 10. Current known blockers (initial baseline)
 
 The repository audit dated 2026-11-23 records:
-- No single integrated release SHA; changes remain in independent draft PRs.
+- Draft PR #67 provides one integrated candidate: 248 tests pass on Python 3.11 and 3.12, with dependency audit, Quality Engine, Security/Reliability and Adversarial Corpus workflows successful. It remains Draft and is not a reviewed or approved release.
 - No verified production deployment, persistent hosting volume or live secret configuration.
 - No production-like migration, restore and rollback drill.
 - Public document uploads and RAG must remain disabled; parser is not yet a full OS/container sandbox.
