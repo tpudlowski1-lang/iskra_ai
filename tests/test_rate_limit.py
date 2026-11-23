@@ -34,6 +34,11 @@ class RateLimitKeyTests(unittest.TestCase):
 
 
 class RateLimitBehaviorTests(unittest.TestCase):
+    def test_explicit_test_environment_disables_application_limiter(self):
+        app = Flask(__name__)
+        create_rate_limiter(app, environ={"ISKRA_TESTING": "true"})
+        self.assertIs(app.config["RATELIMIT_ENABLED"], False)
+
     def test_default_limiter_returns_429_after_configured_limit(self):
         app = Flask(__name__)
         create_rate_limiter(app, environ={}, default_limits=["2 per minute"])
