@@ -66,6 +66,17 @@ class CredentialRegistryTests(unittest.TestCase):
             load_api_credentials(json.dumps([record]))
 
 
+    def test_reserved_system_tenant_is_rejected_from_static_registry(self):
+        record = {
+            "token_sha256": self.digest,
+            "subject": "forged-system-admin",
+            "tenant_id": "system",
+            "roles": ["admin"],
+        }
+        with self.assertRaises(CredentialConfigError):
+            load_api_credentials(json.dumps([record]))
+
+
 class TenantCredentialBoundaryTests(unittest.TestCase):
     def setUp(self):
         self.member_token = "member-secret"
@@ -171,6 +182,30 @@ class TenantCredentialBoundaryTests(unittest.TestCase):
             headers={"Authorization": "Bearer system-admin-secret"},
         )
         self.assertEqual(response.status_code, 503)
+
+
+    def test_forged_system_tenant_admin_cannot_access_global_graph(self):
+        forged_token = "forged-system-admin-secret"
+        digest = hashlib.sha256(forged_token.encode("utf-8")).hexdigest()
+        # Exercise the policy directly: only the singleton installed by the
+        # legacy system-admin credential is allowed to cross this boundary.
+        app = Flask(__name__)
+        from iskra.security.policy import require_system_admin
+
+        @app.get("/global-graph")
+        @require_system_admin
+        def global_graph():
+            return "global graph"
+
+        @app.before_request
+        def attach_forged_system_admin():
+            from flask import request
+            request.environ[PRINCIPAL_ENV_KEY] = Principal(
+                "forged-system-admin", "system", frozenset({"admin"})
+            )
+
+        response = app.test_client().get("/global-graph")
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":
