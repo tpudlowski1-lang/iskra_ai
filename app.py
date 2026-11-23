@@ -142,7 +142,11 @@ TENANT_DB_PATH = os.path.abspath(
 )
 
 
-tenant_store_factory = TenantGraphStoreFactory(TENANT_DB_PATH)
+tenant_store_factory = TenantGraphStoreFactory(
+    TENANT_DB_PATH,
+    backend=settings.tenant_storage_backend,
+    postgres_dsn=settings.postgres_dsn,
+)
 app.register_blueprint(
     create_api_blueprint(siec, tenant_store_factory=tenant_store_factory)
 )
