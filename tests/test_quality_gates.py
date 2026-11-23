@@ -162,7 +162,10 @@ class IskraApiContractTests(unittest.TestCase):
         self.assertNotIn("n_external_worker", reader.dane["neurons"])
         test_app = Flask("graph-refresh-test")
         test_app.register_blueprint(create_api_blueprint(reader))
-        response = test_app.test_client().get("/api/network")
+        from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+        response = test_app.test_client().get(
+            "/api/network", environ_overrides={PRINCIPAL_ENV_KEY: SYSTEM_ADMIN}
+        )
         self.assertEqual(response.status_code, 200)
         self.assertIn(
             "n_external_worker",
@@ -178,7 +181,10 @@ class IskraApiContractTests(unittest.TestCase):
         self.assertIsInstance(payload["neurons"], int)
 
     def test_network_endpoint_contract(self):
-        response = iskra.app.test_client().get("/api/network")
+        from iskra.security.principal import PRINCIPAL_ENV_KEY, SYSTEM_ADMIN
+        response = iskra.app.test_client().get(
+            "/api/network", environ_overrides={PRINCIPAL_ENV_KEY: SYSTEM_ADMIN}
+        )
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertIsInstance(payload["neurons"], dict)
