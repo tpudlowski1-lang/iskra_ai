@@ -144,7 +144,9 @@ def create_api_blueprint(
         if not request.is_json:
             return jsonify({"error": "application_json_required"}), 415
         payload = request.get_json(silent=True)
-        if not isinstance(payload, dict) or set(payload) - {"subject", "roles", "expires_at"}:
+        if (not isinstance(payload, dict)
+                or set(payload) - {"subject", "roles", "expires_at"}
+                or ("roles" in payload and not isinstance(payload["roles"], list))):
             return jsonify({"error": "invalid_credential_payload"}), 400
         principal = principal_from_environ(request.environ)
         try:
@@ -178,7 +180,9 @@ def create_api_blueprint(
             return jsonify({"error": "credential_store_unavailable"}), 503
         if request.is_json:
             payload = request.get_json(silent=True)
-            if not isinstance(payload, dict) or set(payload) - {"roles", "expires_at"}:
+            if (not isinstance(payload, dict)
+                    or set(payload) - {"roles", "expires_at"}
+                    or ("roles" in payload and not isinstance(payload["roles"], list))):
                 return jsonify({"error": "invalid_credential_payload"}), 400
         elif request.data:
             return jsonify({"error": "application_json_required"}), 415
@@ -201,7 +205,7 @@ def create_api_blueprint(
             }), 200
         except PermissionError:
             return jsonify({"error": "forbidden"}), 403
-        except ValueError:
+        except (TypeError, ValueError):
             return jsonify({"error": "credential_not_rotatable"}), 404
         except CredentialStoreUnavailable:
             return jsonify({"error": "credential_store_unavailable"}), 503
