@@ -18,6 +18,8 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [x] Optional PostgreSQL document repository, composite tenant keys/FK, generated FTS vector, GIN index and RLS ENABLE + FORCE; CI verifies with a separate NOSUPERUSER/NOBYPASSRLS role.
 - [x] PostgreSQL document/chunk schema with composite tenant keys, FORCE RLS, GIN full-text index and opt-in repository factory; integration-tested on PostgreSQL 16.
 - [x] CI compiles and runs the full unit, API, security, storage and concurrency suite on Python 3.11 and 3.12, plus dependency audit.
+- [x] LLM router external providers are deny-by-default; each primary/fallback must be listed in `LLM_ALLOWED_PROVIDERS`.
+- [x] Autonomous worker prompt context is limited to a fixed public taxonomy; mutable global graph content is excluded from outbound worker prompts.
 
 ## Not yet production-ready
 - [ ] Public account/credential provisioning, account recovery, self-service rotation and managed expiry/recovery policy. Local operator issue/rotate/revoke and audit are implemented, but do not replace public account lifecycle.
@@ -29,6 +31,7 @@ This checklist is intentionally conservative. Passing CI does not by itself make
 - [ ] CSRF protection for future browser state-changing endpoints.
 - [ ] Rate limits and per-tenant/provider budgets.
 - [ ] Centralized structured logs, metrics, traces and secret/PII redaction.
+- [ ] Data classification, user notice/consent, ordinary-prompt minimization/redaction, per-tenant provider policy, provider-specific retention/region controls and contractual/legal review. The router allowlist is deployment-level only.
 - [ ] Dedicated single-owner autonomous worker with lease/coordination.
 - [ ] Staging deployment and production smoke tests.
 
