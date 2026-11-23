@@ -46,7 +46,7 @@ def _safe_name(name: str) -> str:
 
 
 def _open_regular_nofollow(path: str):
-    flags = os.O_RDONLY
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     try:
@@ -92,7 +92,10 @@ def _snapshot_resource(resource: dict, destination: Path) -> dict:
     source = os.fspath(resource.get("path", ""))
     if kind not in ("sqlite", "json") or not source:
         raise BackupError("Zasób musi mieć kind sqlite/json i path")
-    required = bool(resource.get("required", True))
+    required_value = resource.get("required", True)
+    if not isinstance(required_value, bool):
+        raise BackupError("Pole required musi być wartością logiczną")
+    required = required_value
     if os.path.islink(source):
         raise BackupError(f"Symlink nie jest dozwolony: {name}")
     if not os.path.exists(source):
@@ -156,6 +159,8 @@ def create_archive(resources: list[dict], archive_path: str, *, writes_paused: b
         raise BackupError("Najpierw zatrzymaj zapisy aplikacji i workerów")
     if not isinstance(resources, list) or not resources:
         raise BackupError("Lista zasobów nie może być pusta")
+    if any(not isinstance(item, dict) for item in resources):
+        raise BackupError("Każdy zasób musi być obiektem konfiguracji")
     names = [_safe_name(item.get("name")) for item in resources]
     if len(names) != len(set(names)):
         raise BackupError("Powtórzona logiczna nazwa zasobu")
@@ -250,8 +255,12 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             manifests = [i for i in infos if i.filename == MANIFEST_NAME]
             if len(manifests) != 1:
                 raise BackupError("Brak lub duplikat manifestu")
-            if any(info.is_dir() or stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK for info in infos):
-                raise BackupError("Katalogi i symlinki w archiwum są zabronione")
+            if any(
+                info.is_dir()
+                or stat.S_IFMT(info.external_attr >> 16) not in (0, stat.S_IFREG)
+                for info in infos
+            ):
+                raise BackupError("Katalogi i pliki specjalne w archiwum są zabronione")
             if manifests[0].file_size > MAX_MANIFEST_BYTES:
                 raise BackupError("Manifest przekracza maksymalny rozmiar")
             manifest = json.loads(archive.read(manifests[0]).decode("utf-8"))
@@ -320,8 +329,16 @@ def restore_archive(archive_path: str, target_dir: str) -> dict:
             if len(actual) != len(infos) or actual != expected:
                 raise BackupError("Archiwum zawiera nieoczekiwane lub powtórzone pliki")
         _publish_directory_noreplace(staging, target)
+        try:
+            parent_fd = os.open(parent, os.O_RDONLY)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
+        except OSError:
+            pass
         return manifest
-    except (zipfile.BadZipFile, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (zipfile.BadZipFile, KeyError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         if isinstance(exc, BackupError):
             raise
         raise BackupError("Niepoprawne archiwum lub manifest") from exc
