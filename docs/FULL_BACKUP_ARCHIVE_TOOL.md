@@ -31,3 +31,10 @@ PostgreSQL, object storage, and hosting secrets require separate provider-native
 ## Integrity and authenticity
 
 The SHA-256 values detect accidental corruption and verify that restored bytes match the manifest. They do not authenticate who created the archive: an attacker able to replace both the archive and its manifest can recompute the hashes. For production, store archives in access-controlled, encrypted backup storage and add a separately managed signature or HMAC key; never place that key in the archive. This utility does not implement archive signing or encryption.
+
+
+## Memory and authenticity limits
+
+JSON resources are capped at 64 MiB because Python's standard JSON parser materializes the document in memory. SQLite snapshots and archive members have separate larger limits; an archive-wide size limit does not make unbounded JSON parsing safe.
+
+The manifest SHA-256 values detect accidental corruption and mismatch between a manifest and an extracted resource. They do **not** authenticate the archive: an attacker able to replace the archive can replace both a resource and its manifest hash. Treat the archive as sensitive, store it in access-controlled encrypted backup storage, and use an independently managed digital signature or authenticated envelope when protection against malicious replacement is required. Do not store signing keys beside the archive.
