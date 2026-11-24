@@ -74,6 +74,20 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         self.assertEqual(session.status_code, 200)
         self.assertEqual(session.get_json()["tenant_id"], "tenant-blue")
 
+    def test_browser_session_creation_fails_closed_without_csrf_secret(self):
+        database = os.path.join(self.temp_dir.name, "no-secret", "credentials.sqlite3")
+        store = SQLiteCredentialStore(database)
+        session_token = "s" * 48
+        with self.assertRaises(Exception) as raised:
+            store.create_browser_session(
+                self.principal,
+                self.issued.credential_id,
+                session_token,
+                "c" * 48,
+                time.time() + 60,
+            )
+        self.assertIn("CredentialStoreUnavailable", type(raised.exception).__name__)
+
     def test_database_never_persists_raw_csrf_token(self):
         self.login()
         session_cookie = self.client.get_cookie("__Host-iskra_session")
@@ -255,7 +269,7 @@ class BrowserSessionSecurityTests(unittest.TestCase):
     def test_browser_session_expires(self):
         now = time.time()
         session_token = "s" * 48
-        csrf_token = "c" * 48
+        csrf_token = self.store.issue_browser_csrf_token(session_token)
         self.store.create_browser_session(
             self.principal,
             self.issued.credential_id,
