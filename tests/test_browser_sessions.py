@@ -16,7 +16,8 @@ class BrowserSessionSecurityTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         database = os.path.join(self.temp_dir.name, "private", "credentials.sqlite3")
-        self.store = SQLiteCredentialStore(database)
+        self.csrf_secret = "test-only-csrf-secret-material-32-bytes-minimum"
+        self.store = SQLiteCredentialStore(database, csrf_secret=self.csrf_secret)
         self.principal = Principal("tenant-owner", "tenant-blue", frozenset({"admin"}))
         self.issued = self.store.issue(self.principal)
         self.app = Flask(__name__)
@@ -72,6 +73,20 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         session = self.client.get("/api/tenant/session", base_url=self.base_url)
         self.assertEqual(session.status_code, 200)
         self.assertEqual(session.get_json()["tenant_id"], "tenant-blue")
+
+    def test_database_never_persists_raw_csrf_token(self):
+        self.login()
+        session_cookie = self.client.get_cookie("__Host-iskra_session")
+        self.assertIsNotNone(session_cookie)
+        session_token = session_cookie.value
+        csrf = self.refresh_csrf()
+        with open(self.store.database_path, "rb") as handle:
+            database = handle.read()
+        self.assertNotIn(csrf.encode("utf-8"), database)
+        self.assertEqual(
+            csrf,
+            self.store.issue_browser_csrf_token(session_token),
+        )
 
     def test_cookie_mutation_requires_csrf_and_same_origin(self):
         self.login()
