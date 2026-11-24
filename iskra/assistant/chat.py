@@ -3,6 +3,7 @@ import json
 import re
 
 from iskra.llm.data_minimization import minimize_outbound_text
+from iskra.assistant.identity import DEKALOG
 
 
 class InferenceUnavailable(RuntimeError):
@@ -53,6 +54,12 @@ class KnowledgeChatService:
             if normalized.startswith(greeting):
                 normalized = normalized[len(greeting):]
                 break
+        if normalized in {"dekalog", "jaki jest twój dekalog", "jakie masz zasady"}:
+            return {"status": "answered", "answer": "\n".join(f"{k}. {v}" for k, v in DEKALOG.items()),
+                    "citations": [], "grounded": False}
+        if normalized in {"cześć", "czesc", "hej", "dzień dobry", "witaj"}:
+            return {"status": "answered", "answer": "Cześć! Jestem Iskra AI. W czym mogę pomóc?",
+                    "citations": [], "grounded": False}
         if normalized in {"kim jesteś", "kim jest iskra", "jakie masz możliwości",
                           "kim jesteś i jakie masz możliwości", "co potrafisz"}:
             return {
@@ -84,7 +91,8 @@ class KnowledgeChatService:
                 system_prompt=("Jesteś Iskra AI. Odpowiadaj po polsku, rzeczowo i pomocnie. "
                                "Mów prawdę, nie szkodź, ujawniaj niepewność. "
                                "Nie twierdź, że masz dostęp do dokumentów lub narzędzi. "
-                               "Zwróć wyłącznie JSON z polem answer."),
+                               "Zwróć wyłącznie JSON z polem answer. "
+                               "Zasady projektu: " + " ".join(DEKALOG.values())),
                 allowed_providers=allowed,
             )
             if raw is None:
