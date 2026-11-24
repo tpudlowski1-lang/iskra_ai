@@ -66,6 +66,36 @@ class KnowledgeChatService:
                 "grounded": False,
             }
 
+        # Explicit opt-in to general conversation; never forward document excerpts.
+        if question.casefold().startswith("rozmowa ogólna:"):
+            general = question.split(":", 1)[1].strip()
+            if not general:
+                raise ValueError("Wpisz pytanie do rozmowy ogólnej")
+            allowed = (self.provider_policy.allowed_for(
+                principal, getattr(self.router, "allowed_providers", frozenset())
+            ) if self.provider_policy is not None else frozenset())
+            if not allowed:
+                raise InferenceUnavailable("Rozmowa ogólna wymaga zatwierdzonego providera")
+            raw = self.router.generate(
+                json.dumps({"question": minimize_outbound_text(general)}, ensure_ascii=False),
+                system_prompt=("Jesteś Iskra AI. Odpowiadaj po polsku, rzeczowo i pomocnie. "
+                               "Mów prawdę, nie szkodź, ujawniaj niepewność. "
+                               "Nie twierdź, że masz dostęp do dokumentów lub narzędzi. "
+                               "Zwróć wyłącznie JSON z polem answer."),
+                allowed_providers=allowed,
+            )
+            if raw is None:
+                raise InferenceUnavailable("Brak dostępnego zatwierdzonego providera")
+            try:
+                payload = json.loads(raw)
+            except (TypeError, ValueError) as exc:
+                raise InvalidModelResponse("Nieprawidłowy JSON") from exc
+            answer = payload.get("answer") if isinstance(payload, dict) else None
+            if not isinstance(answer, str) or not answer.strip() or len(answer) > self.MAX_ANSWER_CHARS:
+                raise InvalidModelResponse("Nieprawidłowa odpowiedź ogólna")
+            return {"status": "answered", "answer": "Rozmowa ogólna (bez źródeł organizacji): " + answer.strip(),
+                    "citations": [], "grounded": False}
+
         # The document service derives tenant scope only from the trusted Principal.
         sources = self.document_service.search_documents(
             principal, question, limit=self.MAX_SOURCES
