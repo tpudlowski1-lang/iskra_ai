@@ -6,6 +6,7 @@ single-instance backend; use PostgreSQL before running multiple app instances.
 from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -45,12 +46,16 @@ class SQLiteCredentialStore:
     TENANT_DEFAULT_CREDENTIAL_TTL_SECONDS = 90 * 24 * 60 * 60
     TENANT_MAX_CREDENTIAL_TTL_SECONDS = 365 * 24 * 60 * 60
 
-    def __init__(self, database_path):
+    def __init__(self, database_path, csrf_secret=None):
         if not isinstance(database_path, str) or not database_path.strip():
             raise ValueError("database_path musi być niepustą ścieżką")
         if database_path == ":memory:":
             raise ValueError("Rejestr wymaga trwałej ścieżki pliku")
         self.database_path = os.path.abspath(database_path)
+        configured_secret = csrf_secret if csrf_secret is not None else os.environ.get("ISKRA_CSRF_HMAC_SECRET", "")
+        self.csrf_secret = configured_secret.encode("utf-8") if isinstance(configured_secret, str) else b""
+        if self.csrf_secret and len(self.csrf_secret) < 32:
+            raise ValueError("ISKRA_CSRF_HMAC_SECRET musi mieć co najmniej 32 bajty")
         parent = os.path.dirname(self.database_path)
         os.makedirs(parent, mode=0o700, exist_ok=True)
         self._initialize()
@@ -159,7 +164,6 @@ class SQLiteCredentialStore:
                             session_digest TEXT PRIMARY KEY,
                             credential_id TEXT NOT NULL,
                             csrf_digest TEXT NOT NULL,
-                            csrf_token TEXT NOT NULL,
                             created_at REAL NOT NULL,
                             expires_at REAL NOT NULL,
                             revoked_at REAL,
@@ -170,8 +174,11 @@ class SQLiteCredentialStore:
                     session_columns = {
                         row["name"] for row in connection.execute("PRAGMA table_info(browser_sessions)")
                     }
-                    if "csrf_token" not in session_columns:
-                        connection.execute("ALTER TABLE browser_sessions ADD COLUMN csrf_token TEXT")
+                    if "csrf_token" in session_columns:
+                        # Existing sessions depended on a plaintext token. Invalidate
+                        # them before removing that column; never migrate raw CSRF data.
+                        connection.execute("DELETE FROM browser_sessions")
+                        connection.execute("ALTER TABLE browser_sessions DROP COLUMN csrf_token")
                     connection.execute(
                         "CREATE INDEX IF NOT EXISTS idx_browser_sessions_credential "
                         "ON browser_sessions(credential_id, expires_at)"
@@ -239,6 +246,12 @@ class SQLiteCredentialStore:
     @staticmethod
     def _digest(token):
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def issue_browser_csrf_token(self, session_token):
+        """Derive a stable CSRF token without persisting its plaintext value."""
+        if not self.csrf_secret or not isinstance(session_token, str) or len(session_token) < 32:
+            raise CredentialStoreUnavailable("Browser CSRF signing is not configured")
+        return hmac.new(self.csrf_secret, session_token.encode("utf-8"), hashlib.sha256).hexdigest()
 
     @staticmethod
     def _record_event(connection, event_type, credential_id, principal, actor,
@@ -333,6 +346,9 @@ class SQLiteCredentialStore:
                 or not isinstance(session_token, str) or len(session_token) < 32
                 or not isinstance(csrf_token, str) or len(csrf_token) < 32):
             raise ValueError("Invalid browser session material")
+        expected_csrf = self.issue_browser_csrf_token(session_token)
+        if not hmac.compare_digest(csrf_token, expected_csrf):
+            raise ValueError("Invalid browser CSRF token")
         now = time.time()
         expiry = self._timestamp(expires_at, "expires_at")
         if expiry is None or expiry <= now or expiry > now + 8 * 60 * 60:
@@ -367,12 +383,12 @@ class SQLiteCredentialStore:
                 connection.execute(
                     """
                     INSERT INTO browser_sessions
-                    (session_digest, credential_id, csrf_digest, csrf_token,
+                    (session_digest, credential_id, csrf_digest,
                      created_at, expires_at, revoked_at)
-                    VALUES (?, ?, ?, ?, ?, ?, NULL)
+                    VALUES (?, ?, ?, ?, ?, NULL)
                     """,
                     (self._digest(session_token), credential_id,
-                     self._digest(csrf_token), csrf_token, now, expiry),
+                     self._digest(csrf_token), now, expiry),
                 )
         return expiry
 
@@ -385,7 +401,7 @@ class SQLiteCredentialStore:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT s.credential_id, s.csrf_digest, s.csrf_token, s.expires_at AS session_expires_at,
+                SELECT s.credential_id, s.csrf_digest, s.expires_at AS session_expires_at,
                        s.revoked_at AS session_revoked_at,
                        c.subject, c.tenant_id, c.roles_json, c.expires_at AS credential_expires_at,
                        c.revoked_at AS credential_revoked_at
@@ -408,7 +424,7 @@ class SQLiteCredentialStore:
                 principal=principal,
                 credential_id=row["credential_id"],
                 csrf_digest=row["csrf_digest"],
-                csrf_token=row["csrf_token"],
+                csrf_token=self.issue_browser_csrf_token(session_token),
                 expires_at=row["session_expires_at"],
             )
         except (TypeError, ValueError, json.JSONDecodeError):
@@ -418,6 +434,12 @@ class SQLiteCredentialStore:
         if (not isinstance(session_token, str) or not session_token
                 or not isinstance(csrf_token, str) or len(csrf_token) < 32):
             return False
+        try:
+            expected_csrf = self.issue_browser_csrf_token(session_token)
+        except CredentialStoreUnavailable:
+            return False
+        if not hmac.compare_digest(csrf_token, expected_csrf):
+            return False
         current = self._timestamp(now, "now")
         if current is None:
             current = time.time()
@@ -426,7 +448,7 @@ class SQLiteCredentialStore:
                 cursor = connection.execute(
                     """
                     UPDATE browser_sessions
-                    SET csrf_digest = ?, csrf_token = ?
+                    SET csrf_digest = ?
                     WHERE session_digest = ? AND revoked_at IS NULL AND expires_at > ?
                       AND EXISTS (
                         SELECT 1 FROM api_credentials AS c
@@ -435,7 +457,7 @@ class SQLiteCredentialStore:
                           AND (c.expires_at IS NULL OR c.expires_at > ?)
                       )
                     """,
-                    (self._digest(csrf_token), csrf_token, self._digest(session_token), current, current),
+                    (self._digest(csrf_token), self._digest(session_token), current, current),
                 )
                 return cursor.rowcount == 1
 
