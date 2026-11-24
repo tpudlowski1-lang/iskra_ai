@@ -1,5 +1,6 @@
 import base64
 import os
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -73,6 +74,39 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         session = self.client.get("/api/tenant/session", base_url=self.base_url)
         self.assertEqual(session.status_code, 200)
         self.assertEqual(session.get_json()["tenant_id"], "tenant-blue")
+
+    def test_legacy_plaintext_csrf_column_is_removed_and_sessions_invalidated(self):
+        database = os.path.join(self.temp_dir.name, "legacy", "credentials.sqlite3")
+        os.makedirs(os.path.dirname(database), mode=0o700)
+        connection = sqlite3.connect(database)
+        connection.execute(
+            """
+            CREATE TABLE browser_sessions (
+                session_digest TEXT PRIMARY KEY,
+                credential_id TEXT NOT NULL,
+                csrf_digest TEXT NOT NULL,
+                csrf_token TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                revoked_at REAL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO browser_sessions VALUES (?, ?, ?, ?, ?, ?, NULL)",
+            ("session-digest", "cred-old", "csrf-digest", "plaintext-csrf-token", 1, 9999999999),
+        )
+        connection.commit()
+        connection.close()
+
+        SQLiteCredentialStore(database, csrf_secret=self.csrf_secret)
+
+        connection = sqlite3.connect(database)
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(browser_sessions)")}
+        remaining = connection.execute("SELECT COUNT(*) FROM browser_sessions").fetchone()[0]
+        connection.close()
+        self.assertNotIn("csrf_token", columns)
+        self.assertEqual(remaining, 0)
 
     def test_browser_session_creation_fails_closed_without_csrf_secret(self):
         database = os.path.join(self.temp_dir.name, "no-secret", "credentials.sqlite3")
