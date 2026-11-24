@@ -67,8 +67,11 @@ class KnowledgeChatService:
             }
 
         # Explicit opt-in to general conversation; never forward document excerpts.
-        if question.casefold().startswith("rozmowa ogólna:"):
-            general = question.split(":", 1)[1].strip()
+        if question.casefold().startswith("rozmowa ogólna:") or re.match(
+            r"^(wyjaśnij|wytłumacz|oblicz|ile to|napisz wiersz|co to jest|jak działa)\b",
+            normalized
+        ) and not re.search(r"\b(nasz\w*|moj\w*|mój|firm\w*|dokument\w*|umow\w*|klient\w*)\b", normalized):
+            general = question.split(":", 1)[1].strip() if question.casefold().startswith("rozmowa ogólna:") else question
             if not general:
                 raise ValueError("Wpisz pytanie do rozmowy ogólnej")
             allowed = (self.provider_policy.allowed_for(
