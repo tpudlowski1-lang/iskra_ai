@@ -420,11 +420,15 @@ class SQLiteCredentialStore:
             principal = Principal(
                 row["subject"], row["tenant_id"], frozenset(json.loads(row["roles_json"]))
             )
+            csrf_token = self.issue_browser_csrf_token(session_token)
+            if not hmac.compare_digest(self._digest(csrf_token), row["csrf_digest"]):
+                # A rotated signing secret or modified digest invalidates this session.
+                return None
             return BrowserSession(
                 principal=principal,
                 credential_id=row["credential_id"],
                 csrf_digest=row["csrf_digest"],
-                csrf_token=self.issue_browser_csrf_token(session_token),
+                csrf_token=csrf_token,
                 expires_at=row["session_expires_at"],
             )
         except (TypeError, ValueError, json.JSONDecodeError):
