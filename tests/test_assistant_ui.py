@@ -22,6 +22,13 @@ class AssistantUiTests(unittest.TestCase):
         self.assertIn('id="credential-form"', body)
         self.assertIn('id="issued-token"', body)
 
+    def test_workspace_is_hidden_before_login(self):
+        page = self.client.get("/assistant")
+        self.assertIn('id="workspace" class="workspace" hidden', page.get_data(as_text=True))
+        stylesheet = self.client.get("/static/assistant.css")
+        self.addCleanup(stylesheet.close)
+        self.assertRegex(stylesheet.get_data(as_text=True), r"\[hidden\]\s*\{\s*display:\s*none\s*!important")
+
     def test_assistant_script_does_not_persist_api_token(self):
         response = self.client.get("/static/assistant.js")
         self.addCleanup(response.close)

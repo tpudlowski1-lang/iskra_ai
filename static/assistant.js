@@ -262,6 +262,7 @@
     showIssuedToken("");
     documentList.replaceChildren();
     documentCount.textContent = "0";
+    questionInput.value = "";
     messages.replaceChildren();
     sendButton.disabled = true;
     credentialSubject.value = "";
@@ -329,7 +330,10 @@
     copyTokenButton.textContent = "Kopiuj token";
     sendButton.disabled = true;
     messages.replaceChildren();
-    addMessage("assistant", "Sesja została unieważniona na serwerze. Ciasteczko HttpOnly zostało usunięte.");
+    documentList.replaceChildren();
+    documentCount.textContent = "0";
+    credentialSubject.value = "";
+    questionInput.value = "";
     setStatus("Rozłączono.");
     tokenInput.focus();
   });
