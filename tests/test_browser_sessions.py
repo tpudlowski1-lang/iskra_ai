@@ -109,6 +109,46 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         self.assertNotIn("csrf_token", columns)
         self.assertEqual(remaining, 0)
 
+    def test_legacy_csrf_migration_overwrites_pages_and_truncates_wal(self):
+        database = os.path.join(self.temp_dir.name, "legacy-wal", "credentials.sqlite3")
+        os.makedirs(os.path.dirname(database), mode=0o700)
+        connection = sqlite3.connect(database)
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute(
+            """
+            CREATE TABLE browser_sessions (
+                session_digest TEXT PRIMARY KEY,
+                credential_id TEXT NOT NULL,
+                csrf_digest TEXT NOT NULL,
+                csrf_token TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                revoked_at REAL
+            )
+            """
+        )
+        legacy_secret = "legacy-plaintext-csrf-material-for-wal-check"
+        connection.execute(
+            "INSERT INTO browser_sessions VALUES (?, ?, ?, ?, ?, ?, NULL)",
+            ("session-digest", "cred-old", "csrf-digest", legacy_secret, 1, 9999999999),
+        )
+        connection.commit()
+        keeper = sqlite3.connect(database)
+        wal_path = database + "-wal"
+        self.assertTrue(os.path.exists(wal_path))
+        try:
+            SQLiteCredentialStore(database, csrf_secret=self.csrf_secret)
+            with open(database, "rb") as handle:
+                database_bytes = handle.read()
+            self.assertNotIn(legacy_secret.encode("utf-8"), database_bytes)
+            self.assertTrue(
+                not os.path.exists(wal_path) or os.path.getsize(wal_path) == 0,
+                "WAL must be truncated after the legacy CSRF migration",
+            )
+        finally:
+            keeper.close()
+            connection.close()
+
     def test_browser_session_creation_fails_closed_without_csrf_secret(self):
         database = os.path.join(self.temp_dir.name, "no-secret", "credentials.sqlite3")
         store = SQLiteCredentialStore(database)
