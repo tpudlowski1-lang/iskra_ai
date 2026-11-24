@@ -15,7 +15,7 @@ from iskra.security.principal import (
 )
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
-from iskra.security.sqlite_credentials import CredentialStoreUnavailable, LastTenantAdminError
+from iskra.security.credential_store import CredentialStoreUnavailable, LastTenantAdminError
 
 
 MAX_DOCUMENT_UPLOAD_BYTES = 1024 * 1024

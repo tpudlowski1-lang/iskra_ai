@@ -11,17 +11,15 @@ import sys
 import time
 
 from iskra.security.principal import Principal
-from iskra.security.sqlite_credentials import (
-    CredentialStoreUnavailable,
-    SQLiteCredentialStore,
-)
+from iskra.security.credential_store import CredentialStoreUnavailable
+from iskra.security.store_config import credential_store_from_env
 
 
 def _store_from_environment():
-    path = os.environ.get("ISKRA_CREDENTIAL_DB_PATH", "").strip()
-    if not path:
+    store = credential_store_from_env(os.environ, operator=True)
+    if store is None:
         raise RuntimeError("Ustaw ISKRA_CREDENTIAL_DB_PATH zgodnie z konfiguracją WSGI")
-    return SQLiteCredentialStore(path)
+    return store
 
 
 def _parse_roles(value):
@@ -94,6 +92,7 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
+    store = None
     try:
         store = _store_from_environment()
 
@@ -139,6 +138,9 @@ def main(argv=None):
     except (ValueError, RuntimeError, CredentialStoreUnavailable) as exc:
         print(f"Błąd: {exc}", file=sys.stderr)
         return 2
+    finally:
+        if hasattr(store, "close"):
+            store.close()
 
 
 if __name__ == "__main__":

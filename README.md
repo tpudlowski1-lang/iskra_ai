@@ -7,6 +7,7 @@ Iskra AI is an experimental Polish-language knowledge-system project implemented
 **Development / integrated release candidate — not production-ready and not ready for sale.** The repository contains working modules and PostgreSQL integration tests, but no verified production database cutover, durable customer hosting, public account lifecycle, complete observability/incident response, or commercial/legal clearance.
 
 The canonical integration branch is `refactor/modular-core`. Historical branches are reference material; changes are ported selectively after review. See:
+- [Instalacja pilota i konfiguracja PostgreSQL](docs/INSTALL_PILOT.md)
 - [Unified restructuring program](docs/UNIFIED_RESTRUCTURING_PROGRAM.md)
 - [Production readiness checklist](docs/PRODUCTION_READINESS.md)
 - [Commercial readiness gate](docs/COMMERCIAL_READINESS.md)

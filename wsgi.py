@@ -5,6 +5,7 @@ request passes through the authentication middleware.
 """
 import os
 
+from iskra.security.store_config import credential_store_from_env
 from security import ApiTokenMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -19,16 +20,7 @@ def create_wsgi_app(application=None, environ=None):
     if application is None:
         from app import app as application
 
-    credential_store = None
-    database_path = str(env.get("ISKRA_CREDENTIAL_DB_PATH", "") or "").strip()
-    if database_path:
-        from iskra.security.sqlite_credentials import SQLiteCredentialStore
-
-        credential_store = SQLiteCredentialStore(
-            database_path,
-            csrf_secret=env.get("ISKRA_CSRF_HMAC_SECRET", ""),
-        )
-
+    credential_store = credential_store_from_env(env)
     application.config["ISKRA_CREDENTIAL_STORE"] = credential_store
 
     # Trust exactly one reverse proxy only when the deployment explicitly opts in.

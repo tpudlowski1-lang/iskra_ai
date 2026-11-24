@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 os.environ["ENABLE_AUTONOMOUS_LOOP"] = "false"
 os.environ["ISKRA_TESTING"] = "true"
@@ -163,6 +164,12 @@ class IskraApiContractTests(unittest.TestCase):
         from flask import Flask
         from iskra.api.routes import create_api_blueprint
 
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        path = os.path.join(directory, "wiedza.json")
+        # The legacy façade copies its configured paths into the graph module.
+        for module in (iskra, iskra._graph_store):
+            self.enterContext(patch.object(module, "DATA_DIR", directory))
+            self.enterContext(patch.object(module, "PLIK_SIECI", path))
         reader = iskra.SiecNeuronowa()
         writer = iskra.SiecNeuronowa()
         writer.aktualizuj_siec({
