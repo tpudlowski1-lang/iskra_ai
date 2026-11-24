@@ -135,6 +135,16 @@ class BrowserSessionSecurityTests(unittest.TestCase):
             self.store.issue_browser_csrf_token(session_token),
         )
 
+    def test_rotating_csrf_signing_secret_invalidates_existing_session(self):
+        self.login()
+        cookie = self.client.get_cookie("__Host-iskra_session")
+        self.assertIsNotNone(cookie)
+        rotated_store = SQLiteCredentialStore(
+            self.store.database_path,
+            csrf_secret="different-test-csrf-secret-material-32-bytes",
+        )
+        self.assertIsNone(rotated_store.authenticate_browser_session(cookie.value))
+
     def test_cookie_mutation_requires_csrf_and_same_origin(self):
         self.login()
         csrf = self.refresh_csrf()
