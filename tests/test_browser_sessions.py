@@ -123,7 +123,7 @@ class BrowserSessionSecurityTests(unittest.TestCase):
 
     def test_database_never_persists_raw_csrf_token(self):
         self.login()
-        session_cookie = self.client.get_cookie("__Host-iskra_session")
+        session_cookie = self.client.get_cookie("__Host-iskra_session", domain="iskra.test")
         self.assertIsNotNone(session_cookie)
         session_token = session_cookie.value
         csrf = self.refresh_csrf()
@@ -137,7 +137,7 @@ class BrowserSessionSecurityTests(unittest.TestCase):
 
     def test_rotating_csrf_signing_secret_invalidates_existing_session(self):
         self.login()
-        cookie = self.client.get_cookie("__Host-iskra_session")
+        cookie = self.client.get_cookie("__Host-iskra_session", domain="iskra.test")
         self.assertIsNotNone(cookie)
         rotated_store = SQLiteCredentialStore(
             self.store.database_path,
