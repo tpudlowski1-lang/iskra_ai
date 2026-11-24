@@ -294,9 +294,16 @@ class PostgresCredentialTests(unittest.TestCase):
                 for flag in ("__Host-iskra_session=", "HttpOnly", "Secure", "SameSite=Strict", "Path=/"):
                     self.assertIn(flag, response.headers["Set-Cookie"])
                 csrf = response.json()["csrf_token"]
+                with deployment() as peer:
+                    shared = browser.get(peer + "/api/browser/session", timeout=4)
+                    self.assertEqual(shared.status_code, 200)
+                    self.assertEqual(shared.json()["csrf_token"], csrf)
                 graph = status("GET", "/api/tenant/network", 200).json()
                 graph["neurons"]["pilot_fixture"] = {"label":"test", "weight":0.8, "created":123}
                 status("PUT", "/api/tenant/network", 403, json=graph)
+                status("PUT", "/api/tenant/network", 403, json=graph, headers={"X-CSRF-Token":"incorrect"})
+                status("PUT", "/api/tenant/network", 403, json=graph,
+                       headers={"X-CSRF-Token":csrf, "Origin":"https://other.invalid"})
                 status("PUT", "/api/tenant/network", 200, json=graph, headers={"X-CSRF-Token":csrf, "Origin":address})
             with deployment() as address:
                 self.assertEqual(status("GET", "/api/browser/session", 200).json()["csrf_token"], csrf)
