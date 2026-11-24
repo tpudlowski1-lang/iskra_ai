@@ -83,7 +83,7 @@
         const name = document.createElement("strong");
         name.textContent = String(citation.filename || "Dokument");
         const location = document.createElement("span");
-        location.textContent = "fragment " + String(citation.chunk_index ?? "—");
+        location.textContent = "fragment " + (Number.isInteger(citation.chunk_index) ? citation.chunk_index + 1 : "—");
         item.append(name, location);
         list.append(item);
       });
@@ -262,6 +262,7 @@
     showIssuedToken("");
     documentList.replaceChildren();
     documentCount.textContent = "0";
+    questionInput.value = "";
     messages.replaceChildren();
     sendButton.disabled = true;
     credentialSubject.value = "";
@@ -329,7 +330,10 @@
     copyTokenButton.textContent = "Kopiuj token";
     sendButton.disabled = true;
     messages.replaceChildren();
-    addMessage("assistant", "Sesja została unieważniona na serwerze. Ciasteczko HttpOnly zostało usunięte.");
+    documentList.replaceChildren();
+    documentCount.textContent = "0";
+    credentialSubject.value = "";
+    questionInput.value = "";
     setStatus("Rozłączono.");
     tokenInput.focus();
   });
@@ -380,23 +384,32 @@
   chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const question = questionInput.value.trim();
-    if (!csrfToken || !question) return;
+    if (!csrfToken || !question || sendButton.disabled) return;
+    const sourcesOnly = document.getElementById("answer-mode").value === "sources";
     const generation = sessionGeneration;
     sendButton.disabled = true;
     addMessage("user", question);
     questionInput.value = "";
     try {
-      const response = await apiRequest("/api/tenant/chat", {
+      const path = sourcesOnly ? "/api/tenant/documents/search" : "/api/tenant/chat";
+      const response = await apiRequest(path, {
         method: "POST",
-        body: JSON.stringify({ question }),
+        body: JSON.stringify(sourcesOnly ? { q: question } : { question }),
       });
       const data = await response.json().catch(() => ({}));
       if (generation !== sessionGeneration) return;
       if (response.status === 401) throw new Error("Sesja wygasła lub token jest nieprawidłowy. Połącz się ponownie.");
-      if (response.status === 503) throw new Error("Usługa wnioskowania lub dokumentów jest niedostępna. Sprawdź konfigurację dostawcy i bazę wiedzy.");
+      if (response.status === 503) throw new Error(sourcesOnly
+        ? "Magazyn dokumentów jest niedostępny."
+        : "Usługa wnioskowania lub dokumentów jest niedostępna. Możesz wybrać wyszukiwanie w dokumentach.");
       if (response.status === 502) throw new Error("Model zwrócił odpowiedź bez poprawnych cytowań. Spróbuj sformułować pytanie inaczej.");
       if (!response.ok) throw new Error("Nie udało się uzyskać odpowiedzi (" + response.status + ").");
-      addMessage("assistant", data.answer || "Brak odpowiedzi.", data.citations || []);
+      if (sourcesOnly) {
+        if (!data.results.length) addMessage("assistant", "Brak pasujących fragmentów w dokumentach organizacji.");
+        for (const source of data.results) addMessage("assistant", source.excerpt, [source]);
+      } else {
+        addMessage("assistant", data.answer || "Brak odpowiedzi.", data.citations || []);
+      }
     } catch (error) {
       if (generation === sessionGeneration) {
         addMessage("assistant", error.message || "Wystąpił błąd połączenia.");

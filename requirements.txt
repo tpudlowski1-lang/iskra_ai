@@ -5,3 +5,4 @@ gunicorn==22.0.0
 psycopg[binary]==3.3.9
 pypdf==7.1.1
 defusedxml==0.7.1
+psycopg-pool==3.3.3

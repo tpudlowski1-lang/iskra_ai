@@ -172,11 +172,10 @@ class ApiTokenMiddleware:
 
         if supplied and self.credential_store is not None:
             try:
-                authenticated = None
                 if hasattr(self.credential_store, "authenticate_with_metadata"):
                     authenticated = self.credential_store.authenticate_with_metadata(supplied)
-                if authenticated is not None:
-                    principal, credential_id = authenticated
+                    if authenticated is not None:
+                        principal, credential_id = authenticated
                 else:
                     candidate = self.credential_store.authenticate(supplied)
                     if isinstance(candidate, Principal):

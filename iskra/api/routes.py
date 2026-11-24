@@ -13,9 +13,10 @@ from iskra.security.principal import (
     PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
     principal_from_environ,
 )
+from iskra.assistant.cloud import classify_question
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
-from iskra.security.sqlite_credentials import CredentialStoreUnavailable, LastTenantAdminError
+from iskra.security.credential_store import CredentialStoreUnavailable, LastTenantAdminError
 
 
 MAX_DOCUMENT_UPLOAD_BYTES = 1024 * 1024
@@ -101,9 +102,10 @@ def create_api_blueprint(
         except (OSError, sqlite3.Error):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
 
-    @api.post("/api/tenant/chat")
+    @api.post("/api/chat", defaults={"cloud_format": True})
+    @api.post("/api/tenant/chat", defaults={"cloud_format": False})
     @require_roles("member", "admin")
-    def post_tenant_chat():
+    def post_tenant_chat(cloud_format):
         if chat_service is None:
             return jsonify({"error": "chat_unavailable"}), 503
         if not request.is_json:
@@ -111,12 +113,14 @@ def create_api_blueprint(
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "invalid_chat_payload"}), 400
-        question = payload.get("question")
+        question = payload.get("pytanie" if cloud_format else "question")
         if not isinstance(question, str) or not question.strip():
             return jsonify({"error": "question_required"}), 400
         principal = principal_from_environ(request.environ)
         try:
             result = chat_service.answer(principal, question)
+            if cloud_format:
+                return jsonify({"odpowiedz": result["answer"], "kategoria": classify_question(question)})
             return jsonify(result)
         except ValueError:
             return jsonify({"error": "invalid_question"}), 400
@@ -145,7 +149,10 @@ def create_api_blueprint(
         if not isinstance(payload, dict) or payload:
             return jsonify({"error": "invalid_session_payload"}), 400
         session_token = secrets.token_urlsafe(48)
-        csrf_token = secrets.token_urlsafe(32)
+        try:
+            csrf_token = store.issue_browser_csrf_token(session_token)
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
         expires_at = time.time() + 8 * 60 * 60
         try:
             expires_at = store.create_browser_session(
@@ -360,12 +367,20 @@ def create_api_blueprint(
         except (DocumentStorageError, OSError, sqlite3.Error):
             return jsonify({"error": "document_storage_unavailable"}), 503
 
-    @api.get("/api/tenant/documents/search")
+    @api.route("/api/tenant/documents/search", methods=["GET", "POST"])
     @require_roles("member", "admin")
     def search_tenant_documents():
         if document_service is None:
             return jsonify({"error": "document_storage_unavailable"}), 503
-        query = request.args.get("q", "")
+        if request.method == "POST":
+            if not request.is_json:
+                return jsonify({"error": "application_json_required"}), 415
+            payload = request.get_json(silent=True)
+            query = payload.get("q") if isinstance(payload, dict) else None
+            if not isinstance(query, str):
+                return jsonify({"error": "invalid_query"}), 400
+        else:
+            query = request.args.get("q", "")
         principal = principal_from_environ(request.environ)
         try:
             return jsonify({"results": document_service.search_documents(principal, query, limit=5)})

@@ -95,7 +95,12 @@
           <label class="sr-only" for="question">Twoje pytanie</label>
           <textarea id="question" rows="2" maxlength="1000" placeholder="Zapytaj o procedurę, projekt lub informację w dokumentach…" required></textarea>
           <div class="composer-footer">
-            <span>Do 1000 znaków · bez historii rozmów po stronie serwera</span>
+            <label for="answer-mode">Tryb
+              <select id="answer-mode">
+                <option value="sources"{% if not inference_configured %} selected{% endif %}>Szukaj w dokumentach</option>
+                <option value="chat"{% if inference_configured %} selected{% endif %}>Zapytaj model</option>
+              </select>
+            </label>
             <button id="send-button" type="submit" disabled>Wyślij <span aria-hidden="true">↗</span></button>
           </div>
         </form>

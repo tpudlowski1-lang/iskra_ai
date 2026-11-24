@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import unittest
+from uuid import uuid4
 
 from iskra.security.principal import Principal, SYSTEM_ADMIN
 from iskra.storage.postgres import PostgresGraphStore
@@ -52,8 +53,9 @@ class PostgresGraphStoreTests(unittest.TestCase):
             )
 
     def setUp(self):
-        self.alpha = Principal("alice", "tenant-alpha", frozenset({"member"}))
-        self.beta = Principal("bob", "tenant-beta", frozenset({"member"}))
+        suffix = uuid4().hex
+        self.alpha = Principal("alice", "tenant-alpha-" + suffix, frozenset({"member"}))
+        self.beta = Principal("bob", "tenant-beta-" + suffix, frozenset({"member"}))
         self.alpha_store = PostgresGraphStore(APP_DSN, self.alpha)
         self.beta_store = PostgresGraphStore(APP_DSN, self.beta)
 
@@ -98,15 +100,16 @@ class PostgresGraphStoreTests(unittest.TestCase):
         )
 
     def test_rls_blocks_cross_tenant_reads_and_writes_even_with_direct_sql(self):
+        self.beta_store.save(self.graph("private fixture"))
         with self.psycopg.connect(APP_DSN) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT set_config('iskra.tenant_id', %s, true)",
-                    ("tenant-alpha",),
+                    (self.alpha.tenant_id,),
                 )
                 cursor.execute(
                     "SELECT tenant_id, node_id FROM iskra_graph_neurons WHERE tenant_id = %s",
-                    ("tenant-beta",),
+                    (self.beta.tenant_id,),
                 )
                 self.assertEqual(cursor.fetchall(), [])
                 with self.assertRaises(self.psycopg.errors.InsufficientPrivilege):
@@ -116,7 +119,7 @@ class PostgresGraphStoreTests(unittest.TestCase):
                             (tenant_id, node_id, label, weight, created)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
-                        ("tenant-beta", "attack-node", "attack", 0.2, 123.0),
+                        (self.beta.tenant_id, "attack-node", "attack", 0.2, 123.0),
                     )
                 connection.rollback()
 
@@ -132,7 +135,7 @@ class PostgresGraphStoreTests(unittest.TestCase):
                             (tenant_id, node_id, label, weight, created)
                         VALUES (%s, %s, %s, %s, %s)
                         """,
-                        ("tenant-alpha", "no-context", "blocked", 0.2, 123.0),
+                        (self.alpha.tenant_id, "no-context", "blocked", 0.2, 123.0),
                     )
                 connection.rollback()
 

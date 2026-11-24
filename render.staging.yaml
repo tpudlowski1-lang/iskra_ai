@@ -1,0 +1,48 @@
+# Dedicated staging service. Provision explicitly after the data and auth migrations.
+services:
+  - type: web
+    name: iskra-ai-staging
+    runtime: python
+    repo: https://github.com/tpudlowski1-lang/iskra_ai
+    branch: integration/postgres-auth-staging
+    plan: starter
+    numInstances: 1
+    autoDeployTrigger: "off"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 4 --timeout 120
+    healthCheckPath: /health
+    disk:
+      name: iskra-stage-data
+      mountPath: /var/data/iskra
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.14"
+      - key: DATA_DIR
+        value: /var/data/iskra
+      - key: API_TOKEN
+        generateValue: true
+      - key: ISKRA_CSRF_HMAC_SECRET
+        generateValue: true
+      - key: ISKRA_POSTGRES_DSN
+        sync: false
+      - key: ISKRA_CREDENTIAL_POSTGRES_DSN
+        sync: false
+      - key: ISKRA_CREDENTIAL_STORE_BACKEND
+        value: postgres
+      - key: ISKRA_TENANT_STORAGE_BACKEND
+        value: postgres
+      - key: ISKRA_DOCUMENT_STORAGE_BACKEND
+        value: postgres
+      - key: ISKRA_TRUST_PROXY_HEADERS
+        value: "true"
+      - key: ISKRA_RATE_LIMIT_ENABLED
+        value: "true"
+      - key: ENABLE_AUTONOMOUS_LOOP
+        value: "false"
+      - key: ISKRA_ENABLE_DOCUMENT_INGESTION
+        value: "false"
+      - key: ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON
+        value: "{}"
+      - key: LLM_ALLOWED_PROVIDERS
+        value: ""

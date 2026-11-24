@@ -22,8 +22,16 @@ class AssistantUiTests(unittest.TestCase):
         self.assertIn('id="credential-form"', body)
         self.assertIn('id="issued-token"', body)
 
+    def test_workspace_is_hidden_before_login(self):
+        page = self.client.get("/assistant")
+        self.assertIn('id="workspace" class="workspace" hidden', page.get_data(as_text=True))
+        stylesheet = self.client.get("/static/assistant.css")
+        self.addCleanup(stylesheet.close)
+        self.assertRegex(stylesheet.get_data(as_text=True), r"\[hidden\]\s*\{\s*display:\s*none\s*!important")
+
     def test_assistant_script_does_not_persist_api_token(self):
         response = self.client.get("/static/assistant.js")
+        self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         script = response.get_data(as_text=True)
         self.assertNotIn("localStorage", script)
@@ -45,6 +53,7 @@ class AssistantUiTests(unittest.TestCase):
 
     def test_session_loading_ignores_responses_from_stale_generations(self):
         response = self.client.get("/static/assistant.js")
+        self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         script = response.get_data(as_text=True)
         start = script.index("  async function loadSession() {")
