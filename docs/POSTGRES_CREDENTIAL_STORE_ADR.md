@@ -75,3 +75,17 @@ Before adopting this design, test token derivation, session revocation, secret r
 ## 8. Release gate
 
 This ADR is a design record, not implementation or test evidence. Public SaaS/production and customer data remain blocked until issue #96 and issue #97 acceptance criteria pass, the final release SHA has green CI, a staging deployment produces recorded HTTP evidence, and an independent security review closes critical/high findings.
+
+
+## 9. Authentication bootstrap and database privileges
+
+The current WSGI middleware resolves a bearer token before a trusted tenant Principal exists. Browser-session authentication similarly begins with an opaque session-token digest. Therefore a tenant RLS policy cannot require an already-established tenant setting for the initial lookup.
+
+The implementation must use a deliberately narrow bootstrap path, not a permissive tenant policy. Evaluate either:
+
+- a narrowly scoped `SECURITY DEFINER` function that accepts only a token digest and returns minimal verified principal/credential metadata, with a fixed safe `search_path`, restricted EXECUTE grants, a non-login/controlled owner, and no arbitrary query surface; or
+- a separate least-privilege authentication role/pool limited to digest lookup and required session validation, while tenant administration uses the tenant-scoped runtime role/context.
+
+The bootstrap path must not expose credential enumeration, audit listing, tenant administration, or arbitrary tenant reads. Verify function ownership, search path, grants, and role attributes in integration tests. Invalid, expired, and revoked digests must return no identity. Browser-session lookup must join to the parent credential and reject it immediately when revoked or expired.
+
+Never use a policy equivalent to `tenant_id = current_setting('iskra.tenant_id', true) OR current_setting('iskra.tenant_id', true) IS NULL`: missing tenant context must not grant cross-tenant visibility.
