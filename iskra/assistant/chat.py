@@ -1,5 +1,6 @@
 """Tenant-scoped, source-grounded chat orchestration."""
 import json
+import re
 
 from iskra.llm.data_minimization import minimize_outbound_text
 
@@ -45,6 +46,25 @@ class KnowledgeChatService:
         question = question.strip()
         if not question or len(question) > self.MAX_QUESTION_CHARS:
             raise ValueError("Pytanie musi mieć od 1 do 1000 znaków")
+
+        normalized = re.sub(r"[^\w\s]", " ", question.casefold())
+        normalized = " ".join(normalized.split())
+        for greeting in ("cześć ", "czesc ", "hej ", "dzień dobry "):
+            if normalized.startswith(greeting):
+                normalized = normalized[len(greeting):]
+                break
+        if normalized in {"kim jesteś", "kim jest iskra", "jakie masz możliwości",
+                          "kim jesteś i jakie masz możliwości", "co potrafisz"}:
+            return {
+                "status": "answered",
+                "answer": ("Jestem Iskra AI, polska asystentka organizacyjna. "
+                           "Moją misją jest służyć pomocą, mówić prawdę i nie szkodzić. "
+                           "Pomagam odnajdywać wiedzę w dokumentach Twojej organizacji "
+                           "i wskazywać źródła. Rozmowa ogólna z modelem LLM wymaga "
+                           "zatwierdzonego dostawcy; nie udaję dostępu do niedostępnych funkcji."),
+                "citations": [],
+                "grounded": False,
+            }
 
         # The document service derives tenant scope only from the trusted Principal.
         sources = self.document_service.search_documents(
