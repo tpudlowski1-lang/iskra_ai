@@ -24,7 +24,10 @@ def create_wsgi_app(application=None, environ=None):
     if database_path:
         from iskra.security.sqlite_credentials import SQLiteCredentialStore
 
-        credential_store = SQLiteCredentialStore(database_path)
+        credential_store = SQLiteCredentialStore(
+            database_path,
+            csrf_secret=env.get("ISKRA_CSRF_HMAC_SECRET", ""),
+        )
 
     application.config["ISKRA_CREDENTIAL_STORE"] = credential_store
 
