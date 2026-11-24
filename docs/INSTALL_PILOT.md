@@ -22,6 +22,8 @@ export LLM_ALLOWED_PROVIDERS='' ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON='{}'
 .venv/bin/gunicorn wsgi:app --bind 127.0.0.1:8000 --workers 1 --threads 4 --timeout 120
 ```
 
+Serwer deweloperski uruchamiany poleceniem `python app.py` domyślnie nasłuchuje na `127.0.0.1`. Jawne ustawienie `ISKRA_DEV_BIND` pozwala wybrać inny adres. W hostowanym pilocie użyj Gunicorna i wejścia `wsgi:app`.
+
 Sprawdź `GET /health`. Chronione API akceptuje token Bearer. Interfejs `/assistant` korzysta z ciasteczka Secure. Do testu przeglądarkowego i hostowanego stagingu używaj HTTPS z zaufanym certyfikatem. Sekrety do hostingu wprowadź w menedżerze sekretów.
 
 ## PostgreSQL w stagingu

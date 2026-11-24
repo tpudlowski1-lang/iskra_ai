@@ -186,7 +186,7 @@ if __name__ == "__main__":
     from werkzeug.serving import run_simple
 
     run_simple(
-        "0.0.0.0",
+        os.environ.get("ISKRA_DEV_BIND") or "127.0.0.1",
         PORT,
         create_development_wsgi_app(),
         threaded=True,
