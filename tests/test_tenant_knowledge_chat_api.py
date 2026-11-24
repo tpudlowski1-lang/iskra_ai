@@ -119,6 +119,20 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
     def auth(self, token):
         return {"Authorization": f"Bearer {token}"}
 
+    def test_search_without_model_returns_only_local_sources(self):
+        path = "/api/tenant/documents/search"
+        self.router.allowed_providers = set()
+        self.assertEqual(self.client.post(path, json={"q": "ALPHA"}).status_code, 401)
+        headers = self.auth("alpha-member-token")
+        result = self.client.post(path, headers=headers, json={"q": "ALPHA-SECRET"})
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual({r["document_id"] for r in result.json["results"]}, {self.alpha_doc["document_id"]})
+        self.assertEqual(result.json, self.client.get(path, headers=headers, query_string={"q":"ALPHA-SECRET"}).json)
+        foreign = self.client.post(path, headers=headers, json={"q":"BETA-SECRET"})
+        self.assertNotIn(self.beta_doc["document_id"], {r["document_id"] for r in foreign.json["results"]})
+        self.assertEqual(self.client.post(path, headers=headers, json={"q":[]}).status_code, 400)
+        self.assertEqual(self.router.calls, [])
+
     def test_cloud_chat_preserves_wire_format_and_uses_tenant_sources(self):
         body = {"pytanie": "ALPHA-SECRET: matematyka i algorytmy"}
         self.assertEqual(self.client.post("/api/chat", json=body).status_code, 401)

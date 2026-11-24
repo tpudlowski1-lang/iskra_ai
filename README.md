@@ -4,6 +4,17 @@ Iskra AI is an experimental Polish-language knowledge-system project implemented
 
 [Scalenie repozytoriów Iskry i zgodność z klientem Cloud](docs/SCALENIE_ISKRA_AI.md)
 
+## Uruchom demonstrację
+
+Po rozpakowaniu pakietu na Linuksie z Pythonem 3.11–3.12 i modułem venv uruchom w katalogu projektu:
+
+```bash
+./install.sh --demo
+```
+
+Po instalacji zobaczysz fragment pliku `odbior.txt` z godzinami odbioru zamówień. Wpisz `kontakt`, aby odszukać drugi dokument. Pusty wiersz kończy sesję. Demonstracja korzysta z normalnego logowania i wyszukiwania Iskry w prywatnym, tymczasowym katalogu. Po pierwszej instalacji możesz ją powtarzać offline poleceniem `.venv/bin/python -m scripts.demo`. W interfejsie WWW pod `/assistant` ten sam mechanizm jest dostępny w trybie **Szukaj w dokumentach**.
+
+
 ## Project status
 
 **Development / integrated release candidate — not production-ready and not ready for sale.** The repository contains working modules and PostgreSQL integration tests, but no verified production database cutover, durable customer hosting, public account lifecycle, complete observability/incident response, or commercial/legal clearance.

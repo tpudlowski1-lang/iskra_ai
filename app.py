@@ -148,7 +148,7 @@ DASHBOARD_HTML = """
 
 @app.get("/assistant")
 def assistant_page():
-    return render_template("assistant.html")
+    return render_template("assistant.html", inference_configured=bool(bot.router.allowed_providers))
 
 
 @app.route('/')

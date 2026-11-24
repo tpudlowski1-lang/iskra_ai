@@ -2,6 +2,17 @@
 
 Pakiet źródłowy dla Linux z Pythonem 3.11 lub 3.12 wymaga modułu venv i dostępu do indeksu pakietów. Rozpakuj archiwum w katalogu użytkownika usługi i uruchom `./install.sh`. Instalacja tworzy lokalne środowisko `.venv`. Nową wersję rozpakuj do osobnego katalogu. Dane i sekrety przechowuj poza nim. Do pilota używaj danych syntetycznych.
 
+## Uruchom demonstrację
+
+Po rozpakowaniu pakietu na Linuksie z Pythonem 3.11–3.12 i modułem venv uruchom w katalogu projektu:
+
+```bash
+./install.sh --demo
+```
+
+Po instalacji zobaczysz fragment pliku `odbior.txt` z godzinami odbioru zamówień. Wpisz `kontakt`, aby odszukać drugi dokument. Pusty wiersz kończy sesję. Demonstracja korzysta z normalnego logowania i wyszukiwania Iskry w prywatnym, tymczasowym katalogu. Po pierwszej instalacji możesz ją powtarzać offline poleceniem `.venv/bin/python -m scripts.demo`. W interfejsie WWW pod `/assistant` ten sam mechanizm jest dostępny w trybie **Szukaj w dokumentach**.
+
+
 ## Pierwsze uruchomienie na jednym komputerze
 
 Poniższe polecenia wykonaj w katalogu wydania w Bash. Klucz CSRF wygeneruj raz i zachowaj między restartami. Polecenie wydania poświadczenia pokazuje nowy token tylko raz.
@@ -46,6 +57,18 @@ Nadaj rolę właściciela wyłącznie operatorowi migracji. W jego sesji wykonaj
 | Administrator bazy | Migruje schemat, zarządza rolami i wykonuje zaszyfrowane kopie zapasowe |
 
 Oba loginy aplikacyjne muszą mieć NOSUPERUSER i NOBYPASSRLS, bez członkostwa w roli właściciela, praw do DDL lub zarządzania rolami. W zdalnych DSN używaj weryfikacji TLS i zaufanego CA. Nie przekazuj loginu migracji ani operatora do serwera WWW. Rejestr startuje pusty. To procedura dla nowego stagingu. Istniejący rejestr SQLite pozostaje odrębny. Zmiana backendu wymaga planu przeniesienia lub ponownego wydania poświadczeń i kontrolowanego wylogowania sesji.
+
+### Pusta baza stagingowa z prywatnymi schematami
+
+W nowej, przeznaczonej wyłącznie dla stagingu bazie można przygotować wszystkie trzy migracje i role jednym poleceniem. Uruchom je z katalogu projektu w sesji operatora migracji z ustawionym połączeniem PostgreSQL.
+
+```bash
+psql -X -1 -v ON_ERROR_STOP=1 -f scripts/setup_staging_postgres.sql
+```
+
+Skrypt tworzy schematy `iskra_stage_data` i `iskra_auth` oraz role bez loginu. Nadaj osobnemu loginowi danych członkostwo w `iskra_stage_data_runtime` i ustaw dla tego loginu `search_path = pg_catalog, iskra_stage_data`. Login WWW dla poświadczeń należy do `iskra_auth_runtime`, a oddzielny login CLI do `iskra_auth_operator`. Ustaw hasła w bezpiecznym kanale operatora. W konfiguracji aplikacji wpisz DSN wyłącznie w menedżerze sekretów hostingu. Prywatne schematy aplikacji pozostają poza publicznym Data API. Ta procedura jest alternatywą dla ręcznego tworzenia ról i osobnego stosowania migracji opisanych powyżej.
+
+Przy odtworzeniu starszej kopii uzgodnij cofnięcia i rotacje dokonane po sporządzeniu kopii z niezależnym, aktualnym rejestrem operatora. Każde stare poświadczenie dotknięte zmianą musi zostać cofnięte w odtworzonej bazie przed udostępnieniem ruchu. Jeżeli kompletnego rejestru brakuje, utrzymaj środowisko odłączone i ponownie wydaj poświadczenia po kontrolowanym unieważnieniu wcześniejszych dostępów.
 
 ## Odbiór pilota
 

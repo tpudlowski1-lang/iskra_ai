@@ -4,21 +4,18 @@ Status: test plan only. No live Render deployment, customer data, provider calls
 
 ## 1. Current verified architecture facts
 
-- WSGI configures the persistent credential/session registry only when `ISKRA_CREDENTIAL_DB_PATH` is set.
-- The current registry implementation is SQLite and explicitly documents that it is single-instance; multiple application instances require a PostgreSQL-backed credential/session store.
+- WSGI selects the registry with `ISKRA_CREDENTIAL_STORE_BACKEND`. PostgreSQL uses the runtime login from `ISKRA_CREDENTIAL_POSTGRES_DSN` and the server-side `ISKRA_CSRF_HMAC_SECRET`. Local single-instance SQLite uses `ISKRA_CREDENTIAL_DB_PATH`.
 - Browser sessions depend on the persistent credential registry. A static legacy `API_TOKEN` is not sufficient to exchange into a browser session.
 - The browser session contract uses an opaque `__Host-iskra_session` cookie with Secure, HttpOnly, SameSite=Strict and Path=/, an eight-hour maximum lifetime, and session-bound CSRF checks for cookie-authenticated mutations.
 - Revoking or rotating the underlying API credential invalidates the browser session.
 - Provider inference is deny-by-default unless both deployment-level and tenant-level provider allowlists approve a provider.
 - Document ingestion and the autonomous worker must remain disabled during initial staging.
 
-## 2. Deployment blocker to resolve before browser UI testing
+## 2. Prepare the staging database and web process
 
-The inspected `render.yaml` does not set `ISKRA_CREDENTIAL_DB_PATH` and does not declare a persistent disk. WSGI therefore has no configured persistent credential store from this manifest alone. The browser login/session flow cannot be considered ready from this manifest.
+Use the staging blueprint on the reviewed commit. Keep one Gunicorn worker and a private persistent disk for the global JSON graph. The tenant graph, documents and credential registry use PostgreSQL. Follow [the pilot guide](INSTALL_PILOT.md) to provision distinct roles. The WWW process receives the credential runtime and tenant-data logins. The credential operator runs separately.
 
-For a temporary single-instance staging deployment, configure a private persistent disk and point `ISKRA_CREDENTIAL_DB_PATH` to a database file inside that disk, using a private parent directory. Do not use an ephemeral filesystem path for credentials or sessions. Keep one web instance only.
-
-Before any multi-instance or commercial deployment, replace the SQLite credential/session backend with a reviewed PostgreSQL-backed implementation and test its migrations, locking, revocation, expiry and fail-closed behavior. Do not simply point SQLite at a shared network filesystem.
+Record the commit, deployment ID, region and database version. Exercise the public HTTPS URL before and after a restart and a redeploy. Keep status codes and fixture identifiers. Redact cookies, credentials, signing keys and connection strings from evidence.
 
 ## 3. Safe staging configuration
 
@@ -28,7 +25,7 @@ Before any multi-instance or commercial deployment, replace the SQLite credentia
 - `LLM_ALLOWED_PROVIDERS=` (empty)
 - `ISKRA_TENANT_PROVIDER_ALLOWLIST_JSON={}`
 - Keep provider API keys unset until provider/data-processing review is complete.
-- `ISKRA_CREDENTIAL_DB_PATH` must point to the private persistent disk only after it is provisioned.
+- Set `DATA_DIR` on the private disk. Select PostgreSQL for all three backends and configure both runtime DSNs.
 - One instance; no customer or regulated data; use synthetic test tenants only.
 - `API_TOKEN` and issued credentials must be generated and stored in the hosting secret manager; never place them in Git, tickets, logs, or chat.
 
@@ -40,7 +37,7 @@ Before any multi-instance or commercial deployment, replace the SQLite credentia
 | ST-02 | Protected endpoint without credential | 401 or documented fail-closed 503 | HTTP response |
 | ST-03 | Invalid/revoked/expired credential | Rejected | HTTP response and safe audit event |
 | ST-04 | Persistent credential issuance | Token shown once; only digest persisted | DB inspection without exposing token |
-| ST-05 | Browser login with persistent tenant credential | 201 and secure host cookie | Set-Cookie headers |
+| ST-05 | Browser login with persistent tenant credential | 201 and secure host cookie | Cookie name and attributes, value redacted |
 | ST-06 | Browser login with static legacy API_TOKEN | 403 persistent_credential_required | HTTP response |
 | ST-07 | Browser mutation without CSRF | 403 | HTTP response |
 | ST-08 | Cross-origin or cross-site mutation | 403 | HTTP response |

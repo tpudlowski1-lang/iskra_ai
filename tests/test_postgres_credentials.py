@@ -19,14 +19,47 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from iskra.security.credential_store import CredentialStoreUnavailable, LastTenantAdminError
 from iskra.security.postgres_credentials import PostgresCredentialStore
 from iskra.security.principal import Principal
+from iskra.security.sqlite_credentials import SQLiteCredentialStore
 from iskra.security.store_config import credential_store_from_env
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = os.environ.get("ISKRA_TEST_POSTGRES_ADMIN_DSN")
 
 
+class CredentialLifecycleContract:
+    def test_credential_and_session_boundaries(self):
+        runtime = self.clients[0]
+        expires = time.time() + 600
+        principal = Principal(self.principal.subject, self.principal.tenant_id, frozenset({"admin", "member"}))
+        key = self.operator.issue(principal, expires_at=expires)
+        self.assertEqual(runtime.authenticate(key.token, now=expires - 1), principal)
+        self.assertIsNone(runtime.authenticate(key.token, now=expires))
+        cookie = secrets.token_urlsafe(48)
+        csrf = runtime.issue_browser_csrf_token(cookie)
+        with self.assertRaises(ValueError):
+            runtime.create_browser_session(principal, key.credential_id, cookie, csrf, time.time() + 9 * 3600)
+        actual = runtime.create_browser_session(principal, key.credential_id, cookie, csrf, expires + 60)
+        self.assertEqual(actual, expires)
+        self.assertEqual(runtime.authenticate_browser_session(cookie, now=expires - 1).principal, principal)
+        self.assertIsNone(runtime.authenticate_browser_session(cookie, now=expires))
+        rotated = self.operator.rotate(key.credential_id, roles={"member"})
+        self.assertIsNone(runtime.authenticate_browser_session(cookie))
+        self.assertEqual(runtime.authenticate(rotated.token).roles, frozenset({"member"}))
+        self.assertTrue(self.operator.revoke(rotated.credential_id))
+        self.assertIsNone(runtime.authenticate(rotated.token))
+
+
+class SQLiteCredentialContractTests(CredentialLifecycleContract, unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.principal = Principal("operator", "test-tenant", frozenset({"admin", "member"}))
+        self.operator = SQLiteCredentialStore(str(Path(directory) / "credentials.sqlite3"),
+                                              csrf_secret=secrets.token_hex(32))
+        self.clients = [self.operator]
+
+
 @unittest.skipUnless(ADMIN, "Disposable PostgreSQL integration service is not configured")
-class PostgresCredentialTests(unittest.TestCase):
+class PostgresCredentialTests(CredentialLifecycleContract, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # CI supplies an administrator for a disposable PostgreSQL service.
@@ -138,6 +171,46 @@ class PostgresCredentialTests(unittest.TestCase):
         self.assertEqual({r["tenant_id"] for r in rows}, {self.principal.tenant_id})
         self.assertEqual(sum(r["active"] and "admin" in r["roles"] for r in rows), 1)
 
+    def test_only_one_concurrent_rotation_commits(self):
+        start = threading.Barrier(2)
+
+        def rotate(client):
+            start.wait(timeout=5)
+            try:
+                return client.rotate_for_tenant(self.principal, self.key.credential_id)
+            except ValueError:
+                return None
+
+        with ThreadPoolExecutor(2) as workers:
+            replacements = [key for key in workers.map(rotate, self.clients) if key is not None]
+        self.assertEqual(len(replacements), 1)
+        active = [r["credential_id"] for r in self.clients[0].list_for_tenant(self.principal) if r["active"]]
+        self.assertEqual(active, [replacements[0].credential_id])
+        events = [e for e in self.operator.list_audit_events()
+                  if e["credential_id"] == self.key.credential_id and e["event_type"] == "credential_rotated"]
+        self.assertEqual([e["related_credential_id"] for e in events], active)
+
+    def test_failed_migration_is_atomic_and_retryable(self):
+        database = "migration_" + uuid4().hex[:12]
+        self.create_empty_database(database)
+        dsn = make_conninfo(ADMIN, dbname=database)
+        migration = (ROOT / "migrations" / "0003_credential_store.sql").read_text()
+        with psycopg.connect(dsn) as conn:
+            conn.execute("CREATE SCHEMA iskra_auth AUTHORIZATION iskra_auth_owner")
+            conn.execute("SET LOCAL ROLE iskra_auth_owner")
+            conn.execute("CREATE TABLE iskra_auth.credential_audit_events (fixture int)")
+        with self.assertRaises(psycopg.errors.DuplicateTable), psycopg.connect(dsn) as conn:
+            conn.execute(migration, prepare=False)
+        with psycopg.connect(dsn) as conn:
+            for name in ("schema_version", "api_credentials", "browser_sessions"):
+                self.assertIsNone(conn.execute("SELECT to_regclass(%s)", ("iskra_auth." + name,)).fetchone()[0])
+            conn.execute("SET LOCAL ROLE iskra_auth_owner")
+            conn.execute("DROP TABLE iskra_auth.credential_audit_events")
+            conn.execute(migration, prepare=False)
+        runtime = PostgresCredentialStore(make_conninfo(self.logins["runtime"], dbname=database), self.secret)
+        self.addCleanup(runtime.close)
+        self.assertIsNone(runtime.authenticate(self.key.token))
+
     def test_bootstrap_privileges_schema_and_expiry(self):
         with psycopg.connect(self.logins["runtime"]) as conn:
             self.assertEqual(conn.execute("SELECT count(*) FROM iskra_auth.api_credentials").fetchone(), (0,))
@@ -199,6 +272,18 @@ class PostgresCredentialTests(unittest.TestCase):
     def test_database_archive_restores_credentials_sessions_and_graph(self):
         from iskra.storage.postgres import PostgresGraphStore
 
+        from iskra.documents.parsers import parse_document
+        from iskra.documents.postgres_repository import PostgresDocumentRepository
+
+        documents = PostgresDocumentRepository(self.logins["graph"])
+        other = Principal("restore-reader", "restore-" + uuid4().hex, frozenset({"member"}))
+        for who, word in ((self.principal, "amber"), (other, "violet")):
+            documents.add(who, parse_document(word + ".txt", word.encode()))
+        source = documents.search(self.principal, "amber")
+        self.assertEqual(len(source), 1)
+        revoked = self.operator.issue(self.principal)
+        self.assertTrue(self.operator.revoke(revoked.credential_id))
+        later = self.operator.issue(self.principal)
         stage = PostgresGraphStore(self.logins["graph"], self.principal)
         stage.save({"neurons":{"sample":{"label":"pilot", "created":1, "weight":1}}, "synapses":[]})
         session, csrf, _ = self.create_session()
@@ -210,6 +295,8 @@ class PostgresCredentialTests(unittest.TestCase):
             archive = str(Path(private) / "pilot.dump")
             subprocess.run(["pg_dump", "--dbname", self.database, "-Fc", "-f", archive],
                            env=cli_env, check=True, timeout=60)
+            # A restore from this point must replay revocations made after the snapshot.
+            self.assertTrue(self.operator.revoke(later.credential_id))
             subprocess.run(["pg_restore", "--single-transaction", "--exit-on-error", "-d", restored_db, archive],
                            env=cli_env, check=True, timeout=60)
         restored = PostgresCredentialStore(make_conninfo(self.logins["runtime"], dbname=restored_db), self.secret)
@@ -218,6 +305,22 @@ class PostgresCredentialTests(unittest.TestCase):
         self.assertEqual(restored.authenticate(self.key.token), self.principal)
         recovered = PostgresGraphStore(make_conninfo(self.logins["graph"], dbname=restored_db), self.principal)
         self.assertEqual(recovered.load(), stage.load())
+        restored_documents = PostgresDocumentRepository(make_conninfo(self.logins["graph"], dbname=restored_db))
+        self.assertEqual(restored_documents.search(self.principal, "amber"), source)
+        self.assertEqual(restored_documents.search(other, "violet"), documents.search(other, "violet"))
+        self.assertEqual(restored_documents.search(other, "amber"), [])
+        self.assertIsNone(restored.authenticate(revoked.token))
+        operator = PostgresCredentialStore(make_conninfo(self.logins["operator"], dbname=restored_db), "",
+                                           operator=True)
+        self.addCleanup(operator.close)
+        revocations = [e["credential_id"] for e in self.operator.list_audit_events()
+                       if e["credential_id"] == later.credential_id and e["event_type"] == "credential_revoked"]
+        self.assertEqual(revocations, [later.credential_id])
+        for credential_id in revocations:
+            self.assertTrue(operator.revoke(credential_id, actor="restore-reconciliation"))
+        self.assertIsNone(restored.authenticate(later.token))
+        self.assertTrue(any(e["credential_id"] == revoked.credential_id and e["event_type"] == "credential_revoked"
+                            for e in operator.list_audit_events()))
 
     def test_https_staging_restart_and_database_outage(self):
         import socket
@@ -282,9 +385,9 @@ class PostgresCredentialTests(unittest.TestCase):
                 self.assertEqual(response.status_code, code, f"{method} {path}")
                 return response
 
-            def login():
+            def login(token=None):
                 return status("POST", "/api/browser/session", 201, json={},
-                              headers={"Authorization": "Bearer " + self.key.token})
+                              headers={"Authorization": "Bearer " + (token or self.key.token)})
 
             with deployment() as address:
                 status("GET", "/assistant", 200)
@@ -298,6 +401,29 @@ class PostgresCredentialTests(unittest.TestCase):
                     shared = browser.get(peer + "/api/browser/session", timeout=4)
                     self.assertEqual(shared.status_code, 200)
                     self.assertEqual(shared.json()["csrf_token"], csrf)
+                    # Preserve a second browser's original cookie across logout on the first.
+                    peer_browser = self.enterContext(requests.Session())
+                    peer_browser.trust_env = False
+                    peer_browser.verify = str(cert)
+                    for action in ("logout", "revoke", "rotate"):
+                        key = self.operator.issue(self.principal)
+                        peer_csrf = login(key.token).json()["csrf_token"]
+                        peer_browser.cookies = browser.cookies.copy()
+                        peer_url = peer + "/api/tenant/session"
+                        self.assertEqual(peer_browser.get(peer_url, timeout=5).status_code, 200)
+                        if action == "logout":
+                            status("POST", "/api/browser/session/logout", 200,
+                                   headers={"Origin": address, "X-CSRF-Token": peer_csrf})
+                        elif action == "revoke":
+                            self.assertTrue(self.operator.revoke(key.credential_id))
+                        else:
+                            replacement = self.operator.rotate(key.credential_id)
+                            for host in (address, peer):
+                                response = requests.get(host + "/api/tenant/session", timeout=5, verify=str(cert),
+                                                        headers={"Authorization": "Bearer " + replacement.token})
+                                self.assertEqual(response.status_code, 200)
+                        self.assertEqual(peer_browser.get(peer_url, timeout=5).status_code, 401)
+                    csrf = login().json()["csrf_token"]
                 graph = status("GET", "/api/tenant/network", 200).json()
                 graph["neurons"]["pilot_fixture"] = {"label":"test", "weight":0.8, "created":123}
                 status("PUT", "/api/tenant/network", 403, json=graph)
