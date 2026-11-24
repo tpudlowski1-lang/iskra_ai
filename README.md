@@ -1,6 +1,8 @@
-# Iskra AI — Unified Core
+# Iskra AI
 
 Iskra AI is an experimental Polish-language knowledge-system project implemented as a modular Flask monolith. It preserves the twelve foundational pillars and the legacy graph model while adding tenant-scoped storage adapters, verified credential handling and provider routing.
+
+[Scalenie repozytoriów Iskry i zgodność z klientem Cloud](docs/SCALENIE_ISKRA_AI.md)
 
 ## Project status
 

@@ -13,6 +13,7 @@ from iskra.security.principal import (
     PRINCIPAL_CREDENTIAL_ID_ENV_KEY,
     principal_from_environ,
 )
+from iskra.assistant.cloud import classify_question
 from iskra.assistant.chat import InferenceUnavailable, InvalidModelResponse
 from iskra.documents.repository import DocumentStorageError
 from iskra.security.credential_store import CredentialStoreUnavailable, LastTenantAdminError
@@ -101,9 +102,10 @@ def create_api_blueprint(
         except (OSError, sqlite3.Error):
             return jsonify({"error": "tenant_storage_unavailable"}), 503
 
-    @api.post("/api/tenant/chat")
+    @api.post("/api/chat", defaults={"cloud_format": True})
+    @api.post("/api/tenant/chat", defaults={"cloud_format": False})
     @require_roles("member", "admin")
-    def post_tenant_chat():
+    def post_tenant_chat(cloud_format):
         if chat_service is None:
             return jsonify({"error": "chat_unavailable"}), 503
         if not request.is_json:
@@ -111,12 +113,14 @@ def create_api_blueprint(
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "invalid_chat_payload"}), 400
-        question = payload.get("question")
+        question = payload.get("pytanie" if cloud_format else "question")
         if not isinstance(question, str) or not question.strip():
             return jsonify({"error": "question_required"}), 400
         principal = principal_from_environ(request.environ)
         try:
             result = chat_service.answer(principal, question)
+            if cloud_format:
+                return jsonify({"odpowiedz": result["answer"], "kategoria": classify_question(question)})
             return jsonify(result)
         except ValueError:
             return jsonify({"error": "invalid_question"}), 400

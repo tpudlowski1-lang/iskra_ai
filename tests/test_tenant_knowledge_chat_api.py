@@ -119,6 +119,24 @@ class TenantKnowledgeChatApiTests(unittest.TestCase):
     def auth(self, token):
         return {"Authorization": f"Bearer {token}"}
 
+    def test_cloud_chat_preserves_wire_format_and_uses_tenant_sources(self):
+        body = {"pytanie": "ALPHA-SECRET: matematyka i algorytmy"}
+        self.assertEqual(self.client.post("/api/chat", json=body).status_code, 401)
+        result = self.client.post("/api/chat", json=body, headers=self.auth("alpha-member-token"))
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(set(result.json), {"odpowiedz", "kategoria"})
+        self.assertEqual(result.json["kategoria"], "LOGIKA_I_MATEMATYKA")
+        self.assertIn(self.alpha_doc["document_id"], result.json["odpowiedz"])
+        self.assertNotIn(self.beta_doc["document_id"], result.json["odpowiedz"])
+
+    def test_cloud_chat_rejects_invalid_input_and_respects_provider_policy(self):
+        headers = self.auth("alpha-member-token")
+        self.assertEqual(self.client.post("/api/chat", json={"pytanie": []}, headers=headers).status_code, 400)
+        self.router.allowed_providers = set()
+        response = self.client.post("/api/chat", json={"pytanie":"ALPHA-SECRET"}, headers=headers)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(self.router.calls, [])
+
     def test_chat_requires_authenticated_principal(self):
         response = self.client.post("/api/tenant/chat", json={"question": "ALPHA-SECRET"})
         self.assertEqual(response.status_code, 401)
