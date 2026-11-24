@@ -24,6 +24,7 @@ class AssistantUiTests(unittest.TestCase):
 
     def test_assistant_script_does_not_persist_api_token(self):
         response = self.client.get("/static/assistant.js")
+        self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         script = response.get_data(as_text=True)
         self.assertNotIn("localStorage", script)
@@ -45,6 +46,7 @@ class AssistantUiTests(unittest.TestCase):
 
     def test_session_loading_ignores_responses_from_stale_generations(self):
         response = self.client.get("/static/assistant.js")
+        self.addCleanup(response.close)
         self.assertEqual(response.status_code, 200)
         script = response.get_data(as_text=True)
         start = script.index("  async function loadSession() {")

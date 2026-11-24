@@ -52,3 +52,5 @@ Na dwóch syntetycznych tenantach sprawdź logowanie w `/assistant`, zapis i odc
 Manifest `render.staging.yaml` definiuje oddzielną usługę Render z jednym procesem, dyskiem dla grafu globalnego i dwoma DSN dla istniejącego PostgreSQL. Uruchomienie wymaga konta hostingowego, przygotowanych ról i płatnego planu z dyskiem. Utrzymuj sekrety poza repozytorium. Wskaż w panelu dokładnie zbadany commit i zweryfikuj domenę HTTPS, logowanie, zapis, restart i odtworzenie kopii z hostowanego środowiska. Sam manifest ani pomyślny workflow nie potwierdzają działania tego wdrożenia.
 
 Zakres oferty do rozmów pilotażowych i kalkulacja kosztów znajdują się w [karcie pilota](PILOT_COMMERCIAL_PL.md).
+
+Do próby odtworzenia użyj narzędzi `pg_dump` i `pg_restore` w tej samej wersji głównej co serwer PostgreSQL. Przy odtwarzaniu starszego punktu w czasie uwzględnij unieważnienia poświadczeń po wykonaniu kopii. Przed ponownym otwarciem ruchu uzgodnij stan unieważnień i w razie potrzeby wymień klucz sesji.

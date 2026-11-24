@@ -169,7 +169,7 @@ class SQLiteCredentialStoreTests(unittest.TestCase):
         with open(target, "wb") as handle:
             handle.write(b"not a database")
         os.chmod(target, 0o600)
-        linked = os.path.join(parent, "credentials.sqlite3")
+        linked = os.path.join(parent, "linked-credentials.sqlite3")
         try:
             os.link(target, linked)
         except (AttributeError, NotImplementedError, OSError):
