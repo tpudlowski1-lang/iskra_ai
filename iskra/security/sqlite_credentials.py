@@ -141,7 +141,6 @@ class SQLiteCredentialStore:
 
         try:
             with self._connection() as connection:
-                legacy_csrf_column = False
                 with connection:
                     connection.execute(
                         """
@@ -181,7 +180,6 @@ class SQLiteCredentialStore:
                         # Existing sessions depended on a plaintext token. Invalidate
                         # them before removing that column; never migrate raw CSRF data.
                         # secure_delete overwrites deleted cell content in database pages.
-                        legacy_csrf_column = True
                         connection.execute("DELETE FROM browser_sessions")
                         connection.execute("ALTER TABLE browser_sessions DROP COLUMN csrf_token")
                     connection.execute(
@@ -208,12 +206,13 @@ class SQLiteCredentialStore:
                         "CREATE INDEX IF NOT EXISTS idx_credential_audit_time "
                         "ON credential_audit_events(occurred_at DESC)"
                     )
-                if legacy_csrf_column:
-                    # Flush the migration and truncate any WAL frames that may still
-                    # contain pre-migration pages. Fail closed if SQLite cannot do so.
-                    checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-                    if checkpoint is not None and checkpoint[0] != 0:
-                        raise sqlite3.OperationalError("Could not checkpoint legacy CSRF data")
+                # Always flush and truncate WAL files at initialization. This also
+                # makes a retry safe if a previous migration committed but could not
+                # finish its checkpoint. Fail closed rather than serving with stale
+                # pre-migration WAL frames that may contain plaintext CSRF values.
+                checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+                if checkpoint is not None and checkpoint[0] != 0:
+                    raise sqlite3.OperationalError("Could not checkpoint credential database WAL")
         except sqlite3.Error as exc:
             raise CredentialStoreUnavailable("Credential database unavailable") from exc
 
