@@ -24,3 +24,31 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(result["status"], "no_sources")
         documents.search_documents.assert_called_once_with(principal, "Jaka jest treść umowy?", limit=5)
         router.generate.assert_not_called()
+
+    def test_greetings_and_decalogue_are_local(self):
+        documents, router, policy = Mock(), Mock(), Mock()
+        service = KnowledgeChatService(documents, router, policy)
+        for question in ("Cześć!", "Jaki jest twój dekalog?"):
+            self.assertEqual(service.answer(Mock(), question)["status"], "answered")
+        documents.search_documents.assert_not_called()
+        router.generate.assert_not_called()
+
+    def test_general_requires_approval(self):
+        from iskra.assistant.chat import InferenceUnavailable
+        documents, router, policy = Mock(), Mock(), Mock()
+        policy.allowed_for.return_value = frozenset()
+        with self.assertRaises(InferenceUnavailable):
+            KnowledgeChatService(documents, router, policy).answer(Mock(), "Oblicz 2+2")
+        router.generate.assert_not_called()
+
+    def test_general_approved(self):
+        documents, router, policy = Mock(), Mock(), Mock()
+        router.allowed_providers = frozenset({"openai"})
+        policy.allowed_for.return_value = router.allowed_providers
+        router.generate.return_value = '{"answer":"4"}'
+        result = KnowledgeChatService(documents, router, policy).answer(Mock(), "Oblicz 2+2")
+        self.assertFalse(result["grounded"])
+        self.assertEqual(result["citations"], [])
+        self.assertTrue(result["answer"].endswith("4"))
+        documents.search_documents.assert_not_called()
+        self.assertEqual(router.generate.call_args.kwargs["allowed_providers"], frozenset({"openai"}))
