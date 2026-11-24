@@ -8,7 +8,7 @@ from flask import Flask
 
 from iskra.api.routes import create_api_blueprint
 from iskra.security.principal import Principal
-from iskra.security.sqlite_credentials import SQLiteCredentialStore
+from iskra.security.sqlite_credentials import CredentialStoreUnavailable, SQLiteCredentialStore
 from security import ApiTokenMiddleware
 
 
@@ -78,7 +78,7 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         database = os.path.join(self.temp_dir.name, "no-secret", "credentials.sqlite3")
         store = SQLiteCredentialStore(database)
         session_token = "s" * 48
-        with self.assertRaises(Exception) as raised:
+        with self.assertRaises(CredentialStoreUnavailable):
             store.create_browser_session(
                 self.principal,
                 self.issued.credential_id,
@@ -86,7 +86,6 @@ class BrowserSessionSecurityTests(unittest.TestCase):
                 "c" * 48,
                 time.time() + 60,
             )
-        self.assertIn("CredentialStoreUnavailable", type(raised.exception).__name__)
 
     def test_database_never_persists_raw_csrf_token(self):
         self.login()
