@@ -145,7 +145,10 @@ def create_api_blueprint(
         if not isinstance(payload, dict) or payload:
             return jsonify({"error": "invalid_session_payload"}), 400
         session_token = secrets.token_urlsafe(48)
-        csrf_token = secrets.token_urlsafe(32)
+        try:
+            csrf_token = store.issue_browser_csrf_token(session_token)
+        except CredentialStoreUnavailable:
+            return jsonify({"error": "credential_store_unavailable"}), 503
         expires_at = time.time() + 8 * 60 * 60
         try:
             expires_at = store.create_browser_session(
