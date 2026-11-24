@@ -1,4 +1,5 @@
 import base64
+from http.cookies import SimpleCookie
 import os
 import sqlite3
 import tempfile
@@ -122,10 +123,10 @@ class BrowserSessionSecurityTests(unittest.TestCase):
             )
 
     def test_database_never_persists_raw_csrf_token(self):
-        self.login()
-        session_cookie = self.client.get_cookie("__Host-iskra_session", domain="iskra.test")
-        self.assertIsNotNone(session_cookie)
-        session_token = session_cookie.value
+        login_response = self.login()
+        cookies = SimpleCookie()
+        cookies.load(login_response.headers["Set-Cookie"])
+        session_token = cookies["__Host-iskra_session"].value
         csrf = self.refresh_csrf()
         with open(self.store.database_path, "rb") as handle:
             database = handle.read()
@@ -136,14 +137,15 @@ class BrowserSessionSecurityTests(unittest.TestCase):
         )
 
     def test_rotating_csrf_signing_secret_invalidates_existing_session(self):
-        self.login()
-        cookie = self.client.get_cookie("__Host-iskra_session", domain="iskra.test")
-        self.assertIsNotNone(cookie)
+        login_response = self.login()
+        cookies = SimpleCookie()
+        cookies.load(login_response.headers["Set-Cookie"])
+        session_token = cookies["__Host-iskra_session"].value
         rotated_store = SQLiteCredentialStore(
             self.store.database_path,
             csrf_secret="different-test-csrf-secret-material-32-bytes",
         )
-        self.assertIsNone(rotated_store.authenticate_browser_session(cookie.value))
+        self.assertIsNone(rotated_store.authenticate_browser_session(session_token))
 
     def test_cookie_mutation_requires_csrf_and_same_origin(self):
         self.login()
