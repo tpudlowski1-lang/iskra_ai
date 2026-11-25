@@ -1,6 +1,7 @@
 """Tenant-scoped, source-grounded chat orchestration."""
 import json
 import re
+import unicodedata
 
 from iskra.llm.data_minimization import minimize_outbound_text
 from iskra.assistant.identity import DEKALOG
@@ -48,7 +49,7 @@ class KnowledgeChatService:
         if not question or len(question) > self.MAX_QUESTION_CHARS:
             raise ValueError("Pytanie musi mieć od 1 do 1000 znaków")
 
-        normalized = re.sub(r"[^\w\s]", " ", question.casefold())
+        normalized = re.sub(r"[^\w\s]", " ", unicodedata.normalize("NFC", question).casefold())
         normalized = " ".join(normalized.split())
         for greeting in ("cześć ", "czesc ", "hej ", "dzień dobry "):
             if normalized.startswith(greeting):
@@ -61,7 +62,9 @@ class KnowledgeChatService:
             return {"status": "answered", "answer": "Cześć! Jestem Iskra AI. W czym mogę pomóc?",
                     "citations": [], "grounded": False}
         if normalized in {"kim jesteś", "kim jest iskra", "jakie masz możliwości",
-                          "kim jesteś i jakie masz możliwości", "co potrafisz"}:
+                          "kim jesteś i jakie masz możliwości", "co potrafisz",
+                          "jakie masz funkcje", "jakie funkcje masz", "co umiesz",
+                          "kim jestes", "jakie masz mozliwosci"}:
             return {
                 "status": "answered",
                 "answer": ("Jestem Iskra AI, polska asystentka organizacyjna. "
