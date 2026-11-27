@@ -11,8 +11,11 @@ def ensure_private_parent(database_path):
     eliminate races against an untrusted process that can mutate ancestors.
     """
     parent = os.path.dirname(os.path.abspath(database_path))
-    current = os.path.abspath(os.sep)
-    for component in parent.split(os.sep):
+    drive, tail = os.path.splitdrive(parent)
+    current = drive + os.sep
+    if parent == current:
+        raise OSError("Baza danych nie może znajdować się bezpośrednio w katalogu głównym")
+    for component in tail.split(os.sep):
         if not component:
             continue
         current = os.path.join(current, component)
@@ -21,7 +24,10 @@ def ensure_private_parent(database_path):
         except FileExistsError:
             pass
         metadata = os.lstat(current)
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        reparse = getattr(metadata, "st_file_attributes", 0) & getattr(
+            stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0
+        )
+        if reparse or stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
             raise OSError("Ścieżka bazy danych zawiera symlink lub element niebędący katalogiem")
 
     metadata = os.stat(parent, follow_symlinks=False)
